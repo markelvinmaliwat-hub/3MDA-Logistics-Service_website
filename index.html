@@ -253,15 +253,16 @@ S={};for(const n in DATA)prep(n,DATA[n].map(r=>({...r,DATE:r.DATE?new Date(r.DAT
 const PW='3mdaupland',nc=v=>String(v||'').trim().toUpperCase().replace(/^P/,'');
 const AC={};['PLDT','RED'].forEach(t=>(DATA[t]||[]).forEach(r=>{const c=nc(r['AGENT CODE']);if(c&&!AC[c])AC[c]=r['AGENT NAME']}));
 let ME=null,pendFc=false,suMode=false;
-const LOG_URL='';
+const LOG_URL='';/* PASTE YOUR GOOGLE APPS SCRIPT WEB APP URL BETWEEN THE QUOTES */
 const ld=(k,d)=>{try{return JSON.parse(localStorage.getItem(k))||d}catch(e){return d}},sv=(k,v)=>{try{localStorage.setItem(k,JSON.stringify(v))}catch(e){}};
-function logEv(action,where,search){if(!ME)return;const d=new Date(),p=n=>String(n).padStart(2,'0'),row={time:`${d.getFullYear()}-${p(d.getMonth()+1)}-${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}:${p(d.getSeconds())}`,email:ME.email,code:ME.code,name:ME.name,action,where,search:search||''};
+const VID=()=>{let v=ld('mm_vid','');if(!v){v='V'+Math.random().toString(36).slice(2,10);sv('mm_vid',v)}return v};
+function logEv(action,where,search,em){if(!ME&&!em&&action!=='OPEN PORTAL')return;const d=new Date(),p=n=>String(n).padStart(2,'0'),row={time:`${d.getFullYear()}-${p(d.getMonth()+1)}-${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}:${p(d.getSeconds())}`,email:ME?ME.email:(em||''),code:ME?ME.code:'',name:ME?ME.name:'',action,where,search:search||'',device:(navigator.userAgent||'').slice(0,120),visitor:VID()};
  const L=ld('mm_log',[]);L.push(row);sv('mm_log',L.slice(-5000));
  if(LOG_URL){try{fetch(LOG_URL,{method:'POST',mode:'no-cors',headers:{'Content-Type':'text/plain'},body:JSON.stringify(row)}).catch(()=>{})}catch(e){}}}
 function enter(c,quiet){setSu(false);$('lp').value='';const rg=ld('mm_reg',{})[c]||{};ME={code:c,email:rg.email||'',name:AC[c]||''};document.body.classList.remove('lo','fcv');mode('in');$('t1').textContent='DASHBOARD';$('who').textContent='Agent '+c+(AC[c]?' \u00b7 '+AC[c]:'')+(ME.email?' \u00b7 '+ME.email:'');try{sessionStorage.setItem('agc',c)}catch(e){}if(!quiet)logEv('LOG IN','Login');if(pendFc){pendFc=false;document.body.classList.add('fcv');mode('fc')}}
 function setSu(on){suMode=on;$('lul').hidden=$('lu').hidden=!on;$('lpl').hidden=$('lp').hidden=on;$('lgo').textContent=on?'Sign up':'Log in';$('swi').classList.toggle('on',!on);$('swu').classList.toggle('on',on);$('lerr').textContent=''}
 function tryLogin(){
- const em=$('le').value.trim().toLowerCase(),E=ld('mm_reg',{}),err=m=>{$('lerr').textContent=m};
+ const em=$('le').value.trim().toLowerCase(),E=ld('mm_reg',{}),err=m=>{$('lerr').textContent=m;logEv(suMode?'SIGN UP FAILED':'LOGIN FAILED','Login',m,em)};
  if(!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(em))return err('Enter a valid email address.');
  if(suMode){const c=nc($('lu').value);
   if(AC[c]===undefined)return err('Agent code not found. Please check your agent code.');
@@ -332,9 +333,10 @@ $('hfc').onclick=()=>{document.body.classList.add('fcv');mode('fc')};
 
 const lastS={},LBL={q:'Subscriber search',fq:'Facility checking search',bq:'Barangay search',gq:'Barangay solicited vs posted search',sq:'Site search'};
 ['q','fq','bq','gq','sq'].forEach(id=>{const el=$(id);if(!el)return;let t;el.addEventListener('input',()=>{clearTimeout(t);t=setTimeout(()=>{const v=el.value.trim();if(v.length>1&&v!==lastS[id]&&ME){lastS[id]=v;const fl=id==='fq'?[$('fcity').value&&'city: '+$('fcity').value,$('fav').value&&'availability: '+($('fav').value==='y'?'with slot':'full')].filter(Boolean).join('; '):'';logEv('SEARCH',LBL[id],v+(fl?' ['+fl+']':''))}},1500)})});
-function logCsv(rows){const H=['Time','Email','Agent code','Agent name','Action','Where','Search / details'],q=v=>'"'+String(v==null?'':v).replace(/"/g,'""')+'"';return '\ufeff'+[H.map(q).join(',')].concat(rows.map(r=>[r.time,r.email,r.code,r.name,r.action,r.where,r.search].map(q).join(','))).join('\r\n')}
+function logCsv(rows){const H=['Time','Email','Agent code','Agent name','Action','Where','Search / details','Device','Visitor ID'],q=v=>'"'+String(v==null?'':v).replace(/"/g,'""')+'"';return '\ufeff'+[H.map(q).join(',')].concat(rows.map(r=>[r.time,r.email,r.code,r.name,r.action,r.where,r.search,r.device,r.visitor].map(q).join(','))).join('\r\n')}
 $('dlog').onclick=async()=>{const data=logCsv(ld('mm_log',[]));let d=null;try{d=await claude.use('downloads')}catch(e){}
  if(d){try{await d.save({filename:'activity_log.csv',data})}catch(e){}return}
  const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([data],{type:'text/csv'}));a.download='activity_log.csv';document.body.appendChild(a);a.click();a.remove()};
 try{const c=sessionStorage.getItem('agc');if(c&&AC[c]!==undefined&&ld('mm_reg',{})[c])enter(c,true)}catch(e){}
+logEv('OPEN PORTAL','Portal','');
 </script></body></html>
