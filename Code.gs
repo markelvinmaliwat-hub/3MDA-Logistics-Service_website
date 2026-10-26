@@ -1,39 +1,61 @@
-// Activity log receiver + reader for the PLDT Subscriber Lookup dashboard
-function sheet_() {
+/**
+ * Activity-log backend for the Subscriber Lookup dashboard.
+ *
+ * SETUP
+ * 1. Create a Google Sheet (any name). Open Extensions > Apps Script and paste this file.
+ * 2. Deploy > New deployment > type "Web app".
+ *      Execute as: Me      Who has access: Anyone
+ * 3. Copy the Web app URL and paste it into index.html / pldt_dashboard.html here:
+ *      const LOG_URL='PASTE-URL-HERE';
+ * Every login, search and view is then saved to the "Activity Log" tab and the
+ * dashboard's "Activity log" button shows activity from all devices.
+ */
+var SHEET_NAME = 'Activity Log';
+var HEADERS = ['time','email','code','name','action','where','search','device','visitor'];
+
+function getSheet_() {
   var ss = SpreadsheetApp.getActiveSpreadsheet();
-  return ss.getSheetByName('ACTIVITY LOG') || ss.insertSheet('ACTIVITY LOG');
+  var sh = ss.getSheetByName(SHEET_NAME) || ss.insertSheet(SHEET_NAME);
+  if (sh.getLastRow() === 0) {
+    sh.appendRow(HEADERS);
+    sh.setFrozenRows(1);
+  }
+  return sh;
 }
+
 function doPost(e) {
   var lock = LockService.getScriptLock();
   lock.waitLock(10000);
   try {
-    var sh = sheet_();
-    if (sh.getLastRow() === 0) {
-      sh.appendRow(['Time','Email','Agent code','Agent name','Action','Where','Search / details','Device','Visitor ID']);
-      sh.setFrozenRows(1);
-      sh.getRange('A:A').setNumberFormat('@');
-    }
-    var r = JSON.parse(e.postData.contents);
-    sh.appendRow([r.time, r.email, r.code, r.name, r.action, r.where, r.search, r.device, r.visitor]);
+    var row = JSON.parse(e.postData.contents);
+    getSheet_().appendRow(HEADERS.map(function (k) { return row[k] == null ? '' : String(row[k]); }));
+    return json_({ ok: true });
+  } catch (err) {
+    return json_({ ok: false, error: String(err) });
   } finally {
     lock.releaseLock();
   }
-  return ContentService.createTextOutput('ok');
 }
+
 function doGet(e) {
-  if (e && e.parameter && e.parameter.read === '1') {
-    var sh = sheet_(), rows = [];
-    var last = sh.getLastRow();
-    if (last > 1) {
-      var n = Math.min(last - 1, 3000);
-      var tz = Session.getScriptTimeZone();
-      rows = sh.getRange(last - n + 1, 1, n, 9).getValues().map(function (r) {
-        var t = (r[0] instanceof Date) ? Utilities.formatDate(r[0], tz, 'yyyy-MM-dd HH:mm:ss') : String(r[0]);
-        return {time: t, email: String(r[1]), code: String(r[2]), name: String(r[3]), action: String(r[4]),
-                where: String(r[5]), search: String(r[6]), device: String(r[7]), visitor: String(r[8])};
+  if (e && e.parameter && e.parameter.read) {
+    var sh = getSheet_();
+    var n = sh.getLastRow() - 1;
+    var rows = [];
+    if (n > 0) {
+      var start = Math.max(2, sh.getLastRow() - 4999);          // latest 5000 rows
+      var vals = sh.getRange(start, 1, sh.getLastRow() - start + 1, HEADERS.length).getValues();
+      rows = vals.map(function (r) {
+        var o = {};
+        HEADERS.forEach(function (k, i) { o[k] = r[i] instanceof Date ? Utilities.formatDate(r[i], Session.getScriptTimeZone(), 'yyyy-MM-dd HH:mm:ss') : String(r[i]); });
+        return o;
       });
     }
-    return ContentService.createTextOutput(JSON.stringify({rows: rows})).setMimeType(ContentService.MimeType.JSON);
+    return json_({ rows: rows });
   }
-  return ContentService.createTextOutput('Activity log endpoint is running');
+  return json_({ ok: true, service: 'Subscriber Lookup activity log' });
+}
+
+function json_(o) {
+  return ContentService.createTextOutput(JSON.stringify(o)).setMimeType(ContentService.MimeType.JSON);
 }
