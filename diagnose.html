@@ -1,0 +1,45 @@
+<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Dashboard connection check</title>
+<style>body{font:15px/1.5 system-ui,sans-serif;max-width:760px;margin:24px auto;padding:0 16px;color:#1a2233}
+h1{font-size:20px}.r{border:1px solid #e3e8f0;border-radius:8px;padding:10px 12px;margin:8px 0}.ok{border-left:5px solid #16a34a}.bad{border-left:5px solid #d9001b}.wait{border-left:5px solid #999}
+b{display:block}small{color:#667085;word-break:break-all}button{padding:9px 14px;border:0;border-radius:8px;background:#d9001b;color:#fff;font-weight:700;cursor:pointer;margin:6px 6px 6px 0}</style></head><body>
+<h1>Dashboard connection check</h1>
+<p>Open this page from the <b style="display:inline">same place you open the dashboard</b> (same hosting / same device). It tests each link in the chain.</p>
+<button id="go">Run checks</button><button id="wr" style="background:#111">Also send 1 test row to the Sheet</button>
+<div id="out"></div>
+<script>
+const SHEET_ID='11-VVgEX5ugFP4suckiaV_LitXz2VhuYe3HhDv4rLcdA';
+const WEB='https://script.google.com/macros/s/AKfycbwNG8pirHbssES5uzrx3y_W_Ko7P1EUsAlBxrckFHFd4vTET4Z6z8EVmkRpEEgJ25N1vQ/exec';
+const CSV='https://docs.google.com/spreadsheets/d/'+SHEET_ID+'/gviz/tq?tqx=out:csv&headers=1';
+const out=document.getElementById('out');
+function row(t,cls,msg,url){const d=document.createElement('div');d.className='r '+cls;d.innerHTML='<b></b><span></span><br><small></small>';d.querySelector('b').textContent=t;d.querySelector('span').textContent=msg||'';d.querySelector('small').textContent=url||'';out.appendChild(d);return d}
+async function get(u){const c=new AbortController(),t=setTimeout(()=>c.abort(),15000);try{return await fetch(u,{signal:c.signal})}finally{clearTimeout(t)}}
+const why=e=>e&&e.name==='AbortError'?'timed out':String(e&&e.message||e);
+async function run(write){
+ out.innerHTML='';
+ if(location.protocol==='file:')row('Note','wait','You opened this as a local file. That is fine for testing, but agents need the dashboard on real hosting.');
+ // 1 sheet shared + activity tab
+ try{const r=await get(CSV+'&gid=0');const t=await r.text();
+  if(/^\s*<(!doctype|html)/i.test(t))row('1. Sheet is readable','bad','NOT shared. Sheet > Share > General access > "Anyone with the link" > Viewer.',CSV+'&gid=0');
+  else{const h=(t.split('\n')[0]||'').slice(0,90);row('1. Sheet is readable','ok','Yes. First line of tab gid=0: '+(h||'(empty tab)'),'');
+   if(!/^"?time/i.test(h)&&h)row('1b. Activity headers','bad','The first tab must start with Time, Email, Agent Code... (it has other data). Use an empty first tab and run setup.')}
+ }catch(e){row('1. Sheet is readable','bad','Blocked: '+why(e)+'. Usually the Sheet is not shared with "Anyone with the link", or this page is inside a sandbox (e.g. Claude preview) that blocks other sites.',CSV)}
+ // 2 payment tab
+ try{const r=await get(CSV+'&sheet=Payment_Log&_='+Date.now());const t=await r.text();const h=(t.split('\n')[0]||'').toLowerCase();
+  row('2. Payment_Log tab',/saved at/.test(h)?'ok':'wait',/saved at/.test(h)?'Found.':'Not created yet. That is OK: it is created automatically the first time the web app saves a payment.')}catch(e){row('2. Payment_Log tab','wait','Could not check: '+why(e))}
+ // 3 web app alive
+ let alive=false;
+ try{const r=await get(WEB);const j=await r.json();alive=!!(j&&j.ok);
+  row('3. Web app reachable',alive?'ok':'bad',alive?'Yes: '+JSON.stringify(j):'It answered, but not with the expected reply: '+JSON.stringify(j).slice(0,200)+' - the NEW Code.gs is not deployed.',WEB)}
+ catch(e){row('3. Web app reachable','bad','"'+why(e)+'". The browser was blocked. Fix: Apps Script > Deploy > Manage deployments > pencil > Version: New version; Execute as: Me; Who has access: ANYONE (not "Anyone with Google account"). Also confirm this exact URL is the one shown after Deploy.',WEB)}
+ // 4 new API
+ if(alive){try{const r=await get(WEB+'?action=read');const j=await r.json();
+  row('4. New API (action=read)',j&&j.success?'ok':'bad',j&&j.success?'Works ('+(j.data||[]).length+' payment records).':'Old script is still running. Paste the new Code.gs and deploy a NEW VERSION.')}catch(e){row('4. New API','bad',why(e))}}
+ // 5 write
+ if(write&&alive){try{const d={time:new Date().toISOString().slice(0,19).replace('T',' '),email:'diagnostic@test',code:'',name:'',action:'DIAGNOSTIC TEST',where:'diagnose.html',search:'safe to delete',device:'',visitor:'diag'};
+  const r=await get(WEB+'?action=write&data='+encodeURIComponent(JSON.stringify(d)));const j=await r.json();
+  row('5. Write a test row',j&&j.success?'ok':'bad',j&&j.success?'Saved. Check the first tab of your Sheet for "DIAGNOSTIC TEST" (you can delete it).':'Failed: '+(j&&j.error))}catch(e){row('5. Write a test row','bad',why(e))}}
+ else if(write)row('5. Write a test row','bad','Skipped because step 3 failed.');
+}
+document.getElementById('go').onclick=()=>run(false);document.getElementById('wr').onclick=()=>run(true);
+</script></body></html>
