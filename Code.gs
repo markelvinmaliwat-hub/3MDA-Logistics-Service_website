@@ -1,76 +1,38 @@
-// Activity log + FOR PAYMENT database for the PLDT Subscriber Lookup dashboard
-function ss_() { return SpreadsheetApp.getActiveSpreadsheet(); }
-function sheet_() {
-  return ss_().getSheetByName('ACTIVITY LOG') || ss_().insertSheet('ACTIVITY LOG');
-}
-function payDb_() {
-  var sh = ss_().getSheetByName('FOR PAYMENT DB');
-  if (!sh) {
-    sh = ss_().insertSheet('FOR PAYMENT DB');
-    sh.appendRow(['Key','Subscriber','Account','Agent','Action','Action code','Date of payment','Remarks','Saved by','Agent code','Saved at']);
-    sh.setFrozenRows(1);
-    sh.getRange('A:A').setNumberFormat('@');
-    sh.getRange('C:C').setNumberFormat('@');
-    sh.getRange('G:G').setNumberFormat('@');
-    sh.getRange('K:K').setNumberFormat('@');
-  }
-  return sh;
-}
-function doPost(e) {
-  var lock = LockService.getScriptLock();
-  lock.waitLock(10000);
-  try {
-    var r = JSON.parse(e.postData.contents);
-    if (r.type === 'pay') {
-      // FOR PAYMENT database: one row per subscriber, updated each time an agent saves
-      var db = payDb_();
-      var vals = [r.key, r.name, r.account, r.agent, r.label, r.action, r.date, r.remarks, r.by, r.code, r.at];
-      var last = db.getLastRow(), row = 0;
-      if (last > 1) {
-        var keys = db.getRange(2, 1, last - 1, 1).getValues();
-        for (var i = 0; i < keys.length; i++) { if (String(keys[i][0]) === String(r.key)) { row = i + 2; break; } }
-      }
-      if (row) db.getRange(row, 1, 1, vals.length).setValues([vals]); else db.appendRow(vals);
-    } else {
-      var sh = sheet_();
-      if (sh.getLastRow() === 0) {
-        sh.appendRow(['Time','Email','Agent code','Agent name','Action','Where','Search / details','Device','Visitor ID']);
-        sh.setFrozenRows(1);
-        sh.getRange('A:A').setNumberFormat('@');
-      }
-      sh.appendRow([r.time, r.email, r.code, r.name, r.action, r.where, r.search, r.device, r.visitor]);
+/**
+ * Shared database for the Subscriber Lookup dashboard (works for ANY agent, no claude.ai account needed).
+ * SETUP
+ * 1. Create a new Google Sheet. Extensions > Apps Script. Paste this whole file. Save.
+ * 2. Deploy > New deployment > type "Web app". Execute as: Me. Who has access: Anyone. Deploy.
+ * 3. Copy the Web app URL and paste it into the dashboard HTML between the quotes of:  const LOG_URL='';
+ * Sheets "ActivityLog", "PaymentLatest" and "PaymentHistory" are created automatically.
+ */
+var ACT_H=['time','email','code','name','action','where','search','device','visitor'];
+var PAY_H=['key','name','account','agent','label','action','date','remarks','by','code','byName','at'];
+function sh_(n,h){var ss=SpreadsheetApp.getActiveSpreadsheet(),s=ss.getSheetByName(n);if(!s){s=ss.insertSheet(n);s.appendRow(h);s.setFrozenRows(1)}return s}
+function rows_(s,h){var v=s.getDataRange().getValues();v.shift();return v.map(function(r){var o={};h.forEach(function(k,i){o[k]=r[i]==null?'':String(r[i])});return o})}
+function out_(o){return ContentService.createTextOutput(JSON.stringify(o)).setMimeType(ContentService.MimeType.JSON)}
+function doPost(e){
+  var lock=LockService.getScriptLock();lock.waitLock(20000);
+  try{
+    var b=JSON.parse(e.postData.contents);
+    if(b.type==='pay'){
+      var row=PAY_H.map(function(k){return b[k]==null?'':b[k]});
+      sh_('PaymentHistory',PAY_H).appendRow(row);
+      var s=sh_('PaymentLatest',PAY_H),v=s.getDataRange().getValues(),idx=-1;
+      for(var i=1;i<v.length;i++){if(String(v[i][0])===String(b.key)){idx=i+1;break}}
+      if(idx<0)s.appendRow(row);
+      else if(String(b.at)>=String(v[idx-1][PAY_H.indexOf('at')]))s.getRange(idx,1,1,PAY_H.length).setValues([row]);
+    }else{
+      sh_('ActivityLog',ACT_H).appendRow(ACT_H.map(function(k){return b[k]==null?'':b[k]}));
     }
-  } finally {
-    lock.releaseLock();
-  }
-  return ContentService.createTextOutput('ok');
+    return out_({ok:true});
+  }catch(err){return out_({ok:false,error:String(err)})}
+  finally{lock.releaseLock()}
 }
-function fmt_(v, tz, pattern) {
-  return (v instanceof Date) ? Utilities.formatDate(v, tz, pattern) : String(v);
-}
-function doGet(e) {
-  var p = (e && e.parameter) || {};
-  var tz = Session.getScriptTimeZone();
-  if (p.read === '1') {
-    var sh = sheet_(), rows = [], last = sh.getLastRow();
-    if (last > 1) {
-      var n = Math.min(last - 1, 3000);
-      rows = sh.getRange(last - n + 1, 1, n, 9).getValues().map(function (r) {
-        return {time: fmt_(r[0], tz, 'yyyy-MM-dd HH:mm:ss'), email: String(r[1]), code: String(r[2]), name: String(r[3]), action: String(r[4]),
-                where: String(r[5]), search: String(r[6]), device: String(r[7]), visitor: String(r[8])};
-      });
-    }
-    return ContentService.createTextOutput(JSON.stringify({rows: rows})).setMimeType(ContentService.MimeType.JSON);
-  }
-  if (p.read === 'pay') {
-    var db = payDb_(), out = [], l = db.getLastRow();
-    if (l > 1) {
-      out = db.getRange(2, 1, l - 1, 11).getValues().map(function (r) {
-        return {key: String(r[0]), name: String(r[1]), account: String(r[2]), agent: String(r[3]), label: String(r[4]), action: String(r[5]),
-                date: fmt_(r[6], tz, 'yyyy-MM-dd'), remarks: String(r[7]), by: String(r[8]), code: String(r[9]), at: fmt_(r[10], tz, 'yyyy-MM-dd HH:mm:ss')};
-      });
-    }
-    return ContentService.createTextOutput(JSON.stringify({rows: out})).setMimeType(ContentService.MimeType.JSON);
-  }
-  return ContentService.createTextOutput('Activity log endpoint is running');
+function doGet(e){
+  var r=(e&&e.parameter&&e.parameter.read)||'';
+  if(r==='pay')return out_({rows:rows_(sh_('PaymentLatest',PAY_H),PAY_H)});
+  if(r==='payhist')return out_({rows:rows_(sh_('PaymentHistory',PAY_H),PAY_H)});
+  if(r)return out_({rows:rows_(sh_('ActivityLog',ACT_H),ACT_H).reverse()});
+  return out_({ok:true});
 }
