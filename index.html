@@ -197,17 +197,18 @@ const DF=['SUBSCRIBER NAME','ACCOUNT PID','CSP STATUS','AVAILED PLAN','SR','PR',
 const AL={'ACCOUNT PID':['ACCT','ACCOUNT','PID'],'SUBSCRIBER NAME':['SUBSCRIBERS NAME'],'CSP STATUS':['STATUS'],'AVAILED PLAN':['PLAN AVAILED'],'CSP REMARKS':['REMARKS'],'AGENT NAME':['AGENT'],'HOUSE #':['HOUSE#/ UNIT / FLOOR','HOUSE#'],'BRGY':['BGY']};
 function dv(r,l){for(const a of [l,...(AL[l]||[])]){const k=Object.keys(r).find(k=>k.trim().toUpperCase()===a);if(k&&r[k]!==''&&r[k]!=null){const v=r[k];return v instanceof Date?fmt(v):String(v)}}return ''}
 function mdl(h){$('mc').innerHTML=h;$('md').classList.add('on')}
-function closeM(){$('md').classList.remove('on')}
+function closeM(){window.__plRefresh=null;$('md').classList.remove('on')}
 function showDetail(r,back){logEv('VIEW DETAILS','Dashboard',dv(r,'SUBSCRIBER NAME'));
  const pd=toD(r['POSTED DATE']);
  mdl(`<div class="mh"><div>${back?'<button class="btn" id="mback">← Back</button> ':''}</div><button class="btn" id="mx">✕</button></div><h2 class="bl nmB" style="margin:8px 0 2px">${esc(dv(r,'SUBSCRIBER NAME')||'—')}</h2><div class="sub">Sale date ${fmt(r._d)||'—'}${pd?' · Posted '+fmt(pd):''}</div><div class="dg">`+DF.filter(l=>l!=='PR'||'PR' in r).map(l=>{const v=dv(r,l);return `<div><label>${l.replace(' PID','')}</label><b class="${v&&BL.includes(l)?'bl':''}${l==='PR'&&v?' rd':''}${l==='SUBSCRIBER NAME'&&v?' nmB':''}${l==='ACCOUNT PID'&&v?' acR':''}${l==='FINAL STATUS'&&v?' stH':''}">${v?esc(v):'—'}</b></div>`+(l==='CSP REMARKS'?upRem(r):'')}).join('')+'</div>');
  $('mx').onclick=closeM;if(back)$('mback').onclick=back}
 const payRec=()=>{try{return JSON.parse(localStorage.getItem('mm_pay'))||{}}catch(e){return {}}};
+const payH=()=>{try{return JSON.parse(localStorage.getItem('mm_payh'))||[]}catch(e){return []}};
 const paySave=R=>{try{localStorage.setItem('mm_pay',JSON.stringify(R))}catch(e){}};
 const PK=r=>[dv(r,'SUBSCRIBER NAME'),r['DATE']||'',dv(r,'ACCOUNT PID')||dv(r,'SR')].join('|');
 const isFP=r=>/^\s*FOR PAYMENT/i.test(r._s||'');
 const PAYOPT=[['','Select action'],['cancel','For cancellation'],['nwtp','Not willing to pay'],['sched','Proceed scheduled payment']];
-const upRem=r=>{const x=payRec()[PK(r)];if(!x||(!x.o&&!x.m))return '';const lab=(PAYOPT.find(z=>z[0]===x.o)||['',''])[1];return `<div style="grid-column:1/-1"><label>UPDATED REMARKS</label><b class="upr">${esc([lab,x.d?'pay on '+x.d:'',x.m].filter(Boolean).join(' \u00b7 '))}</b><div class="sub">${esc(x.by||'')}${x.at?' \u00b7 '+esc(x.at):''}</div></div>`};
+const upRem=r=>{const x=payRec()[PK(r)];if(!x||(!x.o&&!x.m))return '';const lab=(PAYOPT.find(z=>z[0]===x.o)||['',''])[1];return `<div style="grid-column:1/-1"><label>UPDATED REMARKS</label><b class="upr">${esc([lab,x.d?'pay on '+x.d:'',x.m].filter(Boolean).join(' \u00b7 '))}</b><div class="sub">${esc([x.bn,x.code?'('+x.code+')':'',x.by].filter(Boolean).join(' '))}${x.at?' \u00b7 '+esc(x.at):''}</div></div>`};
 const NOCONTACT=/ringing|unattended|busy|no answer|not reachable|cannot be reached|out of coverage/i;
 const solicited=(r,REC)=>{if(REC[PK(r)])return true;const t=String(r['PAYMENT REMARKS']||'').trim();return !!t&&!NOCONTACT.test(t)};
 let FM='';
@@ -226,39 +227,70 @@ function renderINS(){const all=cur().filter(r=>INS.includes(insSt(r))),ms=[...ne
  const rk=Object.entries(m).sort((x,y)=>y[1].length-x[1].length),cnt=(l,st)=>l.filter(r=>insSt(r)===st);
  $('ins').textContent=`${IM?mlabel(IM):'All months'} \u00b7 ${rows.length} for installation \u00b7 ${rk.length} agents \u00b7 click a number to see subscriber name, account and CBR`;
  $('insr').innerHTML=rk.length?`<div class="sc" style="max-height:300px"><table class="fpt ins"><thead><tr><th>#</th><th>Agent</th>${INS.map(x=>`<th>${INSL[x]}</th>`).join('')}<th>Total</th></tr></thead><tbody>`+rk.map(([a,l],i)=>`<tr><td>${i+1}</td><td class="rr" ${lk('a',a+' \u00b7 FOR INSTALLATION',l,5)}>${esc(a)}</td>${INS.map(x=>{const c=cnt(l,x);return `<td class="num">${c.length?`<span class="rr" ${lk('a',a+' \u00b7 '+INSL[x],c,5)}>${c.length}</span>`:'0'}</td>`}).join('')}<td class="num"><span class="rr" ${lk('a',a+' \u00b7 FOR INSTALLATION',l,5)}>${l.length}</span></td></tr>`).join('')+`</tbody><tfoot><tr><td></td><td><b>Total</b></td>${INS.map(x=>`<td class="num">${cnt(rows,x).length}</td>`).join('')}<td class="num">${rows.length}</td></tr></tfoot></table></div>`:'<div class="empty">No FOR INSTALLATION records</div>'}
+
+let DB=null,DBP=null,DBW=true;
+const dbMsg=t=>{const e=$('fpsy');if(e)e.textContent=t};
+const strip=x=>{const o={};['o','d','m','at','by','code','bn','n','a','g'].forEach(k=>o[k]=x[k]==null?'':x[k]);return o};
+function dbInit(){if(DBP)return DBP;DBP=(async()=>{
+ if(typeof claude==='undefined'||!claude.use)return null;
+ try{const u=await claude.use('user');if(u&&u.can){const w=u.can('data.write');DBW=w!==false}}catch(e){}
+ try{DB=await claude.use('db')}catch(e){DB=null}
+ if(!DB)return null;
+ let first=true;
+ DB.collection('pay').onSnapshot(snap=>{const L=payRec();let ch=false;const seen={};
+  snap.docs.forEach(d=>{const x=d.data();if(!x||!x.key)return;seen[x.key]=1;const l=L[x.key];if(!l||String(x.at||'')>String(l.at||'')){L[x.key]=strip(x);ch=true}});
+  if(ch){paySave(L);renderFP();if(window.__plRefresh)window.__plRefresh()}
+  dbMsg(DBW?'Shared database connected \u00b7 remarks are live for all agents and admins':'Shared database connected (read-only: ask the owner for Contributor access to save remarks)');
+  if(first){first=false;if(DBW){(async()=>{try{for(const [k,v] of Object.entries(payRec())){const l=seen[k];if(!l){await DB.doc('pay/p'+pwh(k)).set(Object.assign({key:k},v))}}}catch(e){}})()}}
+ },e=>dbMsg('Shared database unavailable, using this browser only'));
+ return DB})();return DBP}
+function dbSave(key,rec,nt){dbInit().then(async()=>{if(!DB)return;
+ try{await DB.doc('pay/p'+pwh(key)).set(Object.assign({key},rec));await DB.doc('payh/h'+pwh(key+'#'+rec.at+'#'+rec.by)).set(Object.assign({key},rec));dbMsg('Saved to shared database \u00b7 visible to all agents and admins');if(nt)nt.innerHTML+=' <span class="pok">\u00b7 shared</span>'}
+ catch(e){dbMsg('Could not save to the shared database (needs Contributor access)');if(nt)nt.innerHTML+=' <span class="perr">\u00b7 not shared: no write access</span>'}})}
+async function dbHist(){await dbInit();if(!DB)return null;try{const s=await DB.collection('payh').orderBy('at','desc').limit(1000).get();return s.docs.map(d=>d.data()).filter(x=>x&&x.key).map(x=>({key:x.key,n:x.n,a:x.a,g:x.g,o:x.o,d:x.d||'',m:x.m||'',at:x.at,by:x.by||'',code:x.code||'',bn:x.bn||''}))}catch(e){return null}}
 function syncPay(){if(!LOG_URL)return;return fetch(LOG_URL+(LOG_URL.includes('?')?'&':'?')+'read=pay').then(r=>r.json()).then(j=>{if(!j||!Array.isArray(j.rows))return;const L=payRec();let ch=false;
- j.rows.forEach(x=>{if(!x.key)return;const l=L[x.key];if(!l||String(x.at)>String(l.at||'')){L[x.key]={o:x.action,d:x.date||'',m:x.remarks||'',at:x.at,by:x.by||'',code:x.code||'',n:x.name||'',a:x.account||'',g:x.agent||''};ch=true}});
+ j.rows.forEach(x=>{if(!x.key)return;const l=L[x.key];if(!l||String(x.at)>String(l.at||'')){L[x.key]={o:x.action,d:x.date||'',m:x.remarks||'',at:x.at,by:x.by||'',code:x.code||'',bn:x.byName||'',n:x.name||'',a:x.account||'',g:x.agent||''};ch=true}});
  if(ch){paySave(L);renderFP()}const e=$('fpsy');if(e)e.textContent='Database synced'}).catch(()=>{const e=$('fpsy');if(e)e.textContent='Could not reach the database, using this browser only'})}
-function payCsv(){const R=payRec(),H=['Subscriber','Account','Agent','Action','Date of payment','Remarks','Saved by','Agent code','Saved at'],q=v=>'"'+String(v==null?'':v).replace(/"/g,'""')+'"';
+function payCsv(){const R=payRec(),H=['Subscriber','Account','Agent','Action','Date of payment','Remarks','Saved by (name)','Saved by (email)','Agent code','Saved at'],q=v=>'"'+String(v==null?'':v).replace(/"/g,'""')+'"';
  const lab=o=>(PAYOPT.find(z=>z[0]===o)||['',o])[1];
- const data=[H.map(q).join(',')].concat(Object.values(R).sort((x,y)=>String(y.at).localeCompare(String(x.at))).map(x=>[x.n,x.a,x.g,lab(x.o),x.d,x.m,x.by,x.code,x.at].map(q).join(','))).join('\r\n');
+ const data=[H.map(q).join(',')].concat(Object.values(R).sort((x,y)=>String(y.at).localeCompare(String(x.at))).map(x=>[x.n,x.a,x.g,lab(x.o),x.d,x.m,x.bn,x.by,x.code,x.at].map(q).join(','))).join('\r\n');
  (async()=>{let d=null;try{d=await claude.use('downloads')}catch(e){}
   if(d){try{await d.save({filename:'for_payment_database.csv',data})}catch(e){}return}
   const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([data],{type:'text/csv'}));a.download='for_payment_database.csv';document.body.appendChild(a);a.click();a.remove()})()}
-function showPayLog(){let ALL=[],VIEW=[];
- mdl(`<div class="mh"><h2 style="margin:0">For payment log</h2><button class="btn" id="mx">\u2715</button></div><div class="sub" id="pls">Loading...</div><div class="ctl"><input id="plq" placeholder="Filter by subscriber, account, agent, action or remarks"><button class="btn" id="plr">Refresh</button><button class="btn" id="pld">Download CSV</button></div><div class="sc2" style="max-height:58vh"><table><thead><tr><th>Saved at</th><th>Subscriber</th><th>Account</th><th>Agent</th><th>Action</th><th>Date of payment</th><th>Remarks</th><th>Saved by</th></tr></thead><tbody id="plb"></tbody></table></div>`);
+function showPayLog(){let ALL=[],HIST=[],MODE='latest',VIEW=[];
+ mdl(`<div class="mh"><h2 style="margin:0">For payment log</h2><button class="btn" id="mx">\u2715</button></div><div class="sub" id="pls">Loading...</div><div class="ctl"><select id="plm"><option value="latest">Latest remarks per subscriber</option><option value="all">All updates (history)</option></select><input id="plq" placeholder="Filter by subscriber, account, agent, action, remarks or who saved"><button class="btn" id="plr">Refresh</button><button class="btn" id="pld">Download CSV</button></div><div class="sc2" style="max-height:58vh"><table><thead><tr><th>Saved at</th><th>Subscriber</th><th>Account</th><th>Agent</th><th>Action</th><th>Date of payment</th><th>Remarks</th><th>Saved by</th><th>Updates</th></tr></thead><tbody id="plb"></tbody></table></div>`);
  $('mx').onclick=closeM;
- const lab=o=>(PAYOPT.find(z=>z[0]===o)||['',o||''])[1];
- const draw=()=>{const f=($('plq').value||'').trim().toLowerCase();
-  VIEW=ALL.filter(x=>!f||[x.n,x.a,x.g,lab(x.o),x.m,x.by,x.d].join(' ').toLowerCase().includes(f));
-  $('plb').innerHTML=VIEW.slice(0,500).map(x=>`<tr><td>${esc(x.at||'')}</td><td class="bl">${esc(x.n||'\u2014')}</td><td>${esc(x.a||'\u2014')}</td><td>${esc(x.g||'\u2014')}</td><td>${esc(lab(x.o))}</td><td>${esc(x.d||'\u2014')}</td><td>${esc(x.m||'\u2014')}</td><td>${esc(x.by||'\u2014')}</td></tr>`).join('')||'<tr><td colspan="8" class="empty">No for payment actions yet</td></tr>'};
- const load=async()=>{$('pls').textContent='Loading...';let ok=true;try{await (syncPay()||Promise.resolve())}catch(e){ok=false}
-  ALL=Object.values(payRec()).sort((x,y)=>String(y.at).localeCompare(String(x.at)));
-  const ag=new Set(ALL.map(x=>x.g).filter(Boolean));
-  $('pls').textContent=`${ALL.length} action${ALL.length===1?'':'s'} \u00b7 ${ag.size} agent${ag.size===1?'':'s'}`+(ALL.length>500?' \u00b7 showing latest 500':'')+(LOG_URL?' \u00b7 shared database \u2014 visible to all agents':' \u00b7 this browser only (add your Google Sheet link to share with all agents)');draw()};
- $('plq').oninput=draw;$('plr').onclick=load;$('pld').onclick=payCsv;load()}
+ const lab=o=>(PAYOPT.find(z=>z[0]===o)||['',o||''])[1],who=x=>[x.bn,x.code?'('+x.code+')':'',x.by].filter(Boolean).join(' ')||'\u2014';
+ const draw=()=>{const f=($('plq').value||'').trim().toLowerCase(),src=MODE==='all'?HIST:ALL;
+  VIEW=src.filter(x=>!f||[x.n,x.a,x.g,lab(x.o),x.m,x.by,x.bn,x.code,x.d].join(' ').toLowerCase().includes(f));
+  const cnt={};HIST.forEach(h=>{cnt[h.key]=(cnt[h.key]||0)+1});
+  $('plb').innerHTML=VIEW.slice(0,500).map(x=>`<tr><td>${esc(x.at||'')}</td><td class="bl">${esc(x.n||'\u2014')}</td><td>${esc(x.a||'\u2014')}</td><td>${esc(x.g||'\u2014')}</td><td>${esc(lab(x.o))}</td><td>${esc(x.d||'\u2014')}</td><td>${esc(x.m||'\u2014')}</td><td>${esc(who(x))}</td><td>${MODE==='all'?'':(cnt[x.key]||1)}</td></tr>`).join('')||'<tr><td colspan="9" class="empty">No for payment actions yet</td></tr>'};
+ const load=async()=>{$('pls').textContent='Loading...';let hist=payH(),rem=false;
+  if(LOG_URL){try{await syncPay();const r=await fetch(LOG_URL+(LOG_URL.includes('?')?'&':'?')+'read=payhist'),j=await r.json();if(j&&Array.isArray(j.rows)){hist=j.rows.map(x=>({key:x.key,n:x.name,a:x.account,g:x.agent,o:x.action,d:x.date||'',m:x.remarks||'',at:x.at,by:x.by||'',code:x.code||'',bn:x.byName||''}));rem=true}}catch(e){}}
+  {const dh=await dbHist();if(dh){hist=dh;rem=true}}
+  HIST=hist.slice().sort((x,y)=>String(y.at).localeCompare(String(x.at)));
+  ALL=Object.entries(payRec()).map(([k,v])=>Object.assign({key:k},v)).sort((x,y)=>String(y.at).localeCompare(String(x.at)));
+  const ag=new Set(ALL.map(x=>x.g).filter(Boolean)),sv2=new Set(ALL.map(x=>x.by).filter(Boolean));
+  $('pls').textContent=`${ALL.length} subscriber${ALL.length===1?'':'s'} with remarks \u00b7 ${HIST.length} update${HIST.length===1?'':'s'} \u00b7 ${sv2.size} agent${sv2.size===1?'':'s'} saved remarks`+(rem?' \u00b7 shared database \u2014 visible to all agents':(LOG_URL?' \u00b7 could not reach the shared database, showing this browser only':' \u00b7 this browser only (add your Google Sheet link to share with all agents)'));draw()};
+ window.__plRefresh=()=>{if($('plb'))load()};$('plq').oninput=draw;$('plm').onchange=e=>{MODE=e.target.value;draw()};$('plr').onclick=load;$('pld').onclick=()=>{if(MODE==='all')histCsv(HIST);else payCsv()};load()}
+function histCsv(rows){const H=['Saved at','Subscriber','Account','Agent','Action','Date of payment','Remarks','Saved by (name)','Saved by (email)','Agent code'],q=v=>'"'+String(v==null?'':v).replace(/"/g,'""')+'"',lab=o=>(PAYOPT.find(z=>z[0]===o)||['',o||''])[1];
+ const data=[H.map(q).join(',')].concat(rows.map(x=>[x.at,x.n,x.a,x.g,lab(x.o),x.d,x.m,x.bn,x.by,x.code].map(q).join(','))).join('\r\n');
+ (async()=>{let d=null;try{d=await claude.use('downloads')}catch(e){}
+  if(d){try{await d.save({filename:'for_payment_history.csv',data})}catch(e){}return}
+  const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([data],{type:'text/csv'}));a.download='for_payment_history.csv';document.body.appendChild(a);a.click();a.remove()})()}
 function showPayList(t,rows){const REC=payRec(),sh=rows.slice(0,200);
- const row=(r,i)=>{const x=REC[PK(r)]||{},nt=String(r['PAYMENT REMARKS']||'').trim();return `<tr data-i="${i}"><td class="bl">${esc(dv(r,'SUBSCRIBER NAME'))}</td><td class="bl">${esc(dv(r,'ACCOUNT PID')||'\u2014')}</td><td><select class="po">${PAYOPT.map(([v,l])=>`<option value="${v}"${x.o===v?' selected':''}>${l}</option>`).join('')}</select></td><td><input type="date" class="pd" value="${esc(x.d||'')}"${x.o==='sched'?'':' disabled'}></td><td><input class="pm" maxlength="300" placeholder="Remarks" value="${esc(x.m||'')}"><div class="pt sub">${x.at?'<span class="pok">Saved '+esc(x.at)+'</span>':(nt?'Note: '+esc(nt.slice(0,70)):'')}</div></td></tr>`};
+ const row=(r,i)=>{const x=REC[PK(r)]||{},nt=String(r['PAYMENT REMARKS']||'').trim();return `<tr data-i="${i}"><td class="bl">${esc(dv(r,'SUBSCRIBER NAME'))}</td><td class="bl">${esc(dv(r,'ACCOUNT PID')||'\u2014')}</td><td><select class="po">${PAYOPT.map(([v,l])=>`<option value="${v}"${x.o===v?' selected':''}>${l}</option>`).join('')}</select></td><td><input type="date" class="pd" value="${esc(x.d||'')}"${x.o==='sched'?'':' disabled'}></td><td><input class="pm" maxlength="300" placeholder="Remarks" value="${esc(x.m||'')}"><div class="pt sub">${x.at?'<span class="pok">Saved '+esc(x.at)+(x.bn?' \u00b7 '+esc(x.bn):'')+'</span>':(nt?'Note: '+esc(nt.slice(0,70)):'')}</div></td></tr>`};
  mdl(`<div class="mh"><h2 style="margin:0">${esc(t)}</h2><button class="btn" id="mx">\u2715</button></div><div class="sub">${rows.length} records${rows.length>200?' \u00b7 showing first 200':''} \u00b7 choose an action, set the payment date if scheduled and add remarks \u2014 it saves automatically</div><div class="sc2 pay" style="max-height:60vh"><table><thead><tr><th>Subscriber name</th><th>Account</th><th>Action</th><th>Date of payment</th><th>Remarks</th></tr></thead><tbody>`+sh.map(row).join('')+'</tbody></table></div>');
  $('mx').onclick=closeM;const mc=$('mc');
  mc.onchange=e=>{const el=e.target.closest('.po,.pd,.pm');if(!el)return;const tr=el.closest('tr'),sel=tr.querySelector('.po'),d=tr.querySelector('.pd'),mm=tr.querySelector('.pm').value.trim(),nt=tr.querySelector('.pt'),r=sh[+tr.dataset.i],o=sel.value,bad=x=>{nt.innerHTML='<span class="perr">'+x+'</span>'};
   if(el===sel){d.disabled=o!=='sched';if(d.disabled)d.value=''}
   if(!o)return bad('Choose an action to save.');if(o==='sched'&&!d.value)return bad('Set the date of payment to save.');
   const R2=payRec(),now=new Date(),p2=n=>String(n).padStart(2,'0'),at=`${now.getFullYear()}-${p2(now.getMonth()+1)}-${p2(now.getDate())} ${p2(now.getHours())}:${p2(now.getMinutes())}:${p2(now.getSeconds())}`,lab=PAYOPT.find(z=>z[0]===o)[1],key=PK(r),dt=o==='sched'?d.value:'';
-  const rec={o,d:dt,m:mm,at,by:(ME&&ME.email)||'',code:(ME&&ME.code)||'',n:dv(r,'SUBSCRIBER NAME'),a:dv(r,'ACCOUNT PID'),g:r._a||''};R2[key]=rec;paySave(R2);
-  if(LOG_URL){try{fetch(LOG_URL,{method:'POST',mode:'no-cors',headers:{'Content-Type':'text/plain'},body:JSON.stringify({type:'pay',key,name:rec.n,account:rec.a,agent:rec.g,label:lab,action:o,date:dt,remarks:mm,by:rec.by,code:rec.code,at})}).catch(()=>{})}catch(er){}}
+  const rec={o,d:dt,m:mm,at,by:(ME&&ME.email)||'',code:(ME&&ME.code)||'',bn:(ME&&ME.name)||'',n:dv(r,'SUBSCRIBER NAME'),a:dv(r,'ACCOUNT PID'),g:r._a||''};R2[key]=rec;paySave(R2);{const H=payH();H.push(Object.assign({key},rec));try{localStorage.setItem('mm_payh',JSON.stringify(H.slice(-2000)))}catch(er){}}
+  if(LOG_URL){try{fetch(LOG_URL,{method:'POST',mode:'no-cors',headers:{'Content-Type':'text/plain'},body:JSON.stringify({type:'pay',key,name:rec.n,account:rec.a,agent:rec.g,label:lab,action:o,date:dt,remarks:mm,by:rec.by,code:rec.code,byName:rec.bn,at})}).catch(()=>{})}catch(er){}}
+  dbSave(key,rec,nt);
   logEv('PAYMENT UPDATE','For payment',`${rec.n} \u00b7 ${rec.a||'no account'} \u00b7 ${lab}${dt?' \u00b7 pay on '+dt:''}${mm?' \u00b7 '+mm:''}`);
-  nt.innerHTML='<span class="pok">Saved '+at+'</span>'};
+  nt.innerHTML='<span class="pok">Saved '+at+(rec.bn?' \u00b7 '+esc(rec.bn):'')+'</span>'};
  syncPay()}
 function showList(t,rows,pm){
  if(pm===4)return showPayList(t,rows);
@@ -337,7 +369,7 @@ const PW='3mdaupland',nc=v=>String(v||'').trim().toUpperCase().replace(/^P/,'');
 const AC={};['PLDT','RED'].forEach(t=>(DATA[t]||[]).forEach(r=>{const c=nc(r['AGENT CODE']);if(c&&!AC[c])AC[c]=r['AGENT NAME']}));
 let ME=null,pendFc=false,suMode=false,lstep=0,pendC='',pendE='';const pwh=x=>{let a=3735928559,b=1103547991;for(let i=0;i<x.length;i++){const c=x.charCodeAt(i);a=Math.imul(a^c,2654435761);b=Math.imul(b^c,1597334677)}a=Math.imul(a^(a>>>16),2246822507)^Math.imul(b^(b>>>13),3266489909);b=Math.imul(b^(b>>>16),2246822507)^Math.imul(a^(a>>>13),3266489909);return (4294967296*(2097151&b)+(a>>>0)).toString(36)};
 const ADMIN_EMAILS=[];/* OPTIONAL: emails allowed to see EVERYONE'S activity, e.g. ['you@email.com']. Leave empty = every logged-in agent sees the full list. */
-const LOG_URL='https://script.google.com/macros/s/AKfycbwNG8pirHbssES5uzrx3y_W_Ko7P1EUsAlBxrckFHFd4vTET4Z6z8EVmkRpEEgJ25N1vQ/exec';/* PASTE YOUR GOOGLE APPS SCRIPT WEB APP URL BETWEEN THE QUOTES */
+const LOG_URL='';/* PASTE YOUR GOOGLE APPS SCRIPT WEB APP URL BETWEEN THE QUOTES */
 const ld=(k,d)=>{try{return JSON.parse(localStorage.getItem(k))||d}catch(e){return d}},sv=(k,v)=>{try{localStorage.setItem(k,JSON.stringify(v))}catch(e){}};
 const VID=()=>{let v=ld('mm_vid','');if(!v){v='V'+Math.random().toString(36).slice(2,10);sv('mm_vid',v)}return v};
 function logEv(action,where,search,em){if(!ME&&!em&&action!=='OPEN PORTAL')return;const d=new Date(),p=n=>String(n).padStart(2,'0'),row={time:`${d.getFullYear()}-${p(d.getMonth()+1)}-${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}:${p(d.getSeconds())}`,email:ME?ME.email:(em||''),code:ME?ME.code:'',name:ME?ME.name:'',action,where,search:search||'',device:(navigator.userAgent||'').slice(0,120),visitor:VID()};
@@ -443,7 +475,7 @@ function showLog(){
 $('dlog').onclick=showLog;
 try{const c=sessionStorage.getItem('agc'),e=sessionStorage.getItem('age')||'',acc=ld('mm_acc',{})[e];if(c&&AC[c]!==undefined&&acc)enter(c,true,e)}catch(e){}
 logEv('OPEN PORTAL','Portal','');
-syncPay();$('fpd').onclick=payCsv;$('im').onchange=e=>{IM=e.target.value;renderINS()};$('fm').onchange=e=>{FM=e.target.value;renderFP()};$('dpay').onclick=showPayLog;
+dbInit();syncPay();$('fpd').onclick=payCsv;$('im').onchange=e=>{IM=e.target.value;renderINS()};$('fm').onchange=e=>{FM=e.target.value;renderFP()};$('dpay').onclick=showPayLog;
 </script><button id="vsw" type="button"></button>
 <script>
 (function(){const h=document.documentElement,mt=document.querySelector('meta[name=viewport]'),b=document.getElementById('vsw');
