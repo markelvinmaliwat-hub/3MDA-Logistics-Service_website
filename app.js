@@ -253,7 +253,7 @@ const PW='3mdaupland',nc=v=>String(v||'').trim().toUpperCase().replace(/^P/,'');
 const AC={};['PLDT','RED'].forEach(t=>(DATA[t]||[]).forEach(r=>{const c=nc(r['AGENT CODE']);if(c&&!AC[c])AC[c]=r['AGENT NAME']}));
 let ME=null,pendFc=false,suMode=false,lstep=0,pendC='',pendE='';const pwh=x=>{let a=3735928559,b=1103547991;for(let i=0;i<x.length;i++){const c=x.charCodeAt(i);a=Math.imul(a^c,2654435761);b=Math.imul(b^c,1597334677)}a=Math.imul(a^(a>>>16),2246822507)^Math.imul(b^(b>>>13),3266489909);b=Math.imul(b^(b>>>16),2246822507)^Math.imul(a^(a>>>13),3266489909);return (4294967296*(2097151&b)+(a>>>0)).toString(36)};
 const ADMIN_EMAILS=[];/* OPTIONAL: emails allowed to see EVERYONE'S activity, e.g. ['you@email.com']. Leave empty = every logged-in agent sees the full list. */
-const LOG_URL='';/* PASTE YOUR GOOGLE APPS SCRIPT WEB APP URL BETWEEN THE QUOTES */
+const LOG_URL='';https://script.google.com/macros/s/AKfycbwNG8pirHbssES5uzrx3y_W_Ko7P1EUsAlBxrckFHFd4vTET4Z6z8EVmkRpEEgJ25N1vQ/exec
 const ld=(k,d)=>{try{return JSON.parse(localStorage.getItem(k))||d}catch(e){return d}},sv=(k,v)=>{try{localStorage.setItem(k,JSON.stringify(v))}catch(e){}};
 const VID=()=>{let v=ld('mm_vid','');if(!v){v='V'+Math.random().toString(36).slice(2,10);sv('mm_vid',v)}return v};
 function logEv(action,where,search,em){if(!ME&&!em&&action!=='OPEN PORTAL')return;const d=new Date(),p=n=>String(n).padStart(2,'0'),row={time:`${d.getFullYear()}-${p(d.getMonth()+1)}-${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}:${p(d.getSeconds())}`,email:ME?ME.email:(em||''),code:ME?ME.code:'',name:ME?ME.name:'',action,where,search:search||'',device:(navigator.userAgent||'').slice(0,120),visitor:VID()};
