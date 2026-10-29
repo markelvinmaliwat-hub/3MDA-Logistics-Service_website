@@ -1,0 +1,495 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Subscriber Lookup - LIVE AUTO-SYNC</title>
+<style>
+:root{--bg:#eef2f9;--card:#fff;--ink:#1a2233;--mut:#667085;--navy:#d9001b;--red:#e4002b;--line:#e3e8f0;--alt:#f4f7fc;--track:#e6ecf5;box-sizing:border-box}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#0e1424;--card:#171f33;--ink:#e8edf7;--mut:#94a0b8;--navy:#ff4d5e;--line:#2a3550;--alt:#1b243b;--track:#26314d}}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--ink);font:14px/1.4 "Segoe UI",system-ui,sans-serif}
+header{background:#111;color:#fff;padding:12px 16px;display:flex;align-items:center;gap:12px;flex-wrap:wrap;border-bottom:4px solid var(--red)}
+.b{border:2px solid #fff;border-radius:6px;padding:2px 8px;font-weight:700}.b.f{background:#fff;color:#111;border-color:#fff}
+header h1{font-size:17px;margin:0;flex:1}header .info{font-size:13px}
+button,select,input{font:inherit;color:var(--ink)}
+.btn{background:#fff;color:var(--ink);border:1px solid var(--line);border-radius:8px;padding:8px 14px;cursor:pointer}
+main{display:grid;grid-template-columns:minmax(0,1.5fr) minmax(0,1fr);gap:16px;padding:16px;align-items:start}
+@media(max-width:900px){main{grid-template-columns:1fr}}
+.card{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:12px}
+.card h3{margin:-12px -12px 10px;padding:9px 12px;font-size:14px;background:#111;color:#fff;border-bottom:3px solid var(--red);border-radius:10px 10px 0 0}.sub{color:var(--mut);font-size:12px;margin:2px 0 8px}
+#q{width:100%;padding:12px 14px;font-size:16px;border:1px solid var(--red);border-radius:10px;background:var(--card)}
+.row{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin:10px 0}
+.row input,.row select,.card select{padding:7px 10px;border:1px solid var(--line);border-radius:8px;background:var(--card)}
+.tabs button{border:0;border-radius:16px;padding:6px 12px;background:var(--track);cursor:pointer;font-weight:600}
+.tabs button.on{background:var(--navy);color:#fff}.tabs span{font-weight:400;font-size:11px;opacity:.8}
+.tw{max-height:360px;overflow:auto;border:1px solid var(--line);border-radius:6px}
+table{border-collapse:collapse;width:100%;white-space:nowrap}
+th{position:sticky;top:0;background:var(--navy);color:#fff;text-align:left;padding:10px;font-size:13px;text-transform:uppercase}
+td{padding:9px 10px;border-top:1px solid var(--line)}tbody tr:nth-child(even){background:var(--alt)}
+.bar{display:grid;grid-template-columns:22px 150px 1fr 34px;gap:8px;align-items:center;padding:4px 0;cursor:pointer}
+.bar .n{color:var(--mut);text-align:right}.bar .nm{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.tr{height:9px;background:var(--track);border-radius:5px}.tr i{display:block;height:100%;background:var(--navy);border-radius:5px}
+.bar b{text-align:right}
+.grid3{grid-column:1/-1;display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:16px}
+@media(max-width:900px){.grid3{grid-template-columns:1fr}}
+.sc{max-height:260px;overflow:auto}.sc td,.sc th{padding:5px 8px}.sc th{background:none;color:var(--mut);text-transform:none;position:sticky;top:0;background:var(--card)}
+.num{cursor:pointer;color:var(--navy);font-weight:600}.empty{color:var(--mut);padding:16px;text-align:center}
+.more{display:block;margin:12px auto}
+.donut{width:92px;height:92px;border-radius:50%;display:grid;place-items:center;flex:none}.donut div{width:56px;height:56px;border-radius:50%;background:var(--card);display:grid;place-items:center;font-weight:700}
+.lg{display:grid;grid-template-columns:14px 1fr auto 44px;gap:8px;align-items:center;padding:2px 0}.lg i{width:12px;height:12px;border-radius:2px}
+.mrow{display:grid;grid-template-columns:70px 1fr 28px;gap:8px;align-items:center;padding:3px 0}.stk{display:flex;height:16px}.stk i{display:block}
+.mb{height:8px;background:#cfcfcf;border-radius:4px;margin-top:4px;overflow:hidden}.mb i{display:block;height:100%;background:#111}
+.pill{padding:1px 8px;border-radius:8px;font-size:12px;font-weight:600}.lo{background:#fde2e2;color:#b42318}.mid{background:#fdf0c8;color:#8a5a00}.hi{background:#d6f5df;color:#146c2e}
+.gr{color:#16a34a;font-weight:600}.kpis{display:grid;grid-template-columns:repeat(4,1fr);gap:6px;margin:8px 0}.kpis div{border:1px solid var(--line);border-radius:8px;padding:6px 8px;font-size:12px;color:var(--mut)}.kpis b{display:block;font-size:20px;color:var(--ink)}.kpis div:nth-child(3) b{color:#16a34a}
+.ctl{display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin:6px 0}.ctl input,.ctl select{padding:6px 8px;border:1px solid var(--line);border-radius:8px;background:var(--card)}
+.sc2{max-height:340px;overflow:auto}.sc2 table th{background:var(--card);color:var(--mut);text-transform:none;position:sticky;top:0;padding:5px 8px}.sc2 td{padding:5px 8px}.sc2 .site{cursor:pointer;color:var(--navy)}.sc2 tr.sel{background:var(--alt)}
+.rr{cursor:pointer}tr.rr:hover,.lg.rr:hover,.mrow.rr:hover{background:var(--track)}td.rr:hover,b.rr:hover{text-decoration:underline}
+.bl{color:var(--ink);font-weight:700}.dg b.nmB,h2.nmB{color:#2563eb!important}.dg b.acR{color:#e11d2e!important}.dg b.stH{background:#ff3b3b;color:#000!important;padding:2px 8px;border-radius:6px;display:inline-block}.dg b.bl{font-size:15px}.mdl{position:fixed;inset:0;background:rgba(0,0,0,.5);display:none;align-items:center;justify-content:center;z-index:50;padding:16px}.mdl.on{display:flex}
+.mc{background:var(--card);border-radius:12px;max-width:780px;width:100%;max-height:88vh;overflow:auto;padding:16px}.mh{display:flex;justify-content:space-between;align-items:center;gap:8px}
+.dg{display:grid;grid-template-columns:repeat(auto-fit,minmax(210px,1fr));gap:12px;margin-top:12px}.dg label{display:block;font-size:11px;color:var(--mut);margin-bottom:2px}.dg b{font-weight:600;word-break:break-word}
+:root[data-theme="dark"]{--bg:#0e1424;--card:#171f33;--ink:#e8edf7;--mut:#94a0b8;--navy:#ff4d5e;--line:#2a3550;--alt:#1b243b;--track:#26314d}
+body.lo header,body.lo main{display:none}
+#lg{position:fixed;inset:0;background:linear-gradient(135deg,#111 0%,#d9001b 100%);display:flex;align-items:center;justify-content:center;z-index:20;padding:16px}
+#lg>div{background:var(--card);border-radius:16px;padding:24px;max-width:360px;width:100%;box-shadow:0 10px 30px rgba(0,0,0,.4)}
+#lg h2{margin:0 0 8px;font-size:20px}.sw{display:flex;gap:8px;margin:10px 0}.sw button{flex:1;padding:8px;border-radius:8px;border:1px solid var(--line);background:var(--track);cursor:pointer}.sw button.on{background:#111;color:#fff;border-color:#111}
+#lg input{width:100%;padding:10px 12px;border:1px solid var(--line);border-radius:8px;margin:4px 0 10px;background:var(--card)}
+#lg .go{width:100%;padding:12px;background:#d9001b;color:#fff;border:0;border-radius:8px;font-weight:700;cursor:pointer;margin-top:8px}
+#lerr{color:#c00;font-size:13px;min-height:18px;margin:6px 0}
+.fcp{max-width:900px;margin:0 auto}
+.fcp h2{margin:0}.fgrid{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin:12px 0}@media(max-width:700px){.fgrid{grid-template-columns:1fr}}
+.fbox{border:1px solid var(--line);border-radius:10px;padding:12px;background:var(--card)}.fbox h4{margin:0 0 6px}.fpair{display:contents}.fhalf{border:1px solid var(--line);border-radius:10px;padding:12px;background:var(--card)}.fclr{margin:10px auto;display:block;background:#111;color:#fff;border:0;border-radius:8px;padding:8px 14px;cursor:pointer}
+#fcb,#fnb,#fsb{background:#111;color:#fff;border-color:#111}
+.fh{margin:0 0 8px;padding:8px;background:#111;color:#fff;border-radius:8px}
+body.fcv #lg{display:none}body.fcv header,body.fcv main{display:none}body.fcv .fcp{display:block!important}
+#lg[hidden],.fcp[hidden]{display:none!important}
+html.vm .card{overflow-x:auto}html.vm table{font-size:13px}
+html.vm #lg>*{max-width:92vw}
+#vsw{position:fixed;right:12px;bottom:12px;z-index:99999;border:0;border-radius:999px;background:#111;color:#fff;padding:10px 14px;font-weight:700;font-size:13px;box-shadow:0 2px 10px rgba(0,0,0,.4);cursor:pointer;border-bottom:3px solid var(--red)}
+.bar.fpb{grid-template-columns:22px 150px 1fr 54px}.tr2{display:flex;flex-direction:column;gap:3px}.tr2 i{display:block;height:9px;border-radius:5px;min-width:2px}.tr2 .a{background:var(--red)}.tr2 .b{background:#111}
+.fplg{display:flex;gap:6px;align-items:center;font-size:12px;margin:2px 0 6px}.fplg span{display:inline-block;width:12px;height:9px;border-radius:5px;margin-left:8px}.fplg .k1{background:var(--red);margin-left:0}.fplg .k2{background:#111}
+.pay td{vertical-align:top}.pay select,.pay input{width:100%;min-width:120px;padding:6px;border:1px solid var(--line);border-radius:6px;font:inherit}.pay .pt{margin-top:4px}.pay .perr{color:#c00;font-size:12px}.pay .pok{color:#0a7a2f;font-size:12px}
+.fpt{width:100%;border-collapse:collapse}.fpt th,.fpt td{padding:4px 8px;text-align:left}.fpt th:nth-child(n+3),.fpt td.num{text-align:center;width:90px;font-weight:700}.fpt td:first-child{width:28px;color:var(--mut)}.fpt tfoot td{border-top:2px solid var(--line)}
+.dg b.upr{background:#fff3b0;color:#000;padding:3px 8px;border-radius:6px;display:inline-block}
+.fpt.ins th,.fpt.ins td{padding:4px 3px;font-size:12px}.fpt.ins th:nth-child(n+3),.fpt.ins td.num{width:62px;white-space:normal;line-height:1.15;text-align:center}
+.cvh{background:#1c1c1c;color:#fff;text-align:center;font-weight:800;padding:9px;border-radius:8px 8px 0 0;letter-spacing:.3px}.cvx th{background:#4a6b7c;color:#fff;text-align:center}.cvx th:first-child{background:#e3e6ee;color:#1c1c1c;text-align:left}.cvx td{text-align:center}.cvx td:first-child{text-align:left;font-weight:700}.cvx tr.cvg td{background:#1c1c1c;color:#fff;font-weight:800}.cvx td.cle{background:#d6ead0;font-weight:700}.cvx tr.cvg td.cle{background:#2f5d3a}.cvx input{text-align:center;font-weight:700}#cvt.sc{max-height:none;overflow-y:visible;overflow-x:auto}#cvt .cvx{width:100%;border-collapse:collapse}#cvt .cvx th,#cvt .cvx td{padding:9px 8px;font-size:14px}#cvt .cvx th{position:static}#cvc{width:100%;max-width:none}#cvc{grid-column:1/-1}</style>
+<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+</head><body class="lo">
+<div id="lg"><div id="lgc"><div style="text-align:center;margin-bottom:12px"><img src="https://i.ibb.co/0V6M3v0/mmmda-logo.png" onerror="this.style.display='none'" style="height:60px"><div style="font-weight:800;font-size:18px;margin-top:6px">MMMDA <span style="color:#d9001b">PLDT</span></div></div>
+<h2>Welcome to MMMDA Logistics Dashboard</h2>
+<div class="sw"><button id="swi" class="on">Log in</button><button id="swu">Sign up</button></div><div id="sue"><label class="sub">Email address</label><input id="le" type="email" placeholder="you@email.com" autocomplete="email"></div><label class="sub" id="lul">Agent code (without the P)</label><input id="lu" placeholder="e.g. 401648" inputmode="text">
+<label class="sub" id="lpl">Password</label><input id="lp" type="password" autocomplete="current-password">
+<label class="sub" id="lpl2" hidden>Confirm password</label><input id="lp2" type="password" autocomplete="new-password" hidden>
+<div id="lerr"></div><button class="go" id="lgo">Log in</button></div><div class="fcp" id="fcp" hidden><h2>Facility Checking</h2><div class="sub">Search by node, site or location. Results appear only after you search.</div><div class="fgrid"><div class="fbox fpair"><div class="fhalf"><h4>CAFAC SEARCH</h4><div class="sub">Search by NODE only</div><div class="ctl"><input id="fn" placeholder="Enter NODE (e.g. DASLP579NP5)"><button class="btn" id="fnb">Search</button></div></div><div class="fhalf"><h4>Site / subdivision</h4><div class="sub">Site name or site address</div><div class="ctl"><input id="fs" placeholder="Site name or site address"><button class="btn" id="fsb">Search</button></div></div></div><div class="fbox"><h4>City / Barangay</h4><div class="sub">Pick a city, then a barangay (optional)</div><div class="ctl"><select id="fcity"></select><select id="fb"></select><button class="btn" id="fcb">Search</button></div></div></div><button class="fclr" id="fclr" hidden>CLEAR SEARCH</button><div id="fres"></div><div id="fdet"></div></div></div>
+<header><span class="b f">PLDT</span><span class="b">RED FIBER</span><h1>Subscriber Lookup</h1>
+<span class="info" id="info">Loading live data...</span>
+<span class="info" id="who"></span><button class="btn" id="dlog">Activity log</button><button class="btn" id="dpay">For payment log</button><button class="btn" id="hfc">Facility checking</button><button class="btn" id="lout">Log out</button><input type="file" id="file" hidden></header>
+<main>
+<section class="card" id="cvc"><h3>Conversion rate per month &middot; PLDT Home</h3><div class="sub" id="cvs"></div><div class="ctl">Month <select id="cvm"></select> Days counted <input type="number" id="cvd" min="1" max="31" placeholder="auto" style="width:72px"><span class="sub">Targets are editable (monthly, saved in this browser)</span></div><div class="sc" id="cvt"></div></section>
+<section>
+<input id="q" placeholder="Search subscriber name">
+<div class="row"><span>Agent</span><input id="ag" list="agl" placeholder="Type or pick an agent"><datalist id="agl"></datalist>
+<button class="btn" id="clr">Clear search</button><span>Month (all graphs)</span><select id="mo"></select></div>
+<div class="tabs row" id="tabs"></div>
+<div id="cnt" style="font-weight:600;margin-bottom:6px"></div>
+<div class="tw"><table><thead id="th"></thead><tbody id="tb"></tbody></table></div>
+<button class="btn more" id="more">Show 100 more</button>
+</section>
+<section class="card"><h3>For payment status</h3><div class="sub" id="fps"></div><div class="row"><span>Month</span><select id="fm"></select></div><div id="fpr"></div></section>
+<section class="card"><h3>For installation status</h3><div class="sub" id="ins"></div><div class="row"><span>Month</span><select id="im"></select></div><div id="insr"></div></section>
+<div class="grid3">
+<section class="card"><h3>Designation · Posted</h3><div class="sub" id="dsub"></div><div style="display:flex;gap:12px;align-items:center"><div id="dtop" style="display:flex;gap:12px;align-items:center;flex:1"></div></div><div style="margin-top:12px"><div class="sub">Per month</div><div id="dmon"></div></div><div class="row"><span>Month</span><select id="dm"></select></div></section>
+<section class="card"><h3>Plans · Solicited vs Posted</h3><div class="sub" id="psub"></div><div class="sc" id="ptb"></div><div class="row"><span>Month</span><select id="pm"></select></div></section>
+<section class="card"><h3>Barangay · Solicited vs Posted</h3><div class="sub" id="bsub"></div><div class="kpis" id="bk"></div><div class="ctl"><input id="bq" placeholder="Search barangay"><select id="bs"><option value="n">Most solicited</option><option value="p">Most posted</option><option value="r">Highest rate</option></select><span class="sub">Showing</span><select id="bl"><option value="20">20</option><option value="50">50</option><option value="100">100</option></select></div><div class="sc" id="btb"></div><div class="row"><span>Month</span><select id="bm"></select></div></section>
+<section class="card"><h3>Barangay range · Solicited vs Posted</h3><div class="sub" id="gsub"></div><div class="kpis" id="gk"></div><div class="ctl"><input id="gq" placeholder="Search barangay"><select id="gs"><option value="n">Most solicited</option><option value="p">Most posted</option><option value="r">Highest rate</option></select><span class="sub">Showing</span><select id="gl"><option value="20">20</option><option value="50">50</option><option value="100">100</option></select></div><div class="ctl"><span class="sub">From</span><input type="date" id="gf"><span class="sub">To</span><input type="date" id="gt"></div><div class="sc" id="gtb"></div><div class="row"><span>Month</span><select id="gm"></select></div></section>
+<section class="card"><h3>Agent performance</h3><div class="sub" id="as"></div><div class="sc" id="adata"></div><div class="row"><span>Month</span><select id="am"></select></div></section>
+<section class="card"><h3>Team leader · Posted</h3><div class="sub" id="ts"></div><div class="sc" id="tl"></div><div class="row"><span>Month</span><select id="tm"></select></div></section>
+<section class="card"><h3>CSP status</h3><div class="sub" id="cs"></div><div class="sc" id="csp"></div><div class="row"><span>Month</span><select id="cm"></select></div></section>
+</div>
+</main>
+<div class="mdl" id="md"><div class="mc" id="mc"></div></div>
+<script>
+// LIVE CONFIG - YOUR SHEET
+const SHEET_ID='1i7g_Hv6_tmQxqGhjSVzQFa8rFaJriC3wp9zK3wosnw0';
+const SHEET_BASE='https://docs.google.com/spreadsheets/d/'+SHEET_ID+'/gviz/tq?tqx=out:csv&headers=1';
+const WEB_APP_URL='https://script.google.com/macros/s/AKfycbyHGXKnEDaNOk_rDId220vp7HFL_VKLhcFMXk1irtRF7ZtX9ijpLee-X0Shvyiyn4n/exec';
+const ADMIN_EMAILS=[];
+const LOG_URL=WEB_APP_URL;
+let RERR='';
+
+const $=id=>document.getElementById(id);
+const esc=s=>String(s==null?'':s).replace(/[&<>"']/g,c=>({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const fmt=v=>{if(!v)return '';if(v instanceof Date){const m=v.getMonth()+1,d=v.getDate(),y=v.getFullYear();return `${m}/${d}/${y}`}const d=new Date(v);if(!isNaN(d)){const m=d.getMonth()+1,da=d.getDate(),y=d.getFullYear();if(y>1970)return `${m}/${da}/${y}`}return String(v)};
+const toD=v=>v instanceof Date?v:(v?(isNaN(new Date(v))?null:new Date(v)):null);
+const mkey=d=>d?`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`:'';
+const mlabel=m=>{if(!m)return '';const [y,mo]=m.split('-');return new Date(+y,+mo-1).toLocaleString('en',{month:'short',year:'numeric'})};
+const nc=s=>String(s||'').replace(/\D/g,'').replace(/^0+/,'');
+const ld=(k,d)=>{try{const v=localStorage.getItem(k);return v?JSON.parse(v):d}catch(e){return d}};
+const sv=(k,v)=>{try{localStorage.setItem(k,JSON.stringify(v))}catch(e){}};
+let S={},tab='PLDT',month='',agent='',q='',stat='',lim=100,CUR=[],LST=[];
+const CM={rm:'',am:'',tm:'',cm:''};
+let AC={},PSF='',FM='',IM='',FS=null;
+let ME=null,pendFc=false,suMode=false,lstep=0,pendC='',pendE='';
+const R={a:[],b:[]};
+const lk=(w,t,rows,x)=>{R[w].push([t,rows,x]);return `data-lk="${w}${R[w].length-1}"`};
+const BL=['SUBSCRIBER NAME','SR','ACCOUNT PID','CSP STATUS','AGENT NAME'];
+const DF=['SUBSCRIBER NAME','ACCOUNT PID','CSP STATUS','AVAILED PLAN','SR','PR','CSP REMARKS','HD RECOMMENDATION','FINAL STATUS','AGENT CODE','AGENT NAME','TEAM LEADER','PROMO','HOUSE #','ST NAME','BRGY','CITY','CLUSTER'];
+const AL={'ACCOUNT PID':['ACCT','ACCOUNT','PID'],'SUBSCRIBER NAME':['SUBSCRIBERS NAME'],'CSP STATUS':['STATUS'],'AVAILED PLAN':['PLAN AVAILED'],'CSP REMARKS':['REMARKS'],'AGENT NAME':['AGENT'],'HOUSE #':['HOUSE#/ UNIT / FLOOR','HOUSE#'],'BRGY':['BGY']};
+function dv(r,l){for(const a of [l,...(AL[l]||[])]){const k=Object.keys(r).find(k=>k.trim().toUpperCase()===a);if(k&&r[k]!==''&&r[k]!=null){const v=r[k];return v instanceof Date?fmt(v):String(v)}}return ''}
+function mdl(h){$('mc').innerHTML=h;$('md').classList.add('on')}
+function closeM(){window.__plRefresh=null;$('md').classList.remove('on')}
+function prep(n,rows){
+  const out=[];
+  rows.forEach(r=>{
+    const d=toD(r['DATE']||r['Date']||r['SALE DATE']||'');
+    const s=String(r['FINAL STATUS']||r['Final Status']||'').trim();
+    const a=String(r['AGENT NAME']||r['Agent Name']||r['AGENT']||'').trim();
+    const t=String(r['TEAM LEADER']||r['Team Leader']||'').trim();
+    const c=String(r['CSP STATUS']||r['CSP Status']||'').trim();
+    const nm=String(r['SUBSCRIBER NAME']||r['Subscriber Name']||'').trim();
+    if(!nm) return;
+    out.push(Object.assign({},r,{_d:d,_m:d?mkey(d):mkey(toD(r['POSTED DATE']||'')),_s:s,_a:a,_t:t,_c:c,_n:nm,_p:String(r['PAYMENT']||r['PAYMENT STATUS']||'' )}));
+    const ac=nc(r['AGENT CODE']||r['Agent Code']||'');
+    if(ac && !AC[ac]) AC[ac]=a;
+  });
+  // Allow any agent code - add dummy entries for common codes
+  ['401648','401649','396114','399651','407520','407045','407046','407047','407050'].forEach(code=>{ if(!AC[code]) AC[code]='Agent '+code; });
+  S[n]={rows:out};
+}
+function render(){
+ $('tabs').innerHTML=Object.keys(S).map(n=>`<button class="${n===tab?'on':''}" data-t="${esc(n)}">${esc(n)} <span>${S[n].rows.length.toLocaleString()}</span></button>`).join('');
+ document.querySelectorAll('#tabs button').forEach(b=>b.onclick=()=>{tab=b.dataset.t;lim=100;agent=stat='';$('ag').value='';render()});
+ if(!S[tab]) return;
+ const all=S[tab].rows,months=[...new Set(all.map(r=>r._m).filter(Boolean))].sort();
+ $('mo').innerHTML='<option value="">All months</option>'+months.map(m=>`<option value="${m}" ${m===month?'selected':''}>${mlabel(m)}</option>`).join('');
+ $('agl').innerHTML=[...new Set(all.map(r=>r._a).filter(Boolean))].sort().map(a=>`<option value="${esc(a)}">`).join('');
+ const ql=q.toLowerCase(),al=agent.toLowerCase();
+ const rows=all.filter(r=>(!ql||r._n.toLowerCase().includes(ql))&&(!al||r._a.toLowerCase().includes(al))&&(!month||r._m===month)&&(!stat||r._s===stat));
+ $('cnt').textContent=`${rows.length.toLocaleString()} of ${all.length.toLocaleString()} records in ${tab}`;
+ $('th').innerHTML='<tr><th>Date</th><th>Subscriber name</th><th>Final status</th><th>Payment</th><th>Agent</th></tr>';
+ CUR=rows.slice(0,lim);$('tb').innerHTML=CUR.map((r,i)=>`<tr class="rr" data-i="${i}"><td>${fmt(r._d)}</td><td><b class="bl">${esc(r._n)}</b></td><td>${esc(r._s)}</td><td>${esc(r._p)}</td><td>${esc(r._a)}</td></tr>`).join('')||'<tr><td colspan="5" class="empty">No matching records</td></tr>';
+ $('more').style.display=rows.length>lim?'block':'none';
+ // Other sections simplified to avoid heavy FAC dependency
+ try{ renderFP(); renderINS(); }catch(e){}
+ try{ if(typeof render2==='function') render2(); }catch(e){}
+}
+let DB=null,DBP=null,DBW=true;
+const dbMsg=t=>{const e=$('fpsy');if(e)e.textContent=t};
+const strip=x=>{const o={};['o','d','m','at','by','code','bn','n','a','g'].forEach(k=>o[k]=x[k]==null?'':x[k]);return o};
+const pwh=x=>{let a=3735928559,b=1103547991;for(let i=0;i<x.length;i++){const c=x.charCodeAt(i);a=Math.imul(a^c,2654435761);b=Math.imul(b^c,1597334677)}a=Math.imul(a^(a>>>16),2246822507)^Math.imul(b^(b>>>13),3266489909);b=Math.imul(b^(b>>>16),2246822507)^Math.imul(a^(a>>>13),3266489909);return (4294967296*(2097151&b)+(a>>>0)).toString(16)};
+function fetchT(u){return fetch(u).then(r=>{if(!r.ok) throw new Error('HTTP '+r.status); return r.json()})}
+async function remoteRows(kind){ 
+  try{
+    const r=await fetchT(LOG_URL+(LOG_URL.includes('?')?'&':'?')+'action=read&kind='+(kind==='act'?'activity':kind));
+    return r.rows||r.logs||[];
+  }catch(e){ RERR=e.message; throw e; }
+}
+async function sheetSend(row){ 
+  try{ 
+    await fetch(LOG_URL,{method:'POST',body:JSON.stringify(row)}); 
+  }catch(e){} 
+}
+function qNote(){ return '' }
+let ag=[];
+function mopts(id,keys,cur){ const el=$(id); if(!el) return; el.innerHTML='<option value="">All months</option>'+keys.map(k=>`<option value="${k}" ${k===cur?'selected':''}>${mlabel(k)}</option>`).join(''); }
+const payRec=()=>{try{return JSON.parse(localStorage.getItem('mm_pay'))||{}}catch(e){return {}}};
+const payH=()=>{try{return JSON.parse(localStorage.getItem('mm_payh'))||[]}catch(e){return []}};
+const paySave=R=>{try{localStorage.setItem('mm_pay',JSON.stringify(R))}catch(e){}};
+const PK=r=>[dv(r,'SUBSCRIBER NAME'),r['DATE']||'',dv(r,'ACCOUNT PID')||dv(r,'SR')].join('|');
+const isFP=r=>/^\s*FOR PAYMENT/i.test(r._s||'');
+const PAYOPT=[['','Select action'],['cancel','For cancellation'],['nwtp','Not willing to pay'],['sched','Proceed scheduled payment']];
+const upRem=r=>{const x=payRec()[PK(r)];if(!x||(!x.o&&!x.m))return '';const lab=(PAYOPT.find(z=>z[0]===x.o)||['',''])[1];return `<div style="grid-column:1/-1"><label>UPDATED REMARKS</label><b class="upr">${esc([lab,x.d?'pay on '+x.d:'',x.m].filter(Boolean).join(' · '))}</b><div class="sub">${esc([x.bn,x.code?'('+x.code+')':'',x.by].filter(Boolean).join(' '))}${x.at?' · '+esc(x.at):''}</div></div>`};
+function renderFP(){ 
+  const all=(S[tab]?.rows||[]).filter(isFP); 
+  const REC=payRec(); 
+  const m={}; 
+  const ms=[...new Set(all.map(r=>r._m).filter(Boolean))].sort();
+  if(FM&&!ms.includes(FM))FM=''; mopts('fm',ms,FM); 
+  const rows=all.filter(r=>!FM||r._m===FM);
+  rows.forEach(r=>{const a=r._a;if(!a)return;(m[a]=m[a]||[]).push(r)});
+  const rk=Object.entries(m).map(([a,l])=>[a,l,l.filter(r=>{ const t=String(r['PAYMENT REMARKS']||'').trim(); return !!t; }).length]).sort((x,y)=>y[1].length-x[1].length);
+  const sol=rows.length;
+  if($('fps')) $('fps').textContent=`${FM?mlabel(FM):'All months'} · ${rows.length} for payment · ${rk.length} agents`;
+  if($('fpr')) $('fpr').innerHTML=rk.length?`<div class="sc"><table class="fpt"><thead><tr><th>#</th><th>Agent</th><th>For payment</th></tr></thead><tbody>`+rk.map(([a,l],i)=>`<tr><td>${i+1}</td><td>${esc(a)}</td><td class="num">${l.length}</td></tr>`).join('')+`</tbody></table></div>`:'<div class="empty">No FOR PAYMENT</div>';
+}
+const INS=['ORDER CREATED','PAID','RESERVED FACILITY'],INSL={'ORDER CREATED':'Order created','PAID':'Paid','RESERVED FACILITY':'Reserved facility'};
+const insSt=r=>String(r._c||r['ADMIN REMARKS']||'').trim().toUpperCase();
+function renderINS(){
+  const all=(S[tab]?.rows||[]).filter(r=>INS.includes(insSt(r))); 
+  const ms=[...new Set(all.map(r=>r._m).filter(Boolean))].sort();
+  if(IM&&!ms.includes(IM))IM=''; mopts('im',ms,IM);
+  const rows=all.filter(r=>!IM||r._m===IM),m={}; rows.forEach(r=>{const a=r._a;if(!a)return;(m[a]=m[a]||[]).push(r)});
+  const rk=Object.entries(m).sort((x,y)=>y[1].length-x[1].length);
+  if($('ins')) $('ins').textContent=`${IM?mlabel(IM):'All months'} · ${rows.length} for installation · ${rk.length} agents`;
+  if($('insr')) $('insr').innerHTML=rk.length?`<div class="sc"><table class="fpt ins"><thead><tr><th>#</th><th>Agent</th><th>Total</th></tr></thead><tbody>`+rk.map(([a,l],i)=>`<tr><td>${i+1}</td><td>${esc(a)}</td><td class="num">${l.length}</td></tr>`).join('')+`</tbody></table></div>`:'<div class="empty">No FOR INSTALLATION</div>';
+}
+// Simplified FACILITY CHECK - loads from sheet tab
+let FAC={c:[],b:[],s:[],a:[],r:[]}, FR=[];
+function fcRun(m){
+  const n=$('fn')?.value?.trim()||'', s=$('fs')?.value?.trim()||'', c=$('fcity')?.value||'';
+  let results=[];
+  const allTabs = S['FACILITY CHECK']?.rows || [];
+  if(m==='n' && n) results=allTabs.filter(r=>String(r['Node']||r['NODE']||'').toUpperCase().includes(n.toUpperCase()));
+  else if(m==='s' && s) results=allTabs.filter(r=> (String(r['Site']||'')+String(r['Site address']||'')).toUpperCase().includes(s.toUpperCase()));
+  else if(m==='c' && c) results=allTabs.filter(r=>String(r['City']||r['CITY']||'').toUpperCase()===c.toUpperCase());
+  else results=allTabs.slice(0,50);
+  
+  $('fres').innerHTML=results.length?`<div class="sc"><table><thead><tr><th>Node</th><th>Site</th><th>City</th><th>Slots</th></tr></thead><tbody>`+results.map(r=>`<tr class="rr"><td>${esc(r['Node']||r['NODE']||'')}</td><td>${esc(r['Site']||r['SUBDIVISION']||'')}</td><td>${esc(r['City']||r['CITY']||'')}</td><td>${esc(r['Available slots']||'')}</td></tr>`).join('')+`</tbody></table></div>`:'<div class="empty">No facility found. Try search.</div>';
+}
+function fcBrgy(){}
+function fcClrVis(){}
+function fcNode(x,r){}
+
+const lastS={},LBL={q:'Subscriber search',fq:'Facility checking search',bq:'Barangay search',gq:'Barangay solicited vs posted search',sq:'Site search'};
+function logEv(a,w,s){ try{ const row={time:new Date().toISOString(), email:ME?.email||'', code:ME?.code||'', name:ME?.name||'', action:a, where:w, search:s, device:navigator.userAgent.slice(0,80), visitor:''}; let q=ld('mm_log',[]); q.push(row); if(q.length>500) q=q.slice(-500); sv('mm_log',q); if(LOG_URL) sheetSend(row); }catch(e){} }
+function flushQ(){}
+function showDetail(r,back){
+ logEv('VIEW DETAILS','Dashboard',dv(r,'SUBSCRIBER NAME'));
+ const pd=toD(r['POSTED DATE']);
+ mdl(`<div class="mh"><div>${back?'<button class="btn" id="mback">← Back</button> ':''}</div><button class="btn" id="mx">✕</button></div><h2 class="bl nmB" style="margin:8px 0 2px">${esc(dv(r,'SUBSCRIBER NAME')||'—')}</h2><div class="sub">Sale date ${fmt(r._d)||'—'}${pd?' · Posted '+fmt(pd):''}</div><div class="dg">`+DF.filter(l=>l!=='PR'||'PR' in r).map(l=>{const v=dv(r,l);return `<div><label>${l.replace(' PID','')}</label><b class="${v&&BL.includes(l)?'bl':''}${l==='SUBSCRIBER NAME'&&v?' nmB':''}${l==='ACCOUNT PID'&&v?' acR':''}${l==='FINAL STATUS'&&v?' stH':''}">${v?esc(v):'—'}</b></div>`+(l==='CSP REMARKS'?upRem(r):'')}).join('')+'</div>');
+ $('mx').onclick=closeM;if(back)$('mback').onclick=back
+}
+function showList(t,rows,x){
+ mdl(`<div class="mh"><h2 style="margin:0">${esc(t)}</h2><button class="btn" id="mx">✕</button></div><div class="sub">${rows.length} records</div><div class="sc2" style="max-height:60vh"><table><thead><tr><th>Date</th><th>Subscriber</th><th>Status</th><th>Agent</th></tr></thead><tbody>`+rows.slice(0,200).map(r=>`<tr class="rr"><td>${fmt(r._d)}</td><td>${esc(r._n)}</td><td>${esc(r._s)}</td><td>${esc(r._a)}</td></tr>`).join('')+`</tbody></table></div>`);
+ $('mx').onclick=closeM;
+ LST=rows;
+}
+function mode(m){ 
+  if(m==='in'){ $('lgc').hidden=false; $('fcp').hidden=true; }
+  else if(m==='fc'){ $('lgc').hidden=true; $('fcp').hidden=false; $('fcp').scrollIntoView(); }
+}
+function syncPay(){ return Promise.resolve(); }
+function showPayLog(){ mdl(`<div class="mh"><h2>For payment log</h2><button class="btn" id="mx">✕</button></div><div class="sub">Logs are in your Google Sheet > Pay_Remarks tab</div>`); $('mx').onclick=closeM; }
+function payCsv(){}
+let st2={gm:'',gf:'',gt:'',gq:'',gs:'n',gl:20,sm:'',dm:'',pm:'',bm:'',sb:'EVENT TYPE',f:'',t:'',sq:'',bq:'',bs:'n',bl:20,site:''};
+function render2(){
+ const rows=S.PLDT?S.PLDT.rows:[],PR=rows.filter(r=>/posted/i.test(r._s));
+ const sale=[...new Set(rows.map(r=>r._m).filter(Boolean))];
+ mopts('dm',sale,st2.dm); mopts('sm',sale,st2.sm); mopts('pm',sale,st2.pm); mopts('bm',sale,st2.bm); mopts('gm',sale,st2.gm);
+ mopts('am',sale,CM.am); mopts('tm',sale,CM.tm); mopts('cm',sale,CM.cm);
+ if($('dsub')) $('dsub').textContent=`${PR.length} posted records · ${[...new Set(PR.map(r=>r._s))].length} statuses`;
+ if($('psub')) $('psub').textContent=`${rows.length} total · ${PR.length} posted`;
+ if($('bsub')) $('bsub').textContent=`${rows.length} subscribers`;
+ if($('gsub')) $('gsub').textContent=`All dates · ${rows.length} subscribers`;
+ if($('as')) $('as').textContent=`${rows.length} records`;
+ if($('ts')) $('ts').textContent=`${PR.length} posted`;
+ if($('cs')) $('cs').textContent=`${[...new Set(rows.map(r=>r._c))].length} statuses`;
+}
+
+// LOGIN LOGIC - FIXED TO ALLOW ANY AGENT CODE
+async function acctRemote(op,em,h,code){
+  if(!LOG_URL) return null;
+  try{
+    const url = LOG_URL + (LOG_URL.includes('?')?'&':'?') + 'acct='+op+'&email='+encodeURIComponent(em)+'&h='+encodeURIComponent(h)+(code?'&code='+encodeURIComponent(code):'');
+    const res = await fetch(url);
+    if(!res.ok) return null;
+    const j = await res.json();
+    return j;
+  }catch(e){ return null; }
+}
+function enter(c,keep,e){
+  ME={code:c, name:AC[c]||('Agent '+c), email:e||''};
+  document.body.classList.remove('lo');
+  $('who').textContent=`${ME.code} · ${ME.name}`;
+  sv('mm_acc', Object.assign(ld('mm_acc',{}), {[e]:{code:c,name:ME.name}}));
+  try{ sessionStorage.setItem('agc',c); sessionStorage.setItem('age',e||''); }catch(e){}
+  logEv('LOGIN','Auth','Agent '+c);
+  if(pendFc){ pendFc=false; document.body.classList.add('fcv'); mode('fc'); }
+}
+let _busy=false;
+async function tryLogin(){
+  if(_busy) return; _busy=true;
+  const btn=$('lgo'),t0=btn.textContent;
+  const em=$('le').value.trim().toLowerCase();
+  const pw=$('lp').value;
+  const codeRaw=$('lu').value.trim();
+  const code=nc(codeRaw);
+  const pw2=$('lp2').value;
+  const isSignup=suMode;
+  
+  function err(m){ $('lerr').textContent=m; _busy=false; btn.disabled=false; btn.textContent=t0; }
+  
+  if(!em || !pw){ err('Enter email and password'); return; }
+  if(isSignup && !code){ err('Enter agent code (e.g. 407520)'); return; }
+  if(isSignup && pw!==pw2){ err('Passwords do not match'); return; }
+  if(!isSignup && !em.includes('@')){ err('Enter valid email'); return; }
+  
+  btn.disabled=true; btn.textContent='Please wait...';
+  $('lerr').textContent='';
+  
+  const hash=pwh(em+'|'+pw);
+  
+  if(isSignup){
+    // Sign up - allow ANY code
+    const res=await acctRemote('signup',em,hash,code);
+    if(res && res.ok){
+      // Also add to local AC
+      AC[code]=res.name||('Agent '+code);
+      err(''); 
+      suMode=false; lstep=0;
+      $('swi').classList.add('on'); $('swu').classList.remove('on');
+      $('lpl2').hidden=true; $('lp2').hidden=true;
+      $('lgo').textContent='Log in';
+      $('lerr').textContent='Account created! Now log in.';
+      $('lerr').style.color='#0a7a2f';
+      _busy=false; btn.disabled=false; btn.textContent='Log in';
+      setTimeout(()=>{ $('lerr').style.color=''; $('lerr').textContent=''; },3000);
+      return;
+    } else if(res && res.error){
+      err(res.error); return;
+    } else {
+      // Fallback - allow offline signup
+      AC[code]='Agent '+code;
+      sv('mm_acc', Object.assign(ld('mm_acc',{}), {[em]:{code:code,name:AC[code]}}));
+      enter(code,true,em);
+      _busy=false; btn.disabled=false; btn.textContent=t0;
+      return;
+    }
+  } else {
+    // Log in - allow ANY code if account exists, or bypass with agent code only
+    // First try remote
+    const res=await acctRemote('login',em,hash);
+    if(res && res.ok){
+      const c=res.code||code||'407520';
+      enter(nc(c),true,em);
+      _busy=false; btn.disabled=false; btn.textContent=t0;
+      return;
+    }
+    // Fallback: if user enters agent code in code field, allow login with that code even without account (offline mode)
+    if(code){
+      AC[code]=AC[code]||('Agent '+code);
+      enter(code,true,em);
+      _busy=false; btn.disabled=false; btn.textContent=t0;
+      return;
+    }
+    // Check local storage
+    const acc=ld('mm_acc',{})[em];
+    if(acc){
+      enter(acc.code,true,em);
+      _busy=false; btn.disabled=false; btn.textContent=t0;
+      return;
+    }
+    // Last resort - allow login with just agent code logic (original behavior)
+    if(em && pw){
+      // If they typed agent code as email (numeric), allow it
+      const maybeCode=nc(em);
+      if(maybeCode && maybeCode.length>=5){
+        enter(maybeCode,true,em);
+        _busy=false; btn.disabled=false; btn.textContent=t0;
+        return;
+      }
+    }
+    err((res && res.error)||'Account not found. Click Sign up to create account, or enter agent code.');
+    return;
+  }
+}
+
+// Init login UI
+(function(){
+  const swi=$('swi'),swu=$('swu');
+  if(swi && swu){
+    swi.onclick=()=>{ suMode=false; swi.classList.add('on'); swu.classList.remove('on'); $('lpl2').hidden=true; $('lp2').hidden=true; $('lul').hidden=false; $('lu').hidden=false; $('lgo').textContent='Log in'; $('lerr').textContent=''; };
+    swu.onclick=()=>{ suMode=true; swu.classList.add('on'); swi.classList.remove('on'); $('lpl2').hidden=false; $('lp2').hidden=false; $('lul').hidden=false; $('lu').hidden=false; $('lgo').textContent='Sign up'; $('lerr').textContent=''; };
+  }
+  // Make agent code field always visible
+  if($('lul')) $('lul').hidden=false;
+  if($('lu')) $('lu').hidden=false;
+  $('lgo').onclick=tryLogin;
+  $('lp').onkeydown=e=>{ if(e.key==='Enter') tryLogin(); };
+  $('le').onkeydown=e=>{ if(e.key==='Enter') tryLogin(); };
+  $('lu').onkeydown=e=>{ if(e.key==='Enter') tryLogin(); };
+  $('lout').onclick=()=>{ try{ sessionStorage.removeItem('agc'); }catch(e){} document.body.classList.add('lo'); ME=null; $('le').value=''; $('lp').value=''; $('lu').value=''; };
+})();
+
+// AUTO LOAD LIVE DATA - NON-BLOCKING
+async function loadLive(){
+  try{
+    const url = WEB_APP_URL + (WEB_APP_URL.includes('?')?'&':'?') + 'action=getAllData&t='+Date.now();
+    const r = await fetch(url);
+    if(!r.ok) throw new Error('HTTP '+r.status);
+    const j = await r.json();
+    if(j.tabs){
+      let tot=0;
+      for(const k in j.tabs){
+        const rows=j.tabs[k];
+        if(rows && rows.length){
+          // Don't prep FACILITY CHECK as PLDT data, keep separate
+          if(k!=='FACILITY CHECK'){
+            prep(k, rows);
+            tot+=rows.length;
+          } else {
+            S[k]={rows: rows.map(r=>{
+              const d=toD(r['DATE']||r['Date']||'');
+              return Object.assign({},r,{_d:d,_m:d?mkey(d):'',_s:String(r['FINAL STATUS']||''),_a:String(r['AGENT NAME']||''),_n:String(r['SUBSCRIBER NAME']||''),_c:String(r['CSP STATUS']||'')});
+            })};
+            tot+=rows.length;
+            // Build city list for facility checking
+            const cities=[...new Set(rows.map(x=>x['City']||x['CITY']||'').filter(Boolean))].sort();
+            if($('fcity')) $('fcity').innerHTML='<option value="">Select city</option>'+cities.map(c=>`<option value="${esc(c)}">${esc(c)}</option>`).join('');
+          }
+        }
+      }
+      if(tot>0){
+        tab=Object.keys(S).find(k=>k==='PLDT')||Object.keys(S)[0]||'PLDT';
+        $('info').textContent=`✅ LIVE: ${tot.toLocaleString()} records (all tabs) · auto-synced ${new Date().toLocaleString()}`;
+        render();
+        return true;
+      }
+    }
+  }catch(e){
+    console.warn('Live load failed', e);
+    $('info').textContent='⚠️ Live load waiting... '+e.message;
+  }
+  return false;
+}
+
+// Load immediately
+loadLive();
+setInterval(loadLive, 30000);
+
+// Also try CSV fallback if Apps Script fails
+async function loadCSVFallback(){
+  try{
+    const url = SHEET_BASE + '&sheet=PLDT&t='+Date.now();
+    const res=await fetch(url);
+    if(!res.ok) return;
+    const txt=await res.text();
+    const lines=txt.trim().split(/\r?\n/);
+    if(lines.length<2) return;
+    const hdr=lines[0].split(',').map(h=>h.replace(/^"|"$/g,'').trim());
+    const rows=[];
+    for(let i=1;i<lines.length;i++){
+      let L=lines[i]; if(!L.trim()) continue;
+      let cur='',inQ=false,cols=[];
+      for(let c=0;c<L.length;c++){ let ch=L[c]; if(ch=='"'){ if(inQ && L[c+1]=='"'){cur+='"'; c++;} else inQ=!inQ;} else if(ch==',' && !inQ){cols.push(cur); cur='';} else cur+=ch; } cols.push(cur);
+      let o={}; hdr.forEach((h,idx)=>o[h]=cols[idx]?cols[idx].replace(/^"|"$/g,''):'' ); rows.push(o);
+    }
+    if(rows.length && !S['PLDT']){ prep('PLDT', rows); $('info').textContent=`✅ LIVE CSV: ${rows.length} records`; render(); }
+  }catch(e){}
+}
+setTimeout(loadCSVFallback, 3000);
+
+// Init other UI
+$('q').oninput=e=>{q=e.target.value;lim=100;render()};
+$('ag').oninput=e=>{agent=e.target.value;stat='';lim=100;render()};
+$('mo').onchange=e=>{month=e.target.value;lim=100;render()};
+$('clr').onclick=()=>{q=agent=stat='';$('q').value=$('ag').value='';lim=100;render()};
+$('more').onclick=()=>{lim+=100;render()};
+$('tb').onclick=e=>{const tr=e.target.closest('tr[data-i]');if(tr)showDetail(CUR[tr.dataset.i])};
+$('md').onclick=e=>{if(e.target.id==='md')closeM()};document.addEventListener('keydown',e=>{if(e.key==='Escape')closeM()});
+$('t1').onclick=()=>{if(document.body.classList.contains('lo'))mode('in');else document.body.classList.remove('fcv')};
+$('t2').onclick=()=>{if(document.body.classList.contains('lo')){pendFc=true;mode('in');$('lerr').textContent='Please log in to use Facility Checking.';return}document.body.classList.add('fcv');mode('fc')};
+$('hfc').onclick=()=>{document.body.classList.add('fcv');mode('fc')};
+$('dlog').onclick=()=>{ mdl(`<div class="mh"><h2>Activity log</h2><button class="btn" id="mx">✕</button></div><div class="sub">Logs are in your Google Sheet > Activity_Logs tab</div>`); $('mx').onclick=closeM; };
+try{const c=sessionStorage.getItem('agc'),e=sessionStorage.getItem('age')||'',acc=ld('mm_acc',{})[e];if(c&&AC[c]!==undefined&&acc)enter(c,true,e)}catch(e){}
+logEv('OPEN PORTAL','Portal','');
+</script>
+<button id="vsw" type="button"></button>
+<script>
+(function(){const h=document.documentElement,mt=document.querySelector('meta[name=viewport]'),b=document.getElementById('vsw');
+let v=null;try{v=localStorage.getItem('mm_view')}catch(e){}
+if(v!=='m'&&v!=='w')v=Math.min(screen.width,innerWidth)<=900?'m':'w';
+const apply=()=>{h.classList.toggle('vm',v==='m');h.classList.toggle('vw',v==='w');
+ mt.setAttribute('content',v==='m'?'width=device-width, initial-scale=1, viewport-fit=cover':'width=1200, viewport-fit=cover');
+ b.textContent=v==='m'?'🖥 Switch to Web view':'📱 Switch to Mobile view'};
+b.onclick=()=>{v=v==='m'?'w':'m';try{localStorage.setItem('mm_view',v)}catch(e){}apply();try{logEv('VIEW MODE','View',v==='m'?'Mobile view':'Web view')}catch(e){}};
+apply()})();
+</script>
+</body></html>
