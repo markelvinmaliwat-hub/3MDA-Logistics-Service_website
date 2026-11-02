@@ -513,11 +513,15 @@ async function saveToPaymentLog(data){return logPayment(data)}
 async function logPayment(p){const ok=await sheetWrite(Object.assign({type:'pay'},p||{}));if(!ok)throw new Error('the log web app did not accept the row');return ok}
 async function sheetWrite(obj){if(!LOG_URL)return false;try{const j=await jsonpReq(LOG_URL,{action:'logWrite',kind:obj&&obj.type==='pay'?'pay':'activity',data:JSON.stringify(obj||{})},20000);return !!(j&&j.success)}catch(e){return false}}
 let _fl=false;
-async function flushQ(){if(_fl)return;_fl=true;try{let q=ld('mm_wq',[]);while(q.length){if(!(await sheetWrite(q[0])))break;q.shift();sv('mm_wq',q)}}finally{_fl=false}}
+async function flushQ(){if(_fl)return;_fl=true;try{let q=ld('mm_wq',[]);
+ /* the queue held months of rows from when the log endpoint was broken - replaying them would
+    stamp every one with today's time, so anything older than 6 hours is dropped instead */
+ const cut=Date.now()-6*3600000;q=q.filter(o=>{const t=Date.parse(String(o.time||'').replace(' ','T'));return !isNaN(t)&&t>cut});sv('mm_wq',q);
+ while(q.length){if(!(await sheetWrite(q[0])))break;q.shift();sv('mm_wq',q)}}finally{_fl=false}}
 function sheetSend(obj){sheetWrite(obj).then(ok=>{if(ok)flushQ();else{const q=ld('mm_wq',[]);q.push(obj);sv('mm_wq',q.slice(-300))}})}
 const qNote=()=>{const n=ld('mm_wq',[]).length;return n?' \u00b7 '+n+' update'+(n>1?'s':'')+' waiting to be sent to the Sheet (web app not reachable)':''};
 const VID=()=>{let v=ld('mm_vid','');if(!v){v='V'+Math.random().toString(36).slice(2,10);sv('mm_vid',v)}return v};
-function logEv(action,where,search,em){if(!ME&&!em&&action!=='OPEN PORTAL')return;const d=new Date(),p=n=>String(n).padStart(2,'0'),row={time:`${d.getFullYear()}-${p(d.getMonth()+1)}-${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}:${p(d.getSeconds())}`,email:ME?ME.email:(em||''),code:ME?ME.code:'',name:ME?ME.name:'',action,where,search:search||'',device:(navigator.userAgent||'').slice(0,120),visitor:VID()};
+function logEv(action,where,search,em){if(!ME&&!em&&action!=='OPEN PORTAL')return;const d=new Date(),p=n=>String(n).padStart(2,'0'),row={time:`${d.getFullYear()}-${p(d.getMonth()+1)}-${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}:${p(d.getSeconds())}`,email:ME?ME.email:(em||''),code:ME?ME.code:'',name:ME?ME.name:'',action,where,search:String(search||'').slice(0,120),device:(navigator.userAgent||'').slice(0,120),visitor:VID()};
  const L=ld('mm_log',[]);L.push(row);sv('mm_log',L.slice(-5000));
  if(LOG_URL)sheetSend(row)}
 function enter(c,quiet,em){setSu(false);$('lp').value='';$('lp2').value='';ME={code:c,email:em||'',name:AC[c]||''};document.body.classList.remove('lo','fcv');mode('in');$('t1').textContent='DASHBOARD';$('who').textContent='Agent '+c+(AC[c]?' \u00b7 '+AC[c]:'')+(ME.email?' \u00b7 '+ME.email:'');try{sessionStorage.setItem('agc',c);sessionStorage.setItem('age',ME.email)}catch(e){}if(!quiet)logEv('LOG IN','Login');if(pendFc){pendFc=false;document.body.classList.add('fcv');mode('fc')}}
