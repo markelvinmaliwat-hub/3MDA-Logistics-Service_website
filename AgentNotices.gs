@@ -126,20 +126,31 @@ function collect_(ss) {
     if (!a.code) a.code = code_(rawCode);
     a[type].push(it);
   };
+  const seen = {};
+  const rtKey = it => [it.date, it.sub, it.plan].join('|');
   NOTICE.SALES_TABS.forEach(tab => tab_(ss, tab).forEach(r => {
-    if (!/^\s*FOR PAYMENT/i.test(String(pick_(r, 'STATUS')))) return;
-    add(pick_(r, 'AGENT'), pick_(r, 'CODE'), 'fp', {
+    const st = String(pick_(r, 'STATUS'));
+    const isFp = /^\s*FOR PAYMENT/i.test(st);
+    const isRts = /^\s*(RTS|RETURN)/i.test(st);
+    if (!isFp && !isRts) return;
+    const it = {
       date: fmtD_(pick_(r, 'DATE')), sub: String(pick_(r, 'SUB')), plan: String(pick_(r, 'PLAN')),
-      status: String(pick_(r, 'STATUS')), remarks: String(pick_(r, 'PAYREM'))
-    });
+      status: st, remarks: String(pick_(r, 'PAYREM'))
+    };
+    if (isFp) { add(pick_(r, 'AGENT'), pick_(r, 'CODE'), 'fp', it); return; }
+    seen[rtKey(it)] = 1;
+    add(pick_(r, 'AGENT'), pick_(r, 'CODE'), 'rt', it);
   }));
   tab_(ss, NOTICE.VALIDATORS_TAB).forEach(r => {
     const adm = String(pick_(r, 'ADMREM')), st = String(pick_(r, 'STATUS'));
     if (!/RETURN/i.test(adm) && !/RETURN/i.test(st)) return;
-    add(pick_(r, 'AGENT'), pick_(r, 'CODE'), 'rt', {
+    const it = {
       date: fmtD_(pick_(r, 'DATE')), sub: String(pick_(r, 'SUB')), plan: String(pick_(r, 'PLAN')),
       status: /RETURN/i.test(st) ? st : 'RETURNED', remarks: adm
-    });
+    };
+    if (seen[rtKey(it)]) return;
+    seen[rtKey(it)] = 1;
+    add(pick_(r, 'AGENT'), pick_(r, 'CODE'), 'rt', it);
   });
   return Object.keys(agents).map(k => agents[k]).filter(a => a.fp.length || a.rt.length)
     .sort((x, y) => nk_(x.name).localeCompare(nk_(y.name)));
