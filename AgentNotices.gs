@@ -19,7 +19,7 @@
  *    Then Deploy > Manage deployments > edit > New version.
  */
 const NOTICE = {
-  SHEET_ID: '11-VVgEX5ugFP4suckiaV_LitXz2VhuYe3HhDv4rLcdA',
+  SHEET_ID: '1i7g_Hv6_tmQxqGhjSVzQFa8rFaJriC3wp9zK3wosnw0',  /* "DATABASE AUG TO OCT" (confirmed by the owner) - holds PLDT, RED, VALIDATORS and Agent_Emails */
   SALES_TABS: ['PLDT', 'RED'],     // FINAL STATUS = FOR PAYMENT is read from these tabs
   VALIDATORS_TAB: 'VALIDATORS',    // RETURNED sales are read from this tab
   EMAIL_TAB: 'Agent_Emails',       // AGENT CODE | AGENT NAME | EMAIL
