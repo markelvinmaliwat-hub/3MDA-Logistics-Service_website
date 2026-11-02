@@ -29,7 +29,7 @@ const NOTICE = {
   EMAIL_TAB: 'Agent_Emails',       // AGENT CODE | AGENT NAME | EMAIL
   SENDER_NAME: '3MDA Logistics',
   SEND_HOUR: 8,                    // daily send hour, in the project time zone
-  DRY_RUN: true,                   // true = every email goes to ADMIN_EMAILS only, labelled [TEST ...]
+  DRY_RUN: false,                  // true = every email goes to ADMIN_EMAILS only, labelled [TEST ...]
   ADMIN_EMAILS: ['markelvinmaliwat@gmail.com'],   /* receives the test copies and the missing-email list; while DRY_RUN is true, every notice is sent here instead of to the agents */
   CC: [],                          // e.g. ['teamleader@email.com'] added to every agent email
   MAX_ROWS: 100,                   // rows listed per section; the rest are summarised (keeps one notice small enough to send)
