@@ -21,11 +21,11 @@
  *    project's existing doGet(e):
  *      if (e && e.parameter && /^notice(Preview|Send|Status|Install)$/.test(e.parameter.action || '')) return noticeWebApp_(e);
  *    Then Deploy > Manage deployments > edit > New version.
- * 6. Recommended: run  setNoticeSendToken('a secret you keep')  once. From then on
- *    the dashboard asks for that token before "Send emails now", so a stranger who
- *    reads the page source cannot blast every agent with one GET request.
- *    setNoticeSendToken('') removes the requirement again. The token lives in
- *    Script Properties - never in this file, never in the public repo.
+ * 6. Recommended: run  setNoticeSendToken()  once and copy the token from the log.
+ *    From then on the dashboard asks for that token before "Send emails now", so a
+ *    stranger who reads the page source cannot blast every agent with one GET
+ *    request.  clearNoticeSendToken()  removes the requirement again. The token
+ *    lives in Script Properties - never in this file, never in the public repo.
  */
 const NOTICE = {
   SHEET_ID: '1i7g_Hv6_tmQxqGhjSVzQFa8rFaJriC3wp9zK3wosnw0',  /* "DATABASE AUG TO OCT" (confirmed by the owner) - holds PLDT, RED, VALIDATORS and Agent_Emails */
@@ -256,13 +256,16 @@ function noticeStatus_() {
   return { installed: installed, hour: NOTICE.SEND_HOUR, tz: NOTICE.TIMEZONE, dryRun: NOTICE.DRY_RUN, sender: NOTICE.SENDER_NAME, needsToken: !!sendToken_() };
 }
 /* The manual-send token lives in Script Properties, never in this file or the repo.
-   Set it once: run  setNoticeSendToken('your secret')  from the function dropdown. */
+   Run setNoticeSendToken() from the dropdown and copy the token it logs. */
 function sendToken_() { return String(PropertiesService.getScriptProperties().getProperty('NOTICE_SEND_TOKEN') || ''); }
-function setNoticeSendToken(token) {
-  const p = PropertiesService.getScriptProperties();
-  if (!token) { p.deleteProperty('NOTICE_SEND_TOKEN'); Logger.log('token cleared - manual send needs no token'); return; }
-  p.setProperty('NOTICE_SEND_TOKEN', String(token).trim());
-  Logger.log('token set - the dashboard must now type it before Send emails now');
+function setNoticeSendToken() {
+  const tok = Utilities.getUuid().replace(/-/g, '').slice(0, 24);
+  PropertiesService.getScriptProperties().setProperty('NOTICE_SEND_TOKEN', tok);
+  Logger.log('Send token: ' + tok + '  - type it in the dashboard when it asks before Send emails now.');
+}
+function clearNoticeSendToken() {
+  PropertiesService.getScriptProperties().deleteProperty('NOTICE_SEND_TOKEN');
+  Logger.log('Send token cleared - the dashboard will send without asking again.');
 }
 function noticeWebApp_(e) {
   const a = (e && e.parameter && e.parameter.action) || '';

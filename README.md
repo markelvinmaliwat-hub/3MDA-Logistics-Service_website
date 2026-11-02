@@ -37,8 +37,8 @@ web app), `MAIL_ADMINS` (who may see the **Email agents** button).
 
 Anyone who reads the page source can see `NOTICE_APP_URL`, so the send action is gated by
 a token kept in **Script Properties** (`NOTICE_SEND_TOKEN`) — never in this repo. Run
-`setNoticeSendToken('your secret')` once in Apps Script; the dashboard then asks for that
-token before **Send emails now**. `setNoticeSendToken('')` removes the requirement.
+`setNoticeSendToken()` once in Apps Script, copy the token it logs, and the dashboard will
+ask for it before **Send emails now**. `clearNoticeSendToken()` removes the requirement.
 
 ## Publishing
 
