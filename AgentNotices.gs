@@ -13,8 +13,12 @@
  *    the team receives anything.
  * 4. Set DRY_RUN = false, then run installNoticeTrigger() once. That is the daily
  *    8:00 AM schedule. (Triggers fire within the hour you select, not on the exact minute.)
- * 5. To let the dashboard's "Email agents" button work, add this as the FIRST line
- *    of your existing doGet(e):
+ * 5. This file also provides doGet(), so you can deploy THIS project as its own
+ *    web app (Deploy > New deployment > Web app, Execute as Me, Access "Anyone").
+ *    Paste the resulting /exec URL into index.html as NOTICE_APP_URL.
+ *    If instead you'd rather reuse your existing dashboard web app, delete the
+ *    doGet() at the bottom of this file and add this as the FIRST line of that
+ *    project's existing doGet(e):
  *      if (e && e.parameter && /^notice(Preview|Send|Status|Install)$/.test(e.parameter.action || '')) return noticeWebApp_(e);
  *    Then Deploy > Manage deployments > edit > New version.
  */
@@ -232,4 +236,15 @@ function noticeWebApp_(e) {
         : sendNotices_(a === 'noticeSend');
   } catch (err) { out = { error: String(err) }; }
   return ContentService.createTextOutput(JSON.stringify(out)).setMimeType(ContentService.MimeType.JSON);
+}
+
+/* Only use this when this project is deployed as its OWN web app (its /exec URL then
+   goes into index.html as NOTICE_APP_URL). If you hook into an existing doGet instead,
+   delete this function and add the notice dispatch line from the header comment. */
+function doGet(e) {
+  const a = (e && e.parameter && e.parameter.action) || '';
+  if (/^notice(Preview|Send|Status|Install)$/.test(a)) return noticeWebApp_(e);
+  return ContentService.createTextOutput(JSON.stringify({
+    error: 'unknown action', use: 'noticeStatus | noticePreview | noticeSend | noticeInstall'
+  })).setMimeType(ContentService.MimeType.JSON);
 }

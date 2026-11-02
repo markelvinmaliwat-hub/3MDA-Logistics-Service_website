@@ -449,6 +449,7 @@ const AC={};['PLDT','RED'].forEach(t=>(DATA[t]||[]).forEach(r=>{const c=nc(r['AG
 let ME=null,pendFc=false,suMode=false,lstep=0,pendC='',pendE='';const pwh=x=>{let a=3735928559,b=1103547991;for(let i=0;i<x.length;i++){const c=x.charCodeAt(i);a=Math.imul(a^c,2654435761);b=Math.imul(b^c,1597334677)}a=Math.imul(a^(a>>>16),2246822507)^Math.imul(b^(b>>>13),3266489909);b=Math.imul(b^(b>>>16),2246822507)^Math.imul(a^(a>>>13),3266489909);return (4294967296*(2097151&b)+(a>>>0)).toString(36)};
 const ADMIN_EMAILS=[];/* OPTIONAL: emails allowed to see EVERYONE'S activity, e.g. ['you@email.com']. Leave empty = every logged-in agent sees the full list. */
 const WEB_APP_URL='https://script.google.com/macros/s/AKfycbwUBLtjrA7M8n0bdGzep6rY8pTlvwGRegpy59hJeeSHKxpWX8VKaJsHTENcQdZB8N-Z/exec';const LOG_URL=WEB_APP_URL;/* Google Apps Script web app (writes to your Google Sheet) */
+const NOTICE_APP_URL='';/* /exec URL of the web app deployed from AgentNotices.gs (the project bound to DATABASE AUG TO OCT). Leave '' only if you added the notice dispatch line to WEB_APP_URL's doGet instead. */
 const SHEET_ID='11-VVgEX5ugFP4suckiaV_LitXz2VhuYe3HhDv4rLcdA';/* Google Sheet used to READ the shared logs (tab gid=0 = activity, tab "Payment_Log" = payments). Must be shared: Anyone with the link = Viewer */
 const SHEET_BASE='https://docs.google.com/spreadsheets/d/'+SHEET_ID+'/gviz/tq?tqx=out:csv&headers=1';let RERR='';
 function parseCsv(t){const R=[];let row=[],f='',q=false;for(let i=0;i<t.length;i++){const c=t[i];if(q){if(c==='"'){if(t[i+1]==='"'){f+='"';i++}else q=false}else f+=c}else if(c==='"')q=true;else if(c===','){row.push(f);f=''}else if(c==='\n'||c==='\r'){if(c==='\r'&&t[i+1]==='\n')i++;row.push(f);R.push(row);row=[];f=''}else f+=c}if(f!==''||row.length){row.push(f);R.push(row)}return R}
@@ -690,6 +691,7 @@ apply()})();
 <script id="mailnotice">
 /* DAILY SALES STATUS NOTICES: one formal English email per agent (FOR PAYMENT + RETURNED SALES), every day at 8:00 AM. Actual sending is done by the Apps Script (AgentNotices.gs). */
 const MAIL_ADMINS=['markelvinmaliwat@gmail.com'];/* addresses allowed to see the "Email agents" button, e.g. ['you@email.com']. Empty = button hidden */
+const NURL=()=>(typeof NOTICE_APP_URL!=='undefined'&&NOTICE_APP_URL)?NOTICE_APP_URL:WEB_APP_URL;
 (function(){
  const nk=s=>String(s==null?'':s).toUpperCase().replace(/\s+/g,' ').trim(),cd=s=>nk(s).replace(/^P/,'');
  const isAdm=()=>typeof ME!=='undefined'&&ME&&MAIL_ADMINS.map(x=>x.toLowerCase()).includes(String(ME.email||'').toLowerCase());
@@ -705,14 +707,14 @@ const MAIL_ADMINS=['markelvinmaliwat@gmail.com'];/* addresses allowed to see the
   const miss=L.filter(x=>!x.em).length;
   $('mns').textContent=`${L.length} agents with pending items \u00b7 ${L.length-miss} with email \u00b7 ${miss} without email. Every day at 8:00 AM each agent receives the full list of their pending FOR PAYMENT and RETURNED sales.`;
   $('mnb').innerHTML=`<div class="ctl"><button class="btn" id="mna">Turn on daily 8:00 AM auto-send</button><span class="sub" id="mnas">Checking...</span></div><div class="ctl"><button class="btn" id="mnp">Preview from server</button><button class="btn" id="mns2" style="background:var(--red);color:#fff;border-color:var(--red)">Send emails now</button><span class="sub" id="mnr"></span></div><div class="sc2" style="max-height:52vh"><table><thead><tr><th>Agent</th><th>Email</th><th>For payment</th><th>Returned</th></tr></thead><tbody>`+(L.map(x=>`<tr><td class="bl">${esc(x.name)}</td><td>${x.em?esc(x.em):'<span style="color:#b42318">no email</span>'}</td><td>${x.fp||''}</td><td>${x.rt||''}</td></tr>`).join('')||'<tr><td colspan="4" class="empty">No FOR PAYMENT or RETURNED sales</td></tr>')+'</tbody></table></div>';
-  const run=async(act)=>{const o=$('mnr');o.textContent='Please wait...';try{const r=await fetchT(WEB_APP_URL+'?action='+act+'&_='+Date.now(),90000),j=await r.json();
+  const run=async(act)=>{const o=$('mnr');o.textContent='Please wait...';try{const r=await fetchT(NURL()+'?action='+act+'&_='+Date.now(),90000),j=await r.json();
     if(j.error)throw new Error(j.error);o.textContent=(act==='noticeSend'?'Sent ':'Would send ')+j.sent.length+' email(s)'+(j.noEmail.length?' \u00b7 '+j.noEmail.length+' agent(s) have no email':'')+(j.dryRun?' \u00b7 TEST MODE: copies went to the admin only':' \u00b7 LIVE: sent to the agents')+(act==='noticeSend'?'.':' (nothing sent).');
     if(act==='noticeSend')try{logEv('EMAIL NOTICES','Email agents',j.sent.length+' sent')}catch(e){}
-   }catch(e){o.textContent='Failed: '+(e&&e.message||e)+' \u2014 check that AgentNotices.gs is installed and the web app is redeployed.'}};
+   }catch(e){o.textContent='Failed: '+(e&&e.message||e)+' \u2014 check that AgentNotices.gs is installed and its web app URL is in NOTICE_APP_URL.'}};
   $('mnp').onclick=()=>run('noticePreview');
-  const stat=async(act)=>{const o=$('mnas'),b=$('mna');try{const r=await fetchT(WEB_APP_URL+'?action='+act+'&_='+Date.now(),60000),j=await r.json();if(j.error)throw new Error(j.error);
+  const stat=async(act)=>{const o=$('mnas'),b=$('mna');try{const r=await fetchT(NURL()+'?action='+act+'&_='+Date.now(),60000),j=await r.json();if(j.error)throw new Error(j.error);
     o.textContent=(j.installed?'\u2705 Automatic emails are ON \u2014 one formal English notice per agent every day at '+(j.hour%12||12)+':00 '+(j.hour<12?'AM':'PM')+' ('+j.tz+')':'Automatic emails are OFF')+(j.dryRun?' \u00b7 TEST MODE: emails go to the admin only \u2014 set DRY_RUN=false in AgentNotices.gs to reach the agents.':'');b.textContent=j.installed?'Daily auto-send is ON':'Turn on daily 8:00 AM auto-send';b.disabled=!!j.installed;
-   }catch(e){o.textContent='Could not check: '+(e&&e.message||e)+' \u2014 update AgentNotices.gs and redeploy the web app.'}};
+   }catch(e){o.textContent='Could not check: '+(e&&e.message||e)+' \u2014 deploy AgentNotices.gs as a web app and put its /exec URL in NOTICE_APP_URL.'}};
   $('mna').onclick=()=>{$('mnas').textContent='Please wait...';stat('noticeInstall')};stat('noticeStatus');
   $('mns2').onclick=()=>{if(confirm('Send the FOR PAYMENT / RETURNED SALES notices to every agent with pending items now?'))run('noticeSend')};
  }
