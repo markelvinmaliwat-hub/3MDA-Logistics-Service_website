@@ -203,16 +203,19 @@ function sendNotices_(send) {
       body: m.text, htmlBody: m.html, name: NOTICE.SENDER_NAME
     };
     if (!NOTICE.DRY_RUN && NOTICE.CC.length) opt.cc = NOTICE.CC.join(',');
-    MailApp.sendEmail(opt); n++;
+    try { MailApp.sendEmail(opt); n++; } catch (err) { row.error = String(err); }
   });
   if (send && res.noEmail.length && testTo) {
-    MailApp.sendEmail({
-      to: testTo, name: NOTICE.SENDER_NAME,
-      subject: `Sales Status Notice: ${res.noEmail.length} agent(s) have no email - ${res.date}`,
-      body: `Add these agents to the "${NOTICE.EMAIL_TAB}" tab (AGENT CODE | AGENT NAME | EMAIL) so they receive their daily notice.\n\n` +
-        res.noEmail.map(x => `- ${x.agent} (${x.forPayment} for payment, ${x.returned} returned)`).join('\n')
-    });
+    try {
+      MailApp.sendEmail({
+        to: testTo, name: NOTICE.SENDER_NAME,
+        subject: `Sales Status Notice: ${res.noEmail.length} agent(s) have no email - ${res.date}`,
+        body: `Add these agents to the "${NOTICE.EMAIL_TAB}" tab (AGENT CODE | AGENT NAME | EMAIL) so they receive their daily notice.\n\n` +
+          res.noEmail.map(x => `- ${x.agent} (${x.forPayment} for payment, ${x.returned} returned)`).join('\n')
+      });
+    } catch (err) { res.noEmailNoticeError = String(err); }
   }
+  res.failed = res.sent.filter(x => x.error).length;
   return res;
 }
 
