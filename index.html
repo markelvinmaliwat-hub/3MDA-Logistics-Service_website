@@ -513,7 +513,7 @@ function enter(c,quiet,em){setSu(false);$('lp').value='';$('lp2').value='';ME={c
 function setSu(on){suMode=on;lstep=0;pendC='';pendE='';$('sue').hidden=false;$('lul').textContent='Agent code (without the P)';$('lu').value='';$('lul').hidden=$('lu').hidden=true;$('lpl').hidden=$('lp').hidden=false;$('lpl').textContent=on?'Create your password (at least 6 characters)':'Password';$('lp').autocomplete=on?'new-password':'current-password';$('lp').value='';$('lp2').value='';$('lpl2').hidden=$('lp2').hidden=!on;$('lgo').textContent=on?'Sign up':'Log in';$('swi').classList.toggle('on',!on);$('swu').classList.toggle('on',on);$('lerr').textContent=''}
 function agStep(em,msg){lstep=1;pendE=em;$('sue').hidden=true;$('lpl').hidden=$('lp').hidden=true;$('lpl2').hidden=$('lp2').hidden=true;$('lul').textContent=msg||'Enter your agent code to proceed';$('lul').hidden=$('lu').hidden=false;$('lu').value='';$('lgo').textContent='Proceed';$('lerr').textContent='';$('lu').focus()}
 let _busy=false;
-async function acctRemote(op,em,h){if(!LOG_URL)return null;let t;try{const c=new AbortController();t=setTimeout(()=>c.abort(),10000);const r=await fetch(LOG_URL+(LOG_URL.includes('?')?'&':'?')+'acct='+op+'&email='+encodeURIComponent(em)+'&h='+encodeURIComponent(h||''),{signal:c.signal});const j=await r.json();return j&&typeof j==='object'&&('ok' in j)?j:null}catch(e){return null}finally{clearTimeout(t)}}
+async function acctRemote(op,em,h){return null}/* The deployed web app has no acct= API - it answers every acct call with the full 13.5MB data dump, which the check below threw away after ~16s of waiting. Accounts are kept in this browser (mm_acc). To make login work across devices, point this at an Apps Script that replies {ok:true} or {ok:false,reason:'bad'}. */
 async function tryLogin(){if(_busy)return;_busy=true;const btn=$('lgo'),t0=btn.textContent;if(LOG_URL){btn.disabled=true;btn.textContent='Please wait...'}
  try{await tryLogin0()}finally{_busy=false;btn.disabled=false;if(btn.textContent==='Please wait...')btn.textContent=t0}}
 async function tryLogin0(){
@@ -530,7 +530,7 @@ async function tryLogin0(){
   const rj=await acctRemote('create',em,h);
   if((rj&&rj.exists)||(!rj&&A[em])){setSu(false);$('le').value=em;return err('You already have an account. Please log in with your email and password.')}
   A[em]={h,at:Date.now()};sv('mm_acc',A);ME={code:'',email:em,name:''};logEv('SIGN UP','Sign up');ME=null;
-  agStep(em,(rj||!LOG_URL)?'Account created. Enter your agent code to proceed':'Account created on this device (server not reachable yet). Enter your agent code to proceed');return}
+  agStep(em,(rj||!LOG_URL)?'Account created. Enter your agent code to proceed':'Account created on this device. Enter your agent code to proceed');return}
  const loc=A[em],rj=await acctRemote('login',em,h);
  if(rj){
   if(rj.ok){A[em]={h,at:Date.now()};sv('mm_acc',A);agStep(em);return}
@@ -539,7 +539,7 @@ async function tryLogin0(){
   if(loc&&loc.h===h){acctRemote('create',em,h);agStep(em);return}
   return err('No account yet. Please sign up first with your email and a password.')}
  /* server unreachable: fall back to the account saved in this browser */
- if(!loc)return err(LOG_URL?'Could not reach the server. Check your internet connection and try again.':'No account yet. Please sign up first with your email and a password.');
+ if(!loc)return err('No account yet. Please sign up first with your email and a password.');
  if(loc.h!==h)return err('Incorrect password.');
  agStep(em)}
 $('swi').onclick=()=>setSu(false);$('swu').onclick=()=>setSu(true);
