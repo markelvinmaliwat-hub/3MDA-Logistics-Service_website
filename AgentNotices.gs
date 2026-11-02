@@ -341,11 +341,13 @@ function logStatus_() {
   const p = Math.max(0, logTab_({ kind: 'pay' }).sh.getLastRow() - 1);
   return { sheet: LOG.SHEET_ID, activity: a, payments: p, tabs: logSs_().getSheets().map(s => s.getName()) };
 }
-/* JSONP when a callback is asked for (same as getAllData), plain JSON otherwise. */
+/* JSONP when a callback is asked for (same as getAllData), plain JSON otherwise.
+   The mime matters: Google sends X-Content-Type-Options: nosniff, so a text/plain
+   script reply is refused by the browser even though curl happily reads it. */
 function jsonOut_(obj, cb) {
   const fn = typeof cb === 'string' && /^[A-Za-z_$][A-Za-z0-9_$]{0,40}$/.test(cb);
   return ContentService.createTextOutput(fn ? cb + '(' + JSON.stringify(obj) + ');' : JSON.stringify(obj))
-    .setMimeType(fn ? ContentService.MimeType.TEXT : ContentService.MimeType.JSON);
+    .setMimeType(fn ? ContentService.MimeType.JAVASCRIPT : ContentService.MimeType.JSON);
 }
 
 /* ------------------------------------------------------- trigger + web app glue */
