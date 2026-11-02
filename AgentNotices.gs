@@ -21,6 +21,11 @@
  *    project's existing doGet(e):
  *      if (e && e.parameter && /^notice(Preview|Send|Status|Install)$/.test(e.parameter.action || '')) return noticeWebApp_(e);
  *    Then Deploy > Manage deployments > edit > New version.
+ * 6. Recommended: run  setNoticeSendToken('a secret you keep')  once. From then on
+ *    the dashboard asks for that token before "Send emails now", so a stranger who
+ *    reads the page source cannot blast every agent with one GET request.
+ *    setNoticeSendToken('') removes the requirement again. The token lives in
+ *    Script Properties - never in this file, never in the public repo.
  */
 const NOTICE = {
   SHEET_ID: '1i7g_Hv6_tmQxqGhjSVzQFa8rFaJriC3wp9zK3wosnw0',  /* "DATABASE AUG TO OCT" (confirmed by the owner) - holds PLDT, RED, VALIDATORS and Agent_Emails */
@@ -248,10 +253,23 @@ function installNoticeTrigger() {
 }
 function noticeStatus_() {
   const installed = ScriptApp.getProjectTriggers().some(t => t.getHandlerFunction() === 'runAgentNotices');
-  return { installed: installed, hour: NOTICE.SEND_HOUR, tz: NOTICE.TIMEZONE, dryRun: NOTICE.DRY_RUN, sender: NOTICE.SENDER_NAME };
+  return { installed: installed, hour: NOTICE.SEND_HOUR, tz: NOTICE.TIMEZONE, dryRun: NOTICE.DRY_RUN, sender: NOTICE.SENDER_NAME, needsToken: !!sendToken_() };
+}
+/* The manual-send token lives in Script Properties, never in this file or the repo.
+   Set it once: run  setNoticeSendToken('your secret')  from the function dropdown. */
+function sendToken_() { return String(PropertiesService.getScriptProperties().getProperty('NOTICE_SEND_TOKEN') || ''); }
+function setNoticeSendToken(token) {
+  const p = PropertiesService.getScriptProperties();
+  if (!token) { p.deleteProperty('NOTICE_SEND_TOKEN'); Logger.log('token cleared - manual send needs no token'); return; }
+  p.setProperty('NOTICE_SEND_TOKEN', String(token).trim());
+  Logger.log('token set - the dashboard must now type it before Send emails now');
 }
 function noticeWebApp_(e) {
   const a = (e && e.parameter && e.parameter.action) || '';
+  const tok = sendToken_();
+  if (a === 'noticeSend' && tok && String((e && e.parameter && e.parameter.t) || '') !== tok) {
+    return ContentService.createTextOutput(JSON.stringify({ error: 'Send token missing or wrong - type the token you set with setNoticeSendToken().' })).setMimeType(ContentService.MimeType.JSON);
+  }
   let out;
   try {
     out = a === 'noticeStatus' ? noticeStatus_()
