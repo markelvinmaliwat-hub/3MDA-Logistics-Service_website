@@ -32,6 +32,7 @@ const NOTICE = {
   DRY_RUN: true,                   // true = every email goes to ADMIN_EMAILS only, labelled [TEST ...]
   ADMIN_EMAILS: ['markelvinmaliwat@gmail.com'],   /* receives the test copies and the missing-email list; while DRY_RUN is true, every notice is sent here instead of to the agents */
   CC: [],                          // e.g. ['teamleader@email.com'] added to every agent email
+  MAX_ROWS: 100,                   // rows listed per section; the rest are summarised (keeps one notice small enough to send)
   TIMEZONE: 'Asia/Manila'
 };
 
@@ -155,13 +156,21 @@ function table_(items) {
         `<td ${td}>${j === 1 ? '<b>' + esc_(v) + '</b>' : esc_(v) || '&mdash;'}</td>`).join('') + '</tr>').join('') +
     '</table>';
 }
-function section_(label, items) {
-  return `<p style="margin:18px 0 4px"><b>${label} (${items.length})</b></p>` + table_(items);
+function moreNote_(items, shown) {
+  const extra = items.length - shown.length;
+  return extra > 0 ? `<p style="color:#667085;font-size:12px">&hellip;and ${extra} more ${extra === 1 ? 'sale' : 'sales'} not listed here. Check the dashboard or ask your Team Leader for the full list.</p>` : '';
 }
-function rowsText_(items) {
-  return items.map(x => `- ${[x.date, x.sub, x.plan, x.status, x.remarks].filter(Boolean).join(' | ')}`).join('\n');
+function section_(label, items, max) {
+  const shown = items.slice(0, max);
+  return `<p style="margin:18px 0 4px"><b>${label} (${items.length})</b></p>` + table_(shown) + moreNote_(items, shown);
+}
+function rowsText_(items, max) {
+  const shown = items.slice(0, max);
+  return shown.map(x => `- ${[x.date, x.sub, x.plan, x.status, x.remarks].filter(Boolean).join(' | ')}`).join('\n') +
+    (items.length > shown.length ? `\n...and ${items.length - shown.length} more.` : '');
 }
 function build_(agent, fp, rt) {
+  const max = NOTICE.MAX_ROWS || 100;
   const today = fmtD_(new Date());
   const subj = fp.length && rt.length
     ? `Notice: ${fp.length} For Payment and ${rt.length} Returned Sale(s) - ${today}`
@@ -173,8 +182,8 @@ function build_(agent, fp, rt) {
     `<div style="padding:16px;border:1px solid #e3e8f0;border-top:0">` +
     `<p>${NT_.GREET} <b>${esc_(agent)}</b>,</p>`;
   let t = `${NT_.GREET} ${agent},\n\n`;
-  if (fp.length) { h += `<p>${NT_.FP_INTRO}</p>` + section_(NT_.FP_HEAD, fp); t += NT_.FP_INTRO + `\n\n${NT_.FP_HEAD} (${fp.length})\n` + rowsText_(fp) + '\n\n'; }
-  if (rt.length) { h += `<p>${NT_.RT_INTRO}</p>` + section_(NT_.RT_HEAD, rt); t += NT_.RT_INTRO + `\n\n${NT_.RT_HEAD} (${rt.length})\n` + rowsText_(rt) + '\n\n'; }
+  if (fp.length) { h += `<p>${NT_.FP_INTRO}</p>` + section_(NT_.FP_HEAD, fp, max); t += NT_.FP_INTRO + `\n\n${NT_.FP_HEAD} (${fp.length})\n` + rowsText_(fp, max) + '\n\n'; }
+  if (rt.length) { h += `<p>${NT_.RT_INTRO}</p>` + section_(NT_.RT_HEAD, rt, max); t += NT_.RT_INTRO + `\n\n${NT_.RT_HEAD} (${rt.length})\n` + rowsText_(rt, max) + '\n\n'; }
   h += `<p style="margin-top:18px">${NT_.CLOSE}</p><p>${NT_.REGARDS}<br><b>${esc_(NOTICE.SENDER_NAME)}</b></p>` +
     `<p style="color:#667085;font-size:12px">${NT_.FOOTER}</p></div></div>`;
   t += NT_.CLOSE + `\n\n${NT_.REGARDS}\n${NOTICE.SENDER_NAME}\n${NT_.FOOTER}`;
@@ -188,7 +197,7 @@ function sendNotices_(send) {
   const list = emailList_(ss), agents = collect_(ss);
   const admins = NOTICE.ADMIN_EMAILS.map(x => String(x).trim().toLowerCase()).filter(Boolean);
   const testTo = admins[0] || Session.getEffectiveUser().getEmail();
-  const res = { sent: [], noEmail: [], mode: send ? (NOTICE.DRY_RUN ? 'test' : 'live') : 'preview', dryRun: NOTICE.DRY_RUN, date: fmtD_(new Date()) };
+  const res = { sent: [], noEmail: [], mode: send ? (NOTICE.DRY_RUN ? 'test' : 'live') : 'preview', dryRun: NOTICE.DRY_RUN, date: fmtD_(new Date()), quota: MailApp.getRemainingDailyQuota() };
   let n = 0;
   agents.forEach(a => {
     const row = { agent: a.name, email: findEmail_(list, a.name, a.code), forPayment: a.fp.length, returned: a.rt.length };
@@ -239,6 +248,30 @@ function noticeWebApp_(e) {
         : sendNotices_(a === 'noticeSend');
   } catch (err) { out = { error: String(err) }; }
   return ContentService.createTextOutput(JSON.stringify(out)).setMimeType(ContentService.MimeType.JSON);
+}
+
+/* One-run diagnostic: pick noticeDiag in the dropdown, Run, then read the log.
+   It answers "why did MailApp refuse the notice?" without emailing any agent. */
+function noticeDiag() {
+  const to = NOTICE.ADMIN_EMAILS[0] || Session.getEffectiveUser().getEmail();
+  Logger.log('remaining daily quota: ' + MailApp.getRemainingDailyQuota());
+  const ss = NOTICE.SHEET_ID ? SpreadsheetApp.openById(NOTICE.SHEET_ID) : SpreadsheetApp.getActiveSpreadsheet();
+  const agents = collect_(ss);
+  Logger.log('agents with pending items: ' + agents.length);
+  agents.map(a => { const m = build_(a.name, a.fp, a.rt); return { agent: a.name, rows: a.fp.length + a.rt.length, htmlChars: m.html.length }; })
+    .sort((x, y) => y.htmlChars - x.htmlChars).slice(0, 5)
+    .forEach(s => Logger.log('biggest notice: ' + JSON.stringify(s)));
+  const real = agents.length ? build_(agents[0].name, agents[0].fp, agents[0].rt) : { text: 'none', html: '<p>none</p>' };
+  const cases = [
+    ['A: sender name only', { to: to, name: NOTICE.SENDER_NAME, subject: 'diag A', body: 'plain' }],
+    ['B: long subject with <email>', { to: to, subject: '[TEST for SOME, ONE <a@b.com>] Notice: 1 For Payment and 1 Returned Sale(s) - 01 Nov 2026', body: 'plain' }],
+    ['C: real notice html (capped)', { to: to, name: NOTICE.SENDER_NAME, subject: 'diag C', body: real.text, htmlBody: real.html }],
+    ['D: 400-row html table', { to: to, subject: 'diag D', body: 'plain', htmlBody: '<table>' + Array(400).join('<tr><td>Subscriber</td><td>FIBER UNLI PLAN 1399</td><td>FOR PAYMENT</td></tr>') + '</table>' }]
+  ];
+  cases.forEach(c => {
+    try { MailApp.sendEmail(c[1]); Logger.log('OK  ' + c[0]); }
+    catch (e) { Logger.log('ERR ' + c[0] + ' -> ' + e); }
+  });
 }
 
 /* Only use this when this project is deployed as its OWN web app (its /exec URL then
