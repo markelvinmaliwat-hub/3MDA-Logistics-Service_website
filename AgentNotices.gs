@@ -28,10 +28,12 @@
  *    lives in Script Properties - never in this file, never in the public repo.
  * 7. This file also serves the dashboard's shared logs (the "Online" avatars and
  *    the payment history) through  action=logRead / logWrite / logStatus, on the
- *    same /exec URL. It writes to LOG.SHEET_ID, creates the Activity and
- *    Payment_Log tabs with the right headers if they are missing, and stamps every
- *    row with server time in NOTICE.TIMEZONE. Nothing to run - it is live as soon
- *    as you deploy a new version.
+ *    same /exec URL. It writes only to LOG.SHEET_ID, in the tabs  activity_log
+ *    and  Payment_Updates , creating them with the right headers if they are
+ *    missing, and stamps every row with server time in NOTICE.TIMEZONE. The old
+ *    tab named Payment_Log is never written to - run  repairLogTabs()  once to
+ *    put its original header back and prepare the two tabs above. Nothing else
+ *    to run; it is live as soon as you deploy a new version.
  */
 const NOTICE = {
   SHEET_ID: '1i7g_Hv6_tmQxqGhjSVzQFa8rFaJriC3wp9zK3wosnw0',  /* "DATABASE AUG TO OCT" (confirmed by the owner) - holds PLDT, RED, VALIDATORS and Agent_Emails */
@@ -47,11 +49,16 @@ const NOTICE = {
   TIMEZONE: 'Asia/Manila'
 };
 
-/* The dashboard's shared logs live in their own spreadsheet, never in the sales file. */
+/* The dashboard's shared logs live in their own spreadsheet, never in the sales file.
+   activity_log was the correctly named but empty tab - that is the one we now fill.
+   The tab called Payment_Log turned out to hold 349 rows of ACTIVITY history, so the
+   payment log goes to its own fresh tab instead of appending under that legacy data. */
 const LOG = {
   SHEET_ID: '11-VVgEX5ugFP4suckiaV_LitXz2VhuYe3HhDv4rLcdA',  /* the logs sheet the dashboard already reads */
-  ACT_TAB: 'Activity',
-  PAY_TAB: 'Payment_Log',
+  ACT_TAB: 'activity_log',
+  PAY_TAB: 'Payment_Updates',
+  LEGACY_TAB: 'Payment_Log',        /* left alone: 349 rows of old activity, header restored by repairLogTabs() */
+  LEGACY_HEAD: ['Timestamp', 'User', 'Amount', 'Method', 'Status', 'Ref', 'Data', '', '', '', '', ''],
   ACT_HEAD: ['Time', 'Email', 'Code', 'Name', 'Action', 'Where', 'Search', 'Device', 'Visitor', 'Ts'],
   PAY_HEAD: ['Saved At', 'Key', 'Name', 'Account', 'Agent', 'Action', 'Label', 'Date', 'Remarks', 'By', 'Code', 'By Name'],
   READ_LIMIT: 600,                 // rows per logRead call (keeps the reply a few KB instead of 13 MB)
@@ -270,14 +277,6 @@ const cell_ = v => v instanceof Date ? Utilities.formatDate(v, NOTICE.TIMEZONE, 
 const flat_ = v => cell_(v).replace(/[\r\n\t]+/g, ' ').slice(0, LOG.FIELD);
 
 function logSs_() { return SpreadsheetApp.openById(LOG.SHEET_ID); }
-/* the first tab already holds the activity rows but was headed "Timestamp,User,Amount,..."
-   - adopt it instead of starting a second log the dashboard would never read */
-function actTab_(ss) {
-  let sh = ss.getSheetByName(LOG.ACT_TAB);
-  if (!sh) sh = ss.getSheets().filter(s => /^time(stamp)?$/i.test(String(s.getRange(1, 1).getValue()).trim()))[0] || null;
-  return sh || ss.insertSheet(LOG.ACT_TAB);
-}
-function payTab_(ss) { return ss.getSheetByName(LOG.PAY_TAB) || ss.insertSheet(LOG.PAY_TAB); }
 function headRow_(sh, head) {
   const cur = sh.getRange(1, 1, 1, head.length).getValues()[0].map(x => String(x).trim()).join('|');
   if (cur === head.join('|')) return;
@@ -286,9 +285,27 @@ function headRow_(sh, head) {
 }
 function logTab_(p) {
   const ss = logSs_(), pay = /pay/i.test(String(p.kind || ''));
-  const sh = pay ? payTab_(ss) : actTab_(ss);
+  const sh = ss.getSheetByName(pay ? LOG.PAY_TAB : LOG.ACT_TAB) || ss.insertSheet(pay ? LOG.PAY_TAB : LOG.ACT_TAB);
   headRow_(sh, pay ? LOG.PAY_HEAD : LOG.ACT_HEAD);
   return { sh: sh, pay: pay };
+}
+/* One-run tidy up: puts the original header back on the legacy tab (an earlier version of
+   this file adopted it by mistake) and prepares the two tabs the dashboard really uses.
+   Pick repairLogTabs() in the dropdown, Run, read the log. It deletes nothing. */
+function repairLogTabs() {
+  const ss = logSs_(), out = [];
+  const legacy = ss.getSheetByName(LOG.LEGACY_TAB);
+  if (legacy) {
+    legacy.getRange(1, 1, 1, LOG.LEGACY_HEAD.length).setValues([LOG.LEGACY_HEAD]);
+    out.push(LOG.LEGACY_TAB + ' header restored, ' + (legacy.getLastRow() - 1) + ' legacy rows kept untouched');
+  } else out.push(LOG.LEGACY_TAB + ' not found - skipped');
+  [LOG.ACT_TAB, LOG.PAY_TAB].forEach(n => {
+    const sh = ss.getSheetByName(n) || ss.insertSheet(n);
+    headRow_(sh, n === LOG.PAY_TAB ? LOG.PAY_HEAD : LOG.ACT_HEAD);
+    out.push(n + ' ready, rows=' + Math.max(0, sh.getLastRow() - 1));
+  });
+  Logger.log(out.join('  |  '));
+  return out;
 }
 function logRead_(p) {
   const t = logTab_(p), head = t.pay ? LOG.PAY_HEAD : LOG.ACT_HEAD;
@@ -320,12 +337,9 @@ function logWrite_(p) {
   return { success: true, row: last + 1, time: time };
 }
 function logStatus_() {
-  const ss = logSs_();
-  return {
-    sheet: LOG.SHEET_ID, tabs: ss.getSheets().map(s => s.getName()),
-    activity: (function () { const t = actTab_(ss); headRow_(t, LOG.ACT_HEAD); return t.getLastRow() - 1; })(),
-    payments: (function () { const t = payTab_(ss); headRow_(t, LOG.PAY_HEAD); return t.getLastRow() - 1; })()
-  };
+  const a = Math.max(0, logTab_({ kind: 'activity' }).sh.getLastRow() - 1);
+  const p = Math.max(0, logTab_({ kind: 'pay' }).sh.getLastRow() - 1);
+  return { sheet: LOG.SHEET_ID, activity: a, payments: p, tabs: logSs_().getSheets().map(s => s.getName()) };
 }
 /* JSONP when a callback is asked for (same as getAllData), plain JSON otherwise. */
 function jsonOut_(obj, cb) {

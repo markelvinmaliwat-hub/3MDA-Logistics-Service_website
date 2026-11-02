@@ -37,10 +37,15 @@ In `index.html`: `WEB_APP_URL` (sales data only, via the `getAllData` JSONP call
 ## Shared logs — the "Online" avatars and payment history
 
 `AgentNotices.gs` also serves `action=logRead | logWrite | logStatus` on the same `/exec`
-URL. It writes to `LOG.SHEET_ID` (the logs spreadsheet, never the sales file), creating the
-`Activity` and `Payment_Log` tabs with the right headers if they are missing — an existing
-tab headed `Timestamp, User, Amount, …` is adopted and its header row is repaired in place,
-so history is kept.
+URL. It writes only to `LOG.SHEET_ID` (the logs spreadsheet, never the sales file), in two
+tabs it owns: **`activity_log`** and **`Payment_Updates`**, created with the right headers
+on first use.
+
+The tab named `Payment_Log` in that spreadsheet turned out to hold 349 rows of *activity*
+history, not payments, so nothing is appended to it and the log API never opens it for
+writing. Run `repairLogTabs()` once in Apps Script to put its original header back (an
+earlier revision of this file adopted it by mistake) and to prepare the two tabs above.
+It deletes nothing and is safe to run twice.
 
 * Every row is stamped with **server** time in `NOTICE.TIMEZONE` plus an epoch `Ts` column,
   so the Online avatars do not depend on any one agent's clock.
