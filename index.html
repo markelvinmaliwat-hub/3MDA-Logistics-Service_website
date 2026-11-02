@@ -448,14 +448,29 @@ const PW='3mdaupland',nc=v=>String(v||'').trim().toUpperCase().replace(/^P/,'');
 const AC={};['PLDT','RED'].forEach(t=>(DATA[t]||[]).forEach(r=>{const c=nc(r['AGENT CODE']);if(c&&!AC[c])AC[c]=r['AGENT NAME']}));
 let ME=null,pendFc=false,suMode=false,lstep=0,pendC='',pendE='';const pwh=x=>{let a=3735928559,b=1103547991;for(let i=0;i<x.length;i++){const c=x.charCodeAt(i);a=Math.imul(a^c,2654435761);b=Math.imul(b^c,1597334677)}a=Math.imul(a^(a>>>16),2246822507)^Math.imul(b^(b>>>13),3266489909);b=Math.imul(b^(b>>>16),2246822507)^Math.imul(a^(a>>>13),3266489909);return (4294967296*(2097151&b)+(a>>>0)).toString(36)};
 const ADMIN_EMAILS=[];/* OPTIONAL: emails allowed to see EVERYONE'S activity, e.g. ['you@email.com']. Leave empty = every logged-in agent sees the full list. */
-const WEB_APP_URL='https://script.google.com/macros/s/AKfycbwUBLtjrA7M8n0bdGzep6rY8pTlvwGRegpy59hJeeSHKxpWX8VKaJsHTENcQdZB8N-Z/exec';const LOG_URL=WEB_APP_URL;/* Google Apps Script web app (writes to your Google Sheet) */
+const WEB_APP_URL='https://script.google.com/macros/s/AKfycbwUBLtjrA7M8n0bdGzep6rY8pTlvwGRegpy59hJeeSHKxpWX8VKaJsHTENcQdZB8N-Z/exec';/* sales database (getAllData) - do not point the logs here */
 const NOTICE_APP_URL='https://script.google.com/macros/s/AKfycbzOWRYDC83JsHm7e79vDOy_cWLHqoOIlwwmz_xZvsw2yh01Ne_-t-EjJvRBKLt3oiOp/exec';/* /exec URL of the web app deployed from AgentNotices.gs (the project bound to DATABASE AUG TO OCT). Leave '' only if you added the notice dispatch line to WEB_APP_URL's doGet instead. */
+const LOG_URL=NOTICE_APP_URL||WEB_APP_URL;/* the AgentNotices web app also serves action=logRead/logWrite/logStatus for the shared activity + payment log */
 const SHEET_ID='11-VVgEX5ugFP4suckiaV_LitXz2VhuYe3HhDv4rLcdA';/* Google Sheet used to READ the shared logs (tab gid=0 = activity, tab "Payment_Log" = payments). Must be shared: Anyone with the link = Viewer */
 const SHEET_BASE='https://docs.google.com/spreadsheets/d/'+SHEET_ID+'/gviz/tq?tqx=out:csv&headers=1';let RERR='';
 function parseCsv(t){const R=[];let row=[],f='',q=false;for(let i=0;i<t.length;i++){const c=t[i];if(q){if(c==='"'){if(t[i+1]==='"'){f+='"';i++}else q=false}else f+=c}else if(c==='"')q=true;else if(c===','){row.push(f);f=''}else if(c==='\n'||c==='\r'){if(c==='\r'&&t[i+1]==='\n')i++;row.push(f);R.push(row);row=[];f=''}else f+=c}if(f!==''||row.length){row.push(f);R.push(row)}return R}
 async function fetchT(u,ms){const c=new AbortController(),t=setTimeout(()=>c.abort(),ms||12000);try{return await fetch(u,{signal:c.signal})}finally{clearTimeout(t)}}
-async function remoteRows(kind){
+/* JSONP call to an Apps Script /exec URL - the same route the live sales sync uses, so the
+   reply is not blocked by CORS and a redirect to googleusercontent.com cannot break it. */
+function jsonpReq(url,params,ms){return new Promise((res,rej)=>{
+ const cb='cb_'+Date.now()+'_'+Math.floor(Math.random()*1e6),s=document.createElement('script');s.id=cb;
+ const done=err=>{clearTimeout(to);try{delete window[cb]}catch(e){window[cb]=undefined}s.remove();err?rej(new Error(err)):0};
+ const to=setTimeout(()=>done('timed out'),ms||20000);
+ window[cb]=j=>{done();res(j)};s.onerror=()=>done('request failed');
+ const q=Object.keys(params).map(k=>encodeURIComponent(k)+'='+encodeURIComponent(params[k])).join('&');
+ s.src=url+(url.includes('?')?'&':'?')+q+'&_='+Date.now();document.head.appendChild(s)})}
+async function remoteRows(kind,limit){
  const errs=[];
+ if(LOG_URL){try{
+  const j=await jsonpReq(LOG_URL,{action:'logRead',kind:kind==='act'?'activity':kind,limit:limit||(kind==='act'?600:3000)},15000);
+  if(j&&Array.isArray(j.rows))return j.rows;
+  throw new Error((j&&j.error)||'the log api sent no rows')
+ }catch(e){errs.push('log api: '+((e&&e.message)||e))}}
  if(SHEET_ID){try{
   const r=await fetchT(SHEET_BASE+(kind==='act'?'&gid=0':'&sheet=Payment_Log')+'&_='+Date.now());
   if(!r.ok)throw new Error('HTTP '+r.status);
@@ -463,7 +478,7 @@ async function remoteRows(kind){
   if(/^\s*<(!doctype|html)/i.test(t))throw new Error('the Sheet is not shared as "Anyone with the link"');
   const A=parseCsv(t),h0=String((A[0]||[])[0]||'').trim().toLowerCase();
   if(kind==='act'){
-    if(h0!=='time'){
+    if(h0!=='time'&&h0!=='timestamp'){
       if(!h0 && A.length<2) return [];
       // FIX: if first tab is not activity, don't hard fail - return empty and let web app handle it
       if(h0!=='time' && h0!=='saved at' && h0!=='') {
@@ -489,18 +504,14 @@ async function remoteRows(kind){
   if(kind==='payhist')return H.sort((a,b)=>a.at<b.at?1:-1).slice(0,1000);
   const L={};H.forEach(x=>{if(!L[x.key]||x.at>=L[x.key].at)L[x.key]=x});return Object.values(L)
  }catch(e){errs.push('sheet: '+(e&&e.name==='AbortError'?'timed out':(e&&e.message)||e))}}
- if(LOG_URL){try{
-  const r=await fetchT(LOG_URL+(LOG_URL.includes('?')?'&':'?')+'action=read&kind='+(kind==='act'?'activity':kind));
-  const j=await r.json(),d=j&&(Array.isArray(j.data)?j.data:j.rows);if(Array.isArray(d))return d;throw new Error((j&&j.error)||'unexpected reply')
- }catch(e){errs.push('web app: '+(e&&e.name==='AbortError'?'timed out':(e&&e.message)||e)+(/failed to fetch|load failed|networkerror/i.test(String(e&&e.message))?' - redeploy it as Web app with Who has access: Anyone':''))}}
  RERR=errs.join(' | ');throw new Error(RERR)}
 
 const ld=(k,d)=>{try{return JSON.parse(localStorage.getItem(k))||d}catch(e){return d}},sv=(k,v)=>{try{localStorage.setItem(k,JSON.stringify(v))}catch(e){}};
 /* ---- Google Sheet API (CORS-safe GET): ?action=read / ?action=write&data=... ---- */
-async function getPayments(){const res=await fetch(`${WEB_APP_URL}?action=read`);const json=await res.json();return json.data}
+async function getPayments(){return remoteRows('pay')}
 async function saveToPaymentLog(data){return logPayment(data)}
-async function logPayment(paymentData){const url=`${WEB_APP_URL}?action=write&data=${encodeURIComponent(JSON.stringify(paymentData))}`;const res=await fetch(url);const json=await res.json();if(!json.success)throw new Error(json.error);return json}
-async function sheetWrite(obj){if(!LOG_URL)return false;try{const r=await fetchT(`${WEB_APP_URL}?action=write&data=${encodeURIComponent(JSON.stringify(obj))}`,15000);const j=await r.json();return !!(j&&j.success)}catch(e){return false}}
+async function logPayment(p){const ok=await sheetWrite(Object.assign({type:'pay'},p||{}));if(!ok)throw new Error('the log web app did not accept the row');return ok}
+async function sheetWrite(obj){if(!LOG_URL)return false;try{const j=await jsonpReq(LOG_URL,{action:'logWrite',kind:obj&&obj.type==='pay'?'pay':'activity',data:JSON.stringify(obj||{})},20000);return !!(j&&j.success)}catch(e){return false}}
 let _fl=false;
 async function flushQ(){if(_fl)return;_fl=true;try{let q=ld('mm_wq',[]);while(q.length){if(!(await sheetWrite(q[0])))break;q.shift();sv('mm_wq',q)}}finally{_fl=false}}
 function sheetSend(obj){sheetWrite(obj).then(ok=>{if(ok)flushQ();else{const q=ld('mm_wq',[]);q.push(obj);sv('mm_wq',q.slice(-300))}})}
@@ -640,7 +651,7 @@ apply()})();
 <script id="presence">
 /* ONLINE PRESENCE: avatar sa taas para sa bawat naka-log in (galing sa shared Activity log / Google Sheet) */
 (function(){
- const WIN=5*60000,HB=2*60000,POLL=30000,COL=['#e11d48','#7c3aed','#0891b2','#d97706','#059669','#db2777','#2563eb','#65a30d'];
+ const WIN=15*60000,HB=3*60000,POLL=60000,COL=['#e11d48','#7c3aed','#0891b2','#d97706','#059669','#db2777','#2563eb','#65a30d'];
  const hue=s=>{let h=0;for(let i=0;i<s.length;i++)h=(h*31+s.charCodeAt(i))>>>0;return h%COL.length};
  const ini=u=>{const n=String(u.name||'').replace(/[,.]/g,' ').trim().split(/\s+/).filter(Boolean);
   if(n.length>1)return (n[0][0]+n[n.length-1][0]).toUpperCase();if(n.length===1)return n[0].slice(0,2).toUpperCase();
@@ -655,22 +666,24 @@ apply()})();
   const b=box();if(!b)return;const my=myKey();
   on=on.slice().sort((x,y)=>(y.k===my)-(x.k===my)||y.t-x.t);
   const MAX=6,show=on.slice(0,MAX),extra=on.length-show.length;
-  b.innerHTML='<span class="lbl">Online &middot; '+on.length+'</span>'+show.map(u=>{const c=COL[hue(u.k)],nm=nameOf(u)||u.email||('Agent '+u.code),me=u.k===my;
-    return `<span class="av${me?' me':''}" tabindex="0" style="background:${c};border-color:${c}" title="${esc(nm)}${me?' (ikaw)':''}">${esc(ini({name:nameOf(u),email:u.email,code:u.code}))}<i></i><span class="tip">${esc(nm)}${me?' (ikaw)':''}</span></span>`}).join('')
+  const seen=u=>{const m=Math.round((Date.now()-u.t)/60000);return m<=1?'now':m+' min ago'};
+  b.innerHTML='<span class="lbl">Online &middot; '+on.length+'</span>'+show.map(u=>{const c=COL[hue(u.k)],nm=nameOf(u)||u.email||('Agent '+u.code),me=u.k===my,tip=esc(nm)+esc(me?' (ikaw)':'')+' · seen '+seen(u);
+    return `<span class="av${me?' me':''}" tabindex="0" style="background:${c};border-color:${c}" title="${tip}">${esc(ini({name:nameOf(u),email:u.email,code:u.code}))}<i></i><span class="tip">${tip}</span></span>`}).join('')
     +(extra>0?`<span class="av more" title="${extra} pang naka-log in">+${extra}</span>`:'');
  }
  async function poll(){
   const b=box();if(!b)return;
   if(typeof ME==='undefined'||!ME){b.innerHTML='';cache=[];return}
+  if(document.hidden)return;                         /* walang bakit na tabang nakatago ang umaabot sa web app */
   paint(cache.length?cache:[selfEntry()]);          /* lalabas agad, hindi naghihintay sa Google Sheet */
   if(busy)return;busy=true;
   try{
    let rows=[];
-   try{rows=await remoteRows('act')}catch(e){}
+   try{rows=await remoteRows('act',200)}catch(e){}
    try{rows=rows.concat(JSON.parse(localStorage.getItem('mm_log'))||[])}catch(e){}
    const last={};
    rows.forEach(r=>{const key=String(r.email||'').toLowerCase()||('code:'+String(r.code||'').toLowerCase());
-    if(!key||key==='code:')return;const t=tms(r.time);if(!t)return;
+    if(!key||key==='code:')return;const t=(r.ts&&+r.ts)||tms(r.time);if(!t)return;
     if(!last[key]||t>=last[key].t)last[key]={t,a:String(r.action||''),email:r.email||'',code:r.code||'',name:r.name||''}});
    const now=Date.now(),my=myKey();
    if(!ME||myKey()!==my)return;

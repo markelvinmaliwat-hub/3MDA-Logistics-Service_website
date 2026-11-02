@@ -26,6 +26,12 @@
  *    stranger who reads the page source cannot blast every agent with one GET
  *    request.  clearNoticeSendToken()  removes the requirement again. The token
  *    lives in Script Properties - never in this file, never in the public repo.
+ * 7. This file also serves the dashboard's shared logs (the "Online" avatars and
+ *    the payment history) through  action=logRead / logWrite / logStatus, on the
+ *    same /exec URL. It writes to LOG.SHEET_ID, creates the Activity and
+ *    Payment_Log tabs with the right headers if they are missing, and stamps every
+ *    row with server time in NOTICE.TIMEZONE. Nothing to run - it is live as soon
+ *    as you deploy a new version.
  */
 const NOTICE = {
   SHEET_ID: '1i7g_Hv6_tmQxqGhjSVzQFa8rFaJriC3wp9zK3wosnw0',  /* "DATABASE AUG TO OCT" (confirmed by the owner) - holds PLDT, RED, VALIDATORS and Agent_Emails */
@@ -39,6 +45,18 @@ const NOTICE = {
   CC: [],                          // e.g. ['teamleader@email.com'] added to every agent email
   MAX_ROWS: 100,                   // rows listed per section; the rest are summarised (keeps one notice small enough to send)
   TIMEZONE: 'Asia/Manila'
+};
+
+/* The dashboard's shared logs live in their own spreadsheet, never in the sales file. */
+const LOG = {
+  SHEET_ID: '11-VVgEX5ugFP4suckiaV_LitXz2VhuYe3HhDv4rLcdA',  /* the logs sheet the dashboard already reads */
+  ACT_TAB: 'Activity',
+  PAY_TAB: 'Payment_Log',
+  ACT_HEAD: ['Time', 'Email', 'Code', 'Name', 'Action', 'Where', 'Search', 'Device', 'Visitor', 'Ts'],
+  PAY_HEAD: ['Saved At', 'Key', 'Name', 'Account', 'Agent', 'Action', 'Label', 'Date', 'Remarks', 'By', 'Code', 'By Name'],
+  READ_LIMIT: 600,                 // rows per logRead call (keeps the reply a few KB instead of 13 MB)
+  MAX_ROWS: 30000,                 // hard stop so a stranger cannot grow the log forever
+  FIELD: 200                       // per-field cap
 };
 
 const NT_ = {
@@ -244,6 +262,78 @@ function sendNotices_(send) {
   return res;
 }
 
+/* --------------------------------------------------------------------- log API
+   The dashboard reads and writes its shared activity + payment log through this
+   web app instead of the old one, which answered every request with the whole
+   13 MB database. Same JSONP style as getAllData, so no CORS surprises. */
+const cell_ = v => v instanceof Date ? Utilities.formatDate(v, NOTICE.TIMEZONE, 'yyyy-MM-dd HH:mm:ss') : String(v == null ? '' : v);
+const flat_ = v => cell_(v).replace(/[\r\n\t]+/g, ' ').slice(0, LOG.FIELD);
+
+function logSs_() { return SpreadsheetApp.openById(LOG.SHEET_ID); }
+/* the first tab already holds the activity rows but was headed "Timestamp,User,Amount,..."
+   - adopt it instead of starting a second log the dashboard would never read */
+function actTab_(ss) {
+  let sh = ss.getSheetByName(LOG.ACT_TAB);
+  if (!sh) sh = ss.getSheets().filter(s => /^time(stamp)?$/i.test(String(s.getRange(1, 1).getValue()).trim()))[0] || null;
+  return sh || ss.insertSheet(LOG.ACT_TAB);
+}
+function payTab_(ss) { return ss.getSheetByName(LOG.PAY_TAB) || ss.insertSheet(LOG.PAY_TAB); }
+function headRow_(sh, head) {
+  const cur = sh.getRange(1, 1, 1, head.length).getValues()[0].map(x => String(x).trim()).join('|');
+  if (cur === head.join('|')) return;
+  sh.getRange(1, 1, 1, head.length).setValues([head]);
+  sh.setFrozenRows(1);
+}
+function logTab_(p) {
+  const ss = logSs_(), pay = /pay/i.test(String(p.kind || ''));
+  const sh = pay ? payTab_(ss) : actTab_(ss);
+  headRow_(sh, pay ? LOG.PAY_HEAD : LOG.ACT_HEAD);
+  return { sh: sh, pay: pay };
+}
+function logRead_(p) {
+  const t = logTab_(p), head = t.pay ? LOG.PAY_HEAD : LOG.ACT_HEAD;
+  const limit = Math.max(1, Math.min(5000, parseInt(p.limit, 10) || LOG.READ_LIMIT));
+  const last = t.sh.getLastRow(), n = Math.max(0, Math.min(limit, last - 1));
+  if (!n) return [];
+  return t.sh.getRange(last - n + 1, 1, n, head.length).getValues().map(v => t.pay
+    ? { at: cell_(v[0]), key: cell_(v[1]), name: cell_(v[2]), account: cell_(v[3]), agent: cell_(v[4]), action: cell_(v[5]), label: cell_(v[6]), date: cell_(v[7]), remarks: cell_(v[8]), by: cell_(v[9]), code: cell_(v[10]), byName: cell_(v[11]) }
+    : { time: cell_(v[0]), email: cell_(v[1]), code: cell_(v[2]), name: cell_(v[3]), action: cell_(v[4]), where: cell_(v[5]), search: cell_(v[6]), device: cell_(v[7]), visitor: cell_(v[8]), ts: Number(v[9]) || 0 });
+}
+function logWrite_(p) {
+  const t = logTab_(p), head = t.pay ? LOG.PAY_HEAD : LOG.ACT_HEAD;
+  let o;
+  try { o = JSON.parse(String(p.data || '')); } catch (e) { return { success: false, error: 'data is not JSON' }; }
+  if (!o || typeof o !== 'object' || Array.isArray(o)) return { success: false, error: 'data must be an object' };
+  if (!t.pay && !String(o.email || o.code || '').trim()) return { success: false, error: 'row needs an email or a code' };
+  const last = t.sh.getLastRow();
+  if (last >= LOG.MAX_ROWS) return { success: false, error: 'the ' + t.sh.getName() + ' tab is full - archive it' };
+  const now = new Date();
+  const time = Utilities.formatDate(now, NOTICE.TIMEZONE, 'yyyy-MM-dd HH:mm:ss');
+  const row = t.pay
+    ? [time, flat_(o.key), flat_(o.name), flat_(o.account), flat_(o.agent), flat_(o.action), flat_(o.label), flat_(o.date), flat_(o.remarks), flat_(o.by), flat_(o.code), flat_(o.byName)]
+    : [time, String(o.email || '').trim().toLowerCase().slice(0, LOG.FIELD), flat_(o.code), flat_(o.name), flat_(o.action), flat_(o.where), flat_(o.search), flat_(o.device), flat_(o.visitor), now.getTime()];
+  const lock = LockService.getScriptLock();
+  let locked = false;
+  try { lock.waitLock(10000); locked = true; } catch (e) { /* an occasional lost race only costs one row */ }
+  try { t.sh.getRange(last + 1, 1, 1, head.length).setValues([row]); }
+  finally { if (locked) { try { lock.releaseLock(); } catch (e) {} } }
+  return { success: true, row: last + 1, time: time };
+}
+function logStatus_() {
+  const ss = logSs_();
+  return {
+    sheet: LOG.SHEET_ID, tabs: ss.getSheets().map(s => s.getName()),
+    activity: (function () { const t = actTab_(ss); headRow_(t, LOG.ACT_HEAD); return t.getLastRow() - 1; })(),
+    payments: (function () { const t = payTab_(ss); headRow_(t, LOG.PAY_HEAD); return t.getLastRow() - 1; })()
+  };
+}
+/* JSONP when a callback is asked for (same as getAllData), plain JSON otherwise. */
+function jsonOut_(obj, cb) {
+  const fn = typeof cb === 'string' && /^[A-Za-z_$][A-Za-z0-9_$]{0,40}$/.test(cb);
+  return ContentService.createTextOutput(fn ? cb + '(' + JSON.stringify(obj) + ');' : JSON.stringify(obj))
+    .setMimeType(fn ? ContentService.MimeType.TEXT : ContentService.MimeType.JSON);
+}
+
 /* ------------------------------------------------------- trigger + web app glue */
 function sendAgentNotices() { sendNotices_(true); }
 function runAgentNotices() { return sendNotices_(true); }
@@ -310,9 +400,17 @@ function noticeDiag() {
    goes into index.html as NOTICE_APP_URL). If you hook into an existing doGet instead,
    delete this function and add the notice dispatch line from the header comment. */
 function doGet(e) {
-  const a = (e && e.parameter && e.parameter.action) || '';
+  const p = (e && e.parameter) || {};
+  const a = String(p.action || '');
   if (/^notice(Preview|Send|Status|Install)$/.test(a)) return noticeWebApp_(e);
+  if (/^(logRead|logWrite|logStatus)$/.test(a)) {
+    let out;
+    try {
+      out = a === 'logRead' ? { ok: true, rows: logRead_(p) } : a === 'logStatus' ? logStatus_() : logWrite_(p);
+    } catch (err) { out = a === 'logWrite' ? { success: false, error: String(err) } : { ok: false, error: String(err) }; }
+    return jsonOut_(out, p.callback);
+  }
   return ContentService.createTextOutput(JSON.stringify({
-    error: 'unknown action', use: 'noticeStatus | noticePreview | noticeSend | noticeInstall'
+    error: 'unknown action', use: 'noticeStatus | noticePreview | noticeSend | noticeInstall | logRead | logWrite | logStatus'
   })).setMimeType(ContentService.MimeType.JSON);
 }
