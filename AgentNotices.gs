@@ -142,14 +142,15 @@ const SFS = {
   TEST: { STATUS: 'REENCODED', MAX_ROWS: 12 }   // what sfsTestReport borrows so there is a sample to look at
 };
 
-/* The CREDIT VALIDATION report - same shape, different queue. The owner's manual mail reads
-   "For credit validation and approval." over rows whose CSP REMARKS says ESCALATED TO CVAA,
-   and it goes to the four people he addressed it to, not to the agents. DRY_RUN is true:
-   cvTestReport shows him a real copy first, and only cvProbe/his "go" turns it live. */
+/* The CREDIT VALIDATION report - same shape, same recipients, different queue. The owner's
+   manual mail reads "For credit validation and approval." over rows whose CSP REMARKS says
+   ESCALATED TO CVAA. He confirmed on 2026-11-04 that BOTH daily reports go to Leonard alone on
+   the To line with the same three CCs, so CV.TO / CV.CC mirror SFS exactly. DRY_RUN is true:
+   cvTestReport shows him a real copy first, and only his "go" turns it live. */
 const CV = {
   NAME: 'CV',
-  TO: ['lsabat@pldt.com.ph', 't-jesnavarro@supplier.pldt.com.ph', 't-jesnavarro@pldt365.onmicrosoft.com', 'abmadlangbayan0510@icloud.com'],
-  CC: [],
+  TO: ['lsabat@pldt.com.ph'],
+  CC: ['t-jesnavarro@supplier.pldt.com.ph', 't-jesnavarro@pldt365.onmicrosoft.com', 'abmadlangbayan0510@icloud.com'],
   GREET: 'Hi Sir ABAT, Leonard S.,',
   INTRO: 'For credit validation and approval.',
   THANKS: 'Thank you !',

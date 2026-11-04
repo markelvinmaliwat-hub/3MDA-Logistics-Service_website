@@ -75,9 +75,9 @@ and both run **twice a day** (`SEND_HOURS = [8, 14]`).
 
 * **SFS** (`runSfsNotices`): To `lsabat@pldt.com.ph`, CC the three addresses in `SFS.CC`,
   subject `3MDA_SFS_VALIDATION_` + `MMMYYYY`. **LIVE since 2026-11-04.**
-* **CV / CREDIT VALIDATION** (`runCvNotices`): the four addresses the owner addressed in his
-  own mail — `SFS`'s To and CC names, but all four sit in `CV.TO` and `CV.CC` is empty, because
-  that is how he sends it. Intro `For credit validation and approval.`, HD REMARKS line
+* **CV / CREDIT VALIDATION** (`runCvNotices`): the recipient set is **identical to SFS** — the
+  owner confirmed on 2026-11-04 that both daily reports go to `lsabat@pldt.com.ph` on the To line
+  with the same three CCs. Intro `For credit validation and approval.`, HD REMARKS line
   `FOR CREDIT VALIDATION AND APPROVAL`, subject `3MDA_CREDIT_VALIDATION_` + `MMMYYYY`.
   **Still `DRY_RUN = true`** — it goes live only after he reviews a `cvTestReport` copy.
 * **Its rule is the owner's own words too: `CSP REMARKS` contains `ESCALATED TO CVAA`.** Note
