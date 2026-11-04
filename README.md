@@ -28,7 +28,8 @@ Script and saved. Keep the two copies in step by pasting from this file.
 ## Settings that matter
 
 In `AgentNotices.gs`: `DRY_RUN` (true = every notice goes to `ADMIN_EMAILS` labelled
-`[TEST for <agent>]`), `SEND_HOUR`, `MAX_ROWS` per section, `SHEET_ID`, `ADMIN_EMAILS`.
+`[TEST for <agent>]`), `SEND_HOUR`, `MAX_ROWS` per section, `SHEET_ID`, `ADMIN_EMAILS` —
+and `SFS.DRY_RUN`, `SFS.FROM`, `SFS.EXACT` for the PLDT report described below.
 
 In `index.html`: `WEB_APP_URL` (sales data only, via the `getAllData` JSONP call),
 `NOTICE_APP_URL` (notices **and** the shared log API), `LOG_URL` (defaults to
@@ -64,22 +65,37 @@ so the header could only ever show `Online · 1`.
 ## SFS VALIDATION report to PLDT
 
 `runSfsNotices` emails **`lsabat@pldt.com.ph`** (CC: the three addresses in `SFS.CC`) once a
-day with every application whose **`FINAL STATUS` is exactly `SFS VALIDATION`** in the
-`PLDT` and `RED` tabs — in this data those are duplicate submissions waiting on validation.
+day with every application tagged **`SFS VALIDATION`**, shaped like the owner's own manual
+`3MDA_SFS_VALIDATION_OCT2026` mail: greeting, one-line intro, a black-bordered
+`DATE | SUBSCRIBER NAME | SR | CSP REMARKS | HD REMARKS` table, `Thank you !`, his
+three-line signature. The `PLDT` and `RED` tabs are read, never the `VALIDATORS` tab.
 
-* Matched after normalising case and spacing, and read from `FINAL STATUS` only. The
-  `CSP STATUS` column says things like `DUPLICATE SUBS INFO`, which is a reason, not a
-  state to report, so a blank `FINAL STATUS` never matches.
-* Deduped by SR number across the two tabs, oldest first, capped at `SFS.MAX_ROWS`.
+* **Which column carries the tag is configurable, because it is not settled yet.**
+  `SFS.FROM` is the list of columns to test (default `['FINAL STATUS', 'HD RECOMMENDATION']`)
+  and `SFS.EXACT` picks exact match (`true`) or "contains" (`false`). The rows in the
+  owner's sample email are `HD REMARKS = SFS VALIDATION - WITH UPLOADED DOCS`, so a contains
+  match that includes `HD REMARKS` is what reproduces his list. Run **`sfsProbe`** in Apps
+  Script and read the Execution log: it lists every column, the ten most common values of
+  `FINAL STATUS / HD REMARKS / HD RECOMMENDATION / CSP STATUS`, every value mentioning SFS
+  with its row count, the full contents of the two sample names, and how many rows the
+  current rule would report. Set `SFS.FROM` / `SFS.EXACT` from that output, not from a guess.
+  `CSP STATUS` is deliberately not a default source — it holds reasons (`DUPLICATE SUBS INFO`),
+  not states.
+* Matched after normalising case and spacing; deduped by SR number across the two tabs,
+  oldest first, capped at `SFS.MAX_ROWS`; `DATE` renders as `M/D/YYYY` like his email.
 * **A day with no matching row sends nothing.**
 * `SFS.DRY_RUN` must stay `true` until the owner has seen a real copy: while it is true the
   report goes to `ADMIN_EMAILS` only and the CC list is ignored, so PLDT receives nothing
   from a test. `sfsPreview` logs the exact body without sending anything.
 * Apps Script cannot schedule an exact minute — a day trigger fires somewhere inside
   `SFS.SEND_HOUR`, so this is "in the 8AM hour", not 8:30:00. Same limitation as the
-  8:00 AM agent notices.
+  8:00 AM agent notices. `installSfsTrigger` creates (and never duplicates) that trigger.
+* `SFS.SR_LINK`, if set, turns each SR into a link to that URL plus the number. Leave it
+  empty unless the link is safe to hand to PLDT.
 * To change the columns, edit `SFS.COLS`; the header name is mapped to the row field in
   `CELL_` (`Date, Subscriber, SR No., Plan, Status, Remarks, Agent, Team Leader, CSP Status`).
+* A new daily email needs no web-app redeploy — triggers run **Head**. Only a new `/exec`
+  action would need Deploy > New version.
 
 ## Agent accounts and Forgot password
 

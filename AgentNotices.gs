@@ -41,12 +41,13 @@
  *    digest or a live code - so keep that spreadsheet shared only with people you
  *    trust. Reset emails respect the 8:00 AM notices: they stop when fewer than
  *    ACCT.QUOTA_FLOOR emails are left for the day.
- * 9. SFS.VALIDATION@PLDT: every day,  runSfsNotices  emails the applications whose
- *    FINAL STATUS is exactly "SFS VALIDATION" to SFS.TO with SFS.CC. It sends nothing
- *    on a day with no such row. While  SFS.DRY_RUN  is true the report goes to the
- *    admin only and the CC list is ignored, so PLDT receives nothing until the owner
- *    flips that switch.  sfsPreview  logs the report without sending, and
- *    installSfsTrigger  creates the daily trigger.
+ * 9. SFS.VALIDATION@PLDT: every day,  runSfsNotices  emails the applications tagged in
+ *    SFS.FROM with SFS.STATUS to SFS.TO plus SFS.CC, shaped like the owner's own
+ *    "3MDA_SFS_VALIDATION_OCT2026" mail. It sends nothing on a day with no matching row.
+ *    While  SFS.DRY_RUN  is true the report goes to the admin only and the CC list is
+ *    ignored, so PLDT receives nothing until the owner flips that switch.  sfsPreview
+ *    logs the report without sending,  sfsProbe  measures the rule against the live
+ *    sheet, and  installSfsTrigger  creates the daily trigger.
  */
 const NOTICE = {
   SHEET_ID: '1i7g_Hv6_tmQxqGhjSVzQFa8rFaJriC3wp9zK3wosnw0',  /* "DATABASE AUG TO OCT" (confirmed by the owner) - holds PLDT, RED, VALIDATORS and Agent_Emails */
@@ -94,22 +95,31 @@ const ACCT = {
   QUOTA_FLOOR: 25                  // never spend the last 25 emails of the day - the 8:00 AM notices need them
 };
 
-/* The SFS VALIDATION report: one email a day to PLDT listing the applications whose
-   FINAL STATUS is exactly "SFS VALIDATION" - in this data those are the duplicate
-   submissions waiting to be validated. DRY_RUN must stay true until the owner has seen
-   a real copy: while it is true the report goes to ADMIN_EMAILS and the CC list below
-   is NOT used, so PLDT never receives anything from a test run. */
+/* The SFS VALIDATION report: one email a day to PLDT listing the applications waiting to
+   be validated, in the same shape as the owner's manual "3MDA_SFS_VALIDATION_OCT2026"
+   mail - greeting, one line, a bordered table, Thank you, his signature block.
+   DRY_RUN must stay true until the owner has seen a real copy: while it is true the
+   report goes to ADMIN_EMAILS and the CC list below is NOT used, so PLDT never receives
+   anything from a test. SFS.FROM / SFS.STATUS decide which rows count - sfsProbe() exists
+   to measure that against his live sheet before the switch is flipped. */
 const SFS = {
   TO: ['lsabat@pldt.com.ph'],
   CC: ['t-jesnavarro@supplier.pldt.com.ph', 't-jesnavarro@pldt365.onmicrosoft.com', 'abmadlangbayan0510@icloud.com'],
-  STATUS: 'SFS VALIDATION',        // compared after nk_(), so spacing and case do not matter
-  COLS: ['Date', 'Subscriber', 'SR No.', 'Plan', 'Status', 'Remarks'],
-  SEND_HOUR: 8,                    // Apps Script fires a day trigger somewhere inside this hour, not at an exact minute
+  GREET: 'Hi Sir ABAT, Leonard S.,',
+  INTRO: 'For endorsement to SFS for proper validation.',
+  THANKS: 'Thank you !',
+  SIGN: ['Mark Maliwat', 'Sales Validator - MMMDA Logistics', 'Service Cavite Upland'],
+  FOOTER: '',                        // e.g. 'Automated daily report from the 3MDA Logistics dashboard.'
+  STATUS: 'SFS VALIDATION',          // the value looked for in SFS.FROM
+  FROM: ['FINAL STATUS', 'HD RECOMMENDATION'],
+  EXACT: true,                       // false = match anywhere in the cell, so "SFS VALIDATION - WITH UPLOADED DOCS" counts too
+  COLS: ['DATE', 'SUBSCRIBER NAME', 'SR', 'CSP REMARKS', 'HD REMARKS'],
+  DATE_FORMAT: 'M/d/yyyy',           // the owner writes 10/23/2026, not 23 Oct 2026
+  SR_LINK: '',                       // 'https://…' prefix if the SR number should be a hyperlink, '' = plain
+  SEND_HOUR: 8,                      // Apps Script fires a day trigger somewhere inside this hour, not at an exact minute
   DRY_RUN: true,
-  MAX_ROWS: 300,                   // rows listed; the rest are summarised
-  TIMEZONE: '',                    // '' = NOTICE.TIMEZONE
-  INTRO: 'This is to formally submit the applications listed below, which are currently tagged as SFS VALIDATION in our records. Kindly review and confirm the validation status of each application at your earliest convenience so that the concerned subscribers may proceed.',
-  CLOSE: 'Should you require further details or supporting documents for any of the applications listed above, please coordinate with the undersigned. Thank you for your continued assistance.'
+  MAX_ROWS: 300,                     // rows listed; the rest are summarised
+  TIMEZONE: ''                       // '' = NOTICE.TIMEZONE
 };
 
 const NT_ = {
@@ -143,6 +153,7 @@ const ALIAS_ = {
   ADMREM: ['ADMIN REMARKS', 'CSP REMARKS', 'REMARKS'],
   SR: ['SR', 'SR NO', 'SR NO.', 'SR NUMBER', 'SERVICE REQUEST'],
   CSP: ['CSP STATUS', 'CSP'],
+  CSPREM: ['CSP REMARKS', 'REMARKS'],
   TL: ['TEAM LEADER', 'TL', 'TEAM LEAD']
 };
 function pick_(r, key) {
@@ -240,8 +251,10 @@ function collect_(ss) {
    up in CELL_, which is what lets the SFS report add SR / agent columns without a second
    builder. Anything not listed there renders as an empty cell. */
 const CELL_ = {
-  'Date': 'date', 'Subscriber': 'sub', 'Plan': 'plan', 'Status': 'status', 'Remarks': 'remarks',
-  'SR No.': 'sr', 'Agent': 'agent', 'Team Leader': 'tl', 'CSP Status': 'csp'
+  'Date': 'date', 'DATE': 'date', 'Subscriber': 'sub', 'SUBSCRIBER NAME': 'sub', 'Plan': 'plan',
+  'Status': 'status', 'FINAL STATUS': 'status', 'Remarks': 'remarks', 'SR No.': 'sr', 'SR': 'sr',
+  'CSP REMARKS': 'cspRem', 'HD REMARKS': 'hd', 'HD RECOMMENDATION': 'hd',
+  'Agent': 'agent', 'Team Leader': 'tl', 'CSP STATUS': 'csp'
 };
 const TH_ = 'style="background:#d9001b;color:#fff;text-align:left;padding:8px 10px;font-size:12px"';
 const TD_ = 'style="padding:7px 10px;border-bottom:1px solid #e3e8f0;font-size:13px;vertical-align:top"';
@@ -333,21 +346,37 @@ function sendNotices_(send) {
    validated. It reuses the same tab reader, the same red-header table and the same
    formal English wording as the agent notices, so a column rename in the sheet cannot
    break one report and not the other. Nothing is emailed when no row matches. */
+/* Which column decides that a row belongs in the report? SFS.FROM is tried in order and
+   the first non-empty value wins, so the same rule works whether the sheet tags these rows
+   in FINAL STATUS or only in HD RECOMMENDATION. With SFS.EXACT=false the longer wording the
+   owner uses by hand ("SFS VALIDATION - WITH UPLOADED DOCS") counts too. */
+function sfsStatusOf_(r) {
+  for (const c of SFS.FROM) {
+    const v = r[c];
+    if (v !== undefined && v !== null && String(v).trim() !== '') return String(v).trim();
+  }
+  return '';
+}
+function fmtSfs_(v) {
+  const tz = SFS.TIMEZONE || NOTICE.TIMEZONE;
+  if (v instanceof Date) return Utilities.formatDate(v, tz, SFS.DATE_FORMAT);
+  const s = String(v == null ? '' : v).trim();
+  if (!s) return '';
+  const d = new Date(s);
+  return isNaN(d.getTime()) ? s : Utilities.formatDate(d, tz, SFS.DATE_FORMAT);
+}
 function collectSfs_(ss) {
   const want = nk_(SFS.STATUS), out = [], seen = {};
   NOTICE.SALES_TABS.forEach(name => tab_(ss, name).forEach(r => {
-    /* Strictly FINAL STATUS (or a plain STATUS column when the sheet has no FINAL STATUS):
-       pick_(r,'STATUS') would fall back to CSP STATUS, and that column says things like
-       "DUPLICATE SUBS INFO" - never a validation state we should report to PLDT. */
-    const fstSrc = r['FINAL STATUS'] === undefined ? r['STATUS'] : r['FINAL STATUS'];
-    const fst = String(fstSrc == null ? '' : fstSrc).trim();
-    if (nk_(fst) !== want) return;
+    const st = sfsStatusOf_(r), match = nk_(st);
+    if (SFS.EXACT ? match !== want : match.indexOf(want) < 0) return;
     const dv = pick_(r, 'DATE'), raw = dv instanceof Date ? dv.getTime() : new Date(dv).getTime();
     const it = {
-      date: fmtD_(dv), sub: String(pick_(r, 'SUB')).trim(), plan: String(pick_(r, 'PLAN')).trim(),
-      status: fst, remarks: String(pick_(r, 'PAYREM')).trim(),
+      date: fmtSfs_(dv), sub: String(pick_(r, 'SUB')).trim(), plan: String(pick_(r, 'PLAN')).trim(),
+      status: st, remarks: String(pick_(r, 'PAYREM')).trim(),
       sr: String(pick_(r, 'SR')).replace(/\.0$/, '').trim(), agent: String(pick_(r, 'AGENT')).trim(),
-      tl: String(pick_(r, 'TL')).trim(), csp: String(pick_(r, 'CSP')).trim(), _t: isNaN(raw) ? 0 : raw
+      tl: String(pick_(r, 'TL')).trim(), csp: String(pick_(r, 'CSP')).trim(),
+      cspRem: String(pick_(r, 'CSPREM')).trim(), hd: sfsHdOf_(r), _t: isNaN(raw) ? 0 : raw
     };
     const k = it.sr || (it.date + '|' + it.sub + '|' + it.plan);
     if (seen[k]) return;
@@ -357,19 +386,37 @@ function collectSfs_(ss) {
   /* oldest first - a validation queue is worked from the top */
   return out.sort((x, y) => x._t - y._t || nk_(x.sub).localeCompare(nk_(y.sub)));
 }
+function sfsHdOf_(r) {
+  for (const c of ['HD REMARKS', 'HD RECOMMENDATION']) {
+    if (r[c] !== undefined && r[c] !== null && String(r[c]).trim() !== '') return String(r[c]).trim();
+  }
+  return '';
+}
+/* The owner's own table style: thin black borders, centred bold caps headers, no banner. */
+function sfsTable_(items) {
+  const th = 'style="border:1px solid #4d4d4d;padding:8px 10px;font-size:12px;font-weight:700;text-align:center"';
+  const td = 'style="border:1px solid #4d4d4d;padding:8px 10px;font-size:13px;text-align:center;vertical-align:top"';
+  return '<table cellpadding="6" cellspacing="0" style="border-collapse:collapse">' +
+    '<tr>' + SFS.COLS.map(c => `<th ${th}>${esc_(c)}</th>`).join('') + '</tr>' +
+    items.map(x => '<tr>' + SFS.COLS.map(c => {
+      const v = cellOf_(x, c);
+      if (c === 'SR' && SFS.SR_LINK && v) return `<td ${td}><a href="${esc_(SFS.SR_LINK + v)}">${esc_(v)}</a></td>`;
+      return `<td ${td}>${esc_(v) || '&mdash;'}</td>`;
+    }).join('') + '</tr>').join('') + '</table>';
+}
 function sfsBuild_(items) {
-  const max = SFS.MAX_ROWS || 300, today = fmtD_(new Date());
-  const subject = `SFS Validation Report - ${today} (${items.length} item${items.length === 1 ? '' : 's'})`;
-  const h = `<div style="font-family:Segoe UI,Arial,sans-serif;font-size:14px;color:#1a2233;max-width:820px">` +
-    `<div style="border-top:5px solid #d9001b;background:#111;color:#fff;padding:12px 16px;font-weight:700">` +
-    `${esc_(NOTICE.SENDER_NAME)} &middot; SFS Validation Report</div>` +
-    `<div style="padding:16px;border:1px solid #e3e8f0;border-top:0">` +
-    `<p>${NT_.GREET} Sir / Madam,</p><p>${SFS.INTRO}</p>` +
-    section_('SFS VALIDATION', items, max, SFS.COLS) +
-    `<p style="margin-top:18px">${SFS.CLOSE}</p><p>${NT_.REGARDS}<br><b>${esc_(NOTICE.SENDER_NAME)}</b></p>` +
-    `<p style="color:#667085;font-size:12px">This report is generated automatically from the ${esc_(NOTICE.SENDER_NAME)} dashboard every day.</p>` +
-    `</div></div>`;
-  const t = `${NT_.GREET} Sir / Madam,\n\n${SFS.INTRO}\n\nSFS VALIDATION (${items.length})\n${rowsText_(items, max, SFS.COLS)}\n\n${SFS.CLOSE}\n\n${NT_.REGARDS}\n${NOTICE.SENDER_NAME}`;
+  const max = SFS.MAX_ROWS || 300, shown = items.slice(0, max);
+  const stamp = Utilities.formatDate(new Date(), SFS.TIMEZONE || NOTICE.TIMEZONE, 'MMMyyyy').toUpperCase();
+  const subject = `3MDA_SFS_VALIDATION_${stamp}`;
+  const extra = items.length - shown.length;
+  const h = `<div style="font-family:Calibri,Arial,sans-serif;font-size:14px;color:#000;max-width:900px">` +
+    `<p>${esc_(SFS.GREET)}</p><p>${esc_(SFS.INTRO)}</p>` + sfsTable_(shown) +
+    (extra > 0 ? `<p style="color:#667085;font-size:12px">&hellip;and ${extra} more not listed here.</p>` : '') +
+    `<p style="margin-top:18px"><b>${esc_(SFS.THANKS)}</b></p>` +
+    `<p><b>${SFS.SIGN.map(x => esc_(x)).join('<br>')}</b></p>` +
+    (SFS.FOOTER ? `<p style="color:#667085;font-size:12px">${esc_(SFS.FOOTER)}</p>` : '') + '</div>';
+  const t = `${SFS.GREET}\n\n${SFS.INTRO}\n\n${rowsText_(items, max, SFS.COLS)}` +
+    (extra > 0 ? `\n...and ${extra} more.` : '') + `\n\n${SFS.THANKS}\n\n${SFS.SIGN.join('\n')}`;
   return { subject: subject, html: h, text: t };
 }
 /** send=false -> preview only, nothing leaves the account. While SFS.DRY_RUN is true the
@@ -414,6 +461,7 @@ function sfsStatus_() {
     installed: ScriptApp.getProjectTriggers().some(t => t.getHandlerFunction() === 'runSfsNotices'),
     hour: SFS.SEND_HOUR, tz: SFS.TIMEZONE || NOTICE.TIMEZONE, dryRun: SFS.DRY_RUN,
     to: SFS.TO, cc: SFS.CC, status: SFS.STATUS, quota: MailApp.getRemainingDailyQuota(),
+    rule: SFS.FROM.join(' or ') + (SFS.EXACT ? ' = ' : ' contains ') + SFS.STATUS,
     note: 'Apps Script fires a day trigger somewhere inside the hour, not at an exact minute'
   };
 }
@@ -421,6 +469,41 @@ function installSfsTrigger() {
   ScriptApp.getProjectTriggers().filter(t => t.getHandlerFunction() === 'runSfsNotices').forEach(t => ScriptApp.deleteTrigger(t));
   ScriptApp.newTrigger('runSfsNotices').timeBased().everyDays(1).atHour(SFS.SEND_HOUR).create();
   return sfsStatus_();
+}
+/* Run sfsProbe from the dropdown to check the rule against the LIVE sheet before turning
+   SFS.DRY_RUN off. It emails nothing and writes nothing. It logs, per tab: the column names,
+   the most common FINAL STATUS / HD REMARKS / HD RECOMMENDATION / CSP STATUS values, every
+   value that
+   mentions SFS with its row count, and the full contents of any row whose subscriber is in
+   SFS_PROBE_ (the two names from the owner's own sample email). Paste that log back and the
+   right SFS.FROM / SFS.EXACT setting is decided by data instead of by guessing. */
+const SFS_PROBE_ = ['MAGILYN MACATANGAY', 'LORAINE MALBAS'];
+function sfsProbe() {
+  const ss = SpreadsheetApp.openById(NOTICE.SHEET_ID);
+  Logger.log('file: ' + ss.getName() + ' | tabs: ' + ss.getSheets().map(s => s.getName() + '=' + Math.max(0, s.getLastRow() - 1)).join(', '));
+  NOTICE.SALES_TABS.concat([NOTICE.VALIDATORS_TAB]).forEach(name => {
+    const rows = tab_(ss, name);
+    if (!rows.length) { Logger.log(name + ': no readable rows (a header line with STATUS and AGENT is needed)'); return; }
+    Logger.log(name + ' columns: ' + Object.keys(rows[0]).join(' | '));
+    ['FINAL STATUS', 'HD REMARKS', 'HD RECOMMENDATION', 'CSP STATUS'].forEach(col => {
+      const c = {};
+      rows.forEach(r => { const k = String(r[col] == null ? '' : r[col]).trim() || '(blank)'; c[k] = (c[k] || 0) + 1; });
+      const keys = Object.keys(c);
+      Logger.log(name + ' ' + col + ': ' + keys.sort((a, b) => c[b] - c[a]).slice(0, 10).map(k => k + '=' + c[k]).join(', ') + (keys.length > 10 ? ' ...(' + keys.length + ' distinct)' : ''));
+      keys.filter(k => /SFS/i.test(k)).forEach(k => Logger.log('  >> ' + name + ' ' + col + ' "' + k + '" rows=' + c[k]));
+    });
+  });
+  SFS_PROBE_.forEach(needle => {
+    let found = 0;
+    NOTICE.SALES_TABS.forEach(name => tab_(ss, name).forEach(r => {
+      if (nk_(r['SUBSCRIBER NAME']).indexOf(nk_(needle)) < 0) return;
+      found++;
+      Logger.log('MATCH ' + needle + ' [' + name + ']: ' + Object.keys(r)
+        .filter(k => String(r[k] == null ? '' : r[k]).trim()).map(k => k + '=' + String(r[k]).slice(0, 70)).join(' ; '));
+    }));
+    Logger.log('rows matched for ' + needle + ': ' + found);
+  });
+  Logger.log('current rule would report ' + collectSfs_(ss).length + ' row(s): ' + SFS.FROM.join(' or ') + (SFS.EXACT ? ' = ' : ' contains ') + SFS.STATUS);
 }
 
 /* --------------------------------------------------------------------- log API
