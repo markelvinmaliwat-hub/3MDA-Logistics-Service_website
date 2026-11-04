@@ -504,7 +504,9 @@ function sendSfsReport() { return sendSfs_(true); }
 /* Dropdown-runnable: logs exactly what PLDT would receive, without sending anything. */
 function sfsPreview() {
   const r = sendSfs_(false);
-  Logger.log('rows tagged ' + SFS.STATUS + ': ' + r.items + ' | logo: ' + r.logo + ' | would go to: ' + r.to.join(',') + (r.cc.length ? ' | cc: ' + r.cc.join(',') : ' | cc: none while DRY_RUN is on'));
+  Logger.log('rows tagged ' + SFS.STATUS + ': ' + r.items + (r.items ? ' | shown in the table: ' + r.shown : '') +
+    ' | logo: ' + (r.logo || 'not fetched - no rows, so there was no email to build') +
+    ' | would go to: ' + r.to.join(',') + ' | cc: ' + (r.cc.length ? r.cc.join(',') : 'none (DRY_RUN is on)'));
   if (!r.items) { Logger.log('Nothing to report today - the daily run would send no email.'); return r; }
   Logger.log('subject: ' + r.subject + ' | html chars: ' + r.htmlChars);
   Logger.log(r.text);
