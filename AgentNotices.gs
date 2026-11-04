@@ -100,11 +100,12 @@ const ACCT = {
 /* The SFS VALIDATION report: one email a day to PLDT listing the applications waiting to
    be validated, in the same shape as the owner's manual "3MDA_SFS_VALIDATION_OCT2026"
    mail - greeting, one line, a bordered table, Thank you, his signature block.
-   DRY_RUN must stay true until the owner has seen a real copy: while it is true the
-   report goes to ADMIN_EMAILS and the CC list below is NOT used, so PLDT never receives
-   anything from a test. SFS.FROM / SFS.STATUS decide which rows count and SFS.SHEET_ID /
-   SFS.TABS decide which file they are read from - sfsProbe() measures both against the live
-   sheet before the switch is flipped. */
+   DRY_RUN is the gate: while it is true the report goes to ADMIN_EMAILS and the CC list
+   below is NOT used, so PLDT never receives anything from a test. The owner approved the
+   live switch on 2026-11-04 after reviewing the sfsTestReport copy, so it is now false -
+   set it back to true any time you want to stop PLDT receiving it. SFS.FROM / SFS.STATUS
+   decide which rows count and SFS.SHEET_ID / SFS.TABS decide which file they are read from;
+   sfsProbe() measures both against the live sheet. */
 const SFS = {
   TO: ['lsabat@pldt.com.ph'],
   CC: ['t-jesnavarro@supplier.pldt.com.ph', 't-jesnavarro@pldt365.onmicrosoft.com', 'abmadlangbayan0510@icloud.com'],
@@ -130,7 +131,7 @@ const SFS = {
   DATE_FORMAT: 'M/d/yyyy',           // the owner writes 10/23/2026, not 23 Oct 2026
   SR_LINK: '',                       // 'https://…' prefix if the SR number should be a hyperlink, '' = plain
   SEND_HOUR: 8,                      // Apps Script fires a day trigger somewhere inside this hour, not at an exact minute
-  DRY_RUN: true,
+  DRY_RUN: false,                    // true = the report goes to ADMIN_EMAILS only, labelled [TEST]; PLDT receives nothing
   MAX_ROWS: 300,                     // rows listed; the rest are summarised
   TIMEZONE: ''                       // '' = NOTICE.TIMEZONE
 };
@@ -477,6 +478,7 @@ function sendSfs_(send) {
   const testTo = admins[0] || Session.getEffectiveUser().getEmail();
   const res = {
     items: items.length, date: fmtD_(new Date()), dryRun: SFS.DRY_RUN,
+    shown: Math.min(items.length, SFS.MAX_ROWS || 300),
     mode: send ? (SFS.DRY_RUN ? 'test' : 'live') : 'preview', quota: MailApp.getRemainingDailyQuota(),
     to: SFS.DRY_RUN ? [testTo] : SFS.TO, cc: SFS.DRY_RUN ? [] : SFS.CC
   };
@@ -508,28 +510,34 @@ function sfsPreview() {
   Logger.log(r.text);
   return r;
 }
-/* Dropdown-runnable TEST COPY. PLDT never sees this one: SFS.DRY_RUN is still true, so it
-   goes to NOTICE.ADMIN_EMAILS only and carries [TEST] in the subject. The real tag appears
-   only when a new encode passes SFS, so on most days the live rule has 0 rows and there is
-   nothing to look at - this temporarily matches SFS_TEST.STATUS instead (a FINAL STATUS value
-   that exists today) and lists at most SFS_TEST.MAX_ROWS rows so the sample stays short.
-   SFS.STATUS and SFS.MAX_ROWS are put back before it returns, whatever happens inside. */
+/* Dropdown-runnable TEST COPY. It forces SFS.DRY_RUN on while it runs, so this can never
+   reach PLDT even now that the daily report is live - without that, the borrowed rows below
+   would go out to lsabat@pldt.com.ph as if they were endorsements. The real tag appears only
+   when a new encode passes SFS, so on most days the live rule has 0 rows and there is nothing
+   to look at: this temporarily matches SFS_TEST.STATUS instead (a FINAL STATUS value that
+   exists today) and lists at most SFS_TEST.MAX_ROWS rows so the sample stays short.
+   SFS.STATUS, SFS.MAX_ROWS and SFS.DRY_RUN are put back before it returns, whatever happens
+   inside - the last log line prints what they went back to. */
 const SFS_TEST = { STATUS: 'REENCODED', MAX_ROWS: 12 };
 function sfsTestReport() {
-  const keepStatus = SFS.STATUS, keepMax = SFS.MAX_ROWS;
+  const keepStatus = SFS.STATUS, keepMax = SFS.MAX_ROWS, keepDry = SFS.DRY_RUN;
   SFS.STATUS = SFS_TEST.STATUS;
   SFS.MAX_ROWS = Math.min(SFS_TEST.MAX_ROWS, keepMax);
+  SFS.DRY_RUN = true;
   let r;
   try {
     r = sendSfs_(true);
   } finally {
     SFS.STATUS = keepStatus;
     SFS.MAX_ROWS = keepMax;
+    SFS.DRY_RUN = keepDry;
   }
   Logger.log('test copy ' + (r.sent ? 'sent to ' + r.to.join(',') : 'NOT sent') +
-    ' | rows listed: ' + r.items + ' | subject: ' + (r.subject || '-') + ' | logo: ' + r.logo);
-  Logger.log('SFS.STATUS is back to "' + SFS.STATUS + '" - the test matched "' + SFS_TEST.STATUS +
-    '" instead' + (r.skipped ? ' | ' + r.skipped : ''));
+    ' | rows matched: ' + r.items + ' | shown in the table: ' + r.shown +
+    ' | subject: ' + (r.subject || '-') + ' | logo: ' + r.logo);
+  Logger.log('settings restored: ' + SFS.STATUS + ' / max ' + SFS.MAX_ROWS + ' / DRY_RUN ' + SFS.DRY_RUN +
+    (SFS.DRY_RUN ? '' : ' (LIVE - PLDT receives the daily report)') +
+    ' - the test matched "' + SFS_TEST.STATUS + '" instead' + (r.skipped ? ' | ' + r.skipped : ''));
   return r;
 }
 function sfsStatus_() {

@@ -102,19 +102,23 @@ three-line signature. The `PLDT` and `RED` tabs are read, never the `VALIDATORS`
 * Matched after normalising case and spacing; deduped by SR number across the two tabs,
   oldest first, capped at `SFS.MAX_ROWS`; `DATE` renders as `M/D/YYYY` like his email.
 * **A day with no matching row sends nothing.**
-* `SFS.DRY_RUN` must stay `true` until the owner has seen a real copy: while it is true the
-  report goes to `ADMIN_EMAILS` only and the CC list is ignored, so PLDT receives nothing
-  from a test. `sfsPreview` logs the exact body without sending anything.
-* **`sfsTestReport` produces a real copy today.** The live rule has 0 rows until a new encode
-  passes SFS, so there would be nothing to look at — this temporarily matches
-  `SFS_TEST.STATUS` (`REENCODED` today, `SFS_TEST.MAX_ROWS` = 12 rows) instead, sends that to
-  `ADMIN_EMAILS` only with `[TEST]` in the subject, and puts `SFS.STATUS` / `SFS.MAX_ROWS`
-  back before it returns. Change `SFS_TEST` to try another status.
+* **LIVE since 2026-11-04** — the owner approved it after reviewing a real copy, so
+  `SFS.DRY_RUN` is `false` and the report goes to `SFS.TO` + `SFS.CC`. Set it back to `true`
+  any time to stop PLDT receiving it: while it is true every copy goes to `ADMIN_EMAILS` only,
+  the CC list is ignored, and the subject gains `[TEST] `. `sfsPreview` logs the exact body
+  without sending anything.
+* **`sfsTestReport` produces a real copy on any day.** The live rule has 0 rows until a new
+  encode passes SFS, so there would be nothing to look at — this temporarily matches
+  `SFS_TEST.STATUS` (`REENCODED` today, at most `SFS_TEST.MAX_ROWS` = 12 rows in the table)
+  and **forces `SFS.DRY_RUN` on for the duration**, so a test can never reach PLDT even while
+  the daily report is live. `SFS.STATUS`, `SFS.MAX_ROWS` and `SFS.DRY_RUN` are restored before
+  it returns and the last log line prints what they went back to. Change `SFS_TEST` to try
+  another status. Measured on the live sheet: 89 rows carry `FINAL STATUS = REENCODED`.
 * Apps Script cannot schedule an exact minute — a day trigger fires somewhere inside
   `SFS.SEND_HOUR`, so this is "in the 8AM hour", not 8:30:00. Same limitation as the
   8:00 AM agent notices. `installSfsTrigger` creates (and never duplicates) that trigger
-  and prints what it did — schedule, rule, file, tabs, and whether `DRY_RUN` is still on —
-  to the Execution log, because the function's return value is not shown there.
+  and prints what it did — schedule, rule, file, tabs, and whether the report is live or still
+  in test mode — to the Execution log, because the function's return value is not shown there.
 * `SFS.SR_LINK`, if set, turns each SR into a link to that number's page. Leave it
   empty unless the link is safe to hand to PLDT.
 * **The MMMDA logo is part of the signature** (`assets/mmmda-logo.jpg`, 1280x1255). Apps
