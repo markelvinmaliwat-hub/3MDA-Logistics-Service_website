@@ -147,6 +147,17 @@ and both run **twice a day** (`SEND_HOURS = [8, 14]`).
   older trigger for the same handler first so running them twice never duplicates a mail, and
   print what they did — schedule, rule, file, tabs, and whether that report is live or still
   in test mode — to the Execution log, because the function's return value is not shown there.
+* **The schedule repairs itself.** `ensureReportTriggers_()` runs at the top of every scheduled
+  run (`runAgentNotices`, `runSfsNotices`, `runCvNotices`) and rebuilds a report's triggers only
+  when their count does not match `cfg.SEND_HOURS` — Apps Script cannot read a trigger's hour
+  back, so the count is the check, and a correct pair is never touched. This exists because the
+  editor was refusing manual runs ("An unknown error has occurred") and the owner should not
+  have to press Run for the plan to exist: one firing trigger is enough to install the rest. A
+  rebuild can put a fresh trigger back inside the current hour window, which is exactly what the
+  daily dedupe absorbs (`nothing new, nothing sent`). The whole check is wrapped in `try/catch`
+  so a trigger-quota failure logs a line and the report still goes out. When it is the **CV**
+  pair that was new and CV is still on `DRY_RUN`, `cvReviewCopy_()` posts him one `[TEST]` copy
+  — at most once per day, keyed by `CV_REVIEW_yyyyMMdd` in Script Properties.
 * `cfg.SR_LINK`, if set, turns each SR into a link to that number's page. Both are shipped
   empty because the owner asked for plain numbers ("Hindi na kailangan, plain number lang"),
   and a link should only be handed to PLDT if it is safe to show.

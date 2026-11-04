@@ -569,8 +569,8 @@ function sendReport_(send, cfg) {
   } catch (err) { res.error = String(err); }
   return res;
 }
-function runSfsNotices() { return sendReport_(true, SFS); }
-function runCvNotices() { return sendReport_(true, CV); }
+function runSfsNotices() { ensureReportTriggers_(); return sendReport_(true, SFS); }
+function runCvNotices() { ensureReportTriggers_(); return sendReport_(true, CV); }
 /* Dropdown-runnable: sends today's report once, right now, honouring that report's DRY_RUN. */
 function sendSfsReport() { return sendReport_(true, SFS); }
 function sendCvReport() { return sendReport_(true, CV); }
@@ -648,6 +648,43 @@ function installReportTrigger_(cfg, handler) {
 }
 function installSfsTrigger() { return installReportTrigger_(SFS, 'runSfsNotices'); }
 function installCvTrigger() { return installReportTrigger_(CV, 'runCvNotices'); }
+/* Self-repairing schedule. The owner should not have to press Run for the plan to exist:
+   every scheduled run (the agent notices and both reports) checks its own report triggers
+   first and rebuilds only the ones whose count does not match cfg.SEND_HOURS. Apps Script
+   cannot read a trigger's hour back, so the count is the check - a pair that is already right
+   is never touched. Rebuilding at 8AM can put a fresh trigger inside the same hour window and
+   fire it again, which is exactly why the daily dedupe exists: the second run reports
+   "nothing new, nothing sent". If the console is refusing manual runs, or the CV trigger was
+   never installed, tomorrow 8:00 AM fixes it on its own. */
+function ensureReportTriggers_() {
+  const repaired = [];
+  try {
+    const triggers = ScriptApp.getProjectTriggers();
+    [[SFS, 'runSfsNotices'], [CV, 'runCvNotices']].forEach(pair => {
+      const cfg = pair[0], handler = pair[1];
+      const have = triggers.filter(t => t.getHandlerFunction() === handler);
+      if (have.length === cfg.SEND_HOURS.length) return;
+      have.forEach(t => ScriptApp.deleteTrigger(t));
+      cfg.SEND_HOURS.forEach(h => ScriptApp.newTrigger(handler).timeBased().everyDays(1).atHour(h).create());
+      repaired.push(cfg.NAME);
+      Logger.log(cfg.NAME + ' schedule repaired - now runs in the ' + hoursText_(cfg) + ' hour');
+    });
+    if (repaired.indexOf('CV') >= 0 && CV.DRY_RUN) cvReviewCopy_();
+  } catch (err) {
+    Logger.log('schedule check could not run (' + err + ') - the report itself still goes out');
+  }
+  return repaired;
+}
+/* The CV trigger is new, so he has probably never seen the mail it will send. One review copy
+   straight to his inbox, at most once a day, so a repair cannot spam him twice in one morning. */
+function cvReviewCopy_() {
+  const p = PropertiesService.getScriptProperties(), key = 'CV_REVIEW_' + Utilities.formatDate(new Date(), CV.TIMEZONE || NOTICE.TIMEZONE, 'yyyyMMdd');
+  if (p.getProperty(key)) return;
+  Object.keys(p.getProperties()).forEach(k => { if (k.indexOf('CV_REVIEW_') === 0) p.deleteProperty(k); });
+  p.setProperty(key, '1');
+  Logger.log('CV was just put on the schedule - sending you one copy to read before it goes live');
+  testReport_(CV);
+}
 /* Run sfsProbe or cvProbe from the dropdown to check a rule against the LIVE sheet before
    trusting it. It emails nothing and writes nothing. Per tab it logs the column names, the ten
    most common values of the status and remarks columns, every value mentioning cfg.PROBE with
@@ -944,7 +981,7 @@ function acctCodeOk_(sh, r, o, p) {
 
 /* ------------------------------------------------------- trigger + web app glue */
 function sendAgentNotices() { sendNotices_(true); }
-function runAgentNotices() { return sendNotices_(true); }
+function runAgentNotices() { ensureReportTriggers_(); return sendNotices_(true); }
 function installNoticeTrigger() {
   ScriptApp.getProjectTriggers().filter(t => t.getHandlerFunction() === 'runAgentNotices').forEach(t => ScriptApp.deleteTrigger(t));
   ScriptApp.newTrigger('runAgentNotices').timeBased().everyDays(1).atHour(NOTICE.SEND_HOUR).create();
