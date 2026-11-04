@@ -463,7 +463,7 @@ function jsonpReq(url,params,ms){return new Promise((res,rej)=>{
  const to=setTimeout(()=>done('timed out'),ms||20000);
  window[cb]=j=>{done();res(j)};s.onerror=()=>done('request failed');
  const q=Object.keys(params).map(k=>encodeURIComponent(k)+'='+encodeURIComponent(params[k])).join('&');
- s.src=url+(url.includes('?')?'&':'?')+q+'&_='+Date.now();document.head.appendChild(s)})}
+ s.src=url+(url.includes('?')?'&':'?')+q+'&callback='+cb+'&_='+Date.now();document.head.appendChild(s)})}
 async function remoteRows(kind,limit){
  const errs=[];
  if(LOG_URL){try{
@@ -514,9 +514,10 @@ async function logPayment(p){const ok=await sheetWrite(Object.assign({type:'pay'
 async function sheetWrite(obj){if(!LOG_URL)return false;try{const j=await jsonpReq(LOG_URL,{action:'logWrite',kind:obj&&obj.type==='pay'?'pay':'activity',data:JSON.stringify(obj||{})},20000);return !!(j&&j.success)}catch(e){return false}}
 let _fl=false;
 async function flushQ(){if(_fl)return;_fl=true;try{let q=ld('mm_wq',[]);
- /* the queue held months of rows from when the log endpoint was broken - replaying them would
-    stamp every one with today's time, so anything older than 6 hours is dropped instead */
- const cut=Date.now()-6*3600000;q=q.filter(o=>{const t=Date.parse(String(o.time||'').replace(' ','T'));return !isNaN(t)&&t>cut});sv('mm_wq',q);
+ /* the queue held months of rows from when the log endpoint was broken, and every retry used to
+    write a fresh copy - so anything older than half an hour is dropped (a stale ONLINE row is
+    worse than a missing one). Payment rows keep the longer 6 hour window. */
+ const now=Date.now();q=q.filter(o=>{const t=Date.parse(String(o.time||'').replace(' ','T'));if(isNaN(t))return false;return o.type==='pay'?now-t<6*3600000:now-t<30*60000});sv('mm_wq',q);
  while(q.length){if(!(await sheetWrite(q[0])))break;q.shift();sv('mm_wq',q)}}finally{_fl=false}}
 function sheetSend(obj){sheetWrite(obj).then(ok=>{if(ok)flushQ();else{const q=ld('mm_wq',[]);q.push(obj);sv('mm_wq',q.slice(-300))}})}
 const qNote=()=>{const n=ld('mm_wq',[]).length;return n?' \u00b7 '+n+' update'+(n>1?'s':'')+' waiting to be sent to the Sheet (web app not reachable)':''};
