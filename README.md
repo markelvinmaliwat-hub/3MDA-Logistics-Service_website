@@ -89,6 +89,16 @@ three-line signature. The `PLDT` and `RED` tabs are read, never the `VALIDATORS`
   full contents of the two names from the owner's sample email, and how many rows the current
   rule would report. As measured on 2026-11-04 the live Aug-Oct sheet had **0** rows tagged
   `SFS VALIDATION`, so an automated run that day correctly sends nothing.
+* **Which spreadsheet is read is its own switch.** `SFS.SHEET_ID` (`''` = the same file the
+  agent notices use, `DATABASE AUG TO OCT`) and `SFS.TABS` (`[]` = `NOTICE.SALES_TABS`) let
+  the report follow the owner's *current* file once Aug–Oct is closed, without touching the
+  notices. `sfsProbe` prints which file and tabs it used, and `sfsStatus()` reports them too.
+* Measured on the live Aug-Oct file (2026-11-04, `sfsProbe`): PLDT 1,374 rows, RED 303,
+  `VALIDATORS` empty, and **no row anywhere in RED contains the word SFS**. The two names
+  from the owner's manual email are `FINAL STATUS = REENCODED` (MAGILYN) and
+  `CANCELLED - WITH EXISTING SR` (LORAINE) — the SFS tag is not applied in this file, so the
+  report currently has 0 rows and sends nothing. Point `SFS.SHEET_ID` at the file where he
+  actually types `SFS VALIDATION` and the same rule starts producing rows.
 * Matched after normalising case and spacing; deduped by SR number across the two tabs,
   oldest first, capped at `SFS.MAX_ROWS`; `DATE` renders as `M/D/YYYY` like his email.
 * **A day with no matching row sends nothing.**

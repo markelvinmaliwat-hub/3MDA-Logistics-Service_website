@@ -102,8 +102,9 @@ const ACCT = {
    mail - greeting, one line, a bordered table, Thank you, his signature block.
    DRY_RUN must stay true until the owner has seen a real copy: while it is true the
    report goes to ADMIN_EMAILS and the CC list below is NOT used, so PLDT never receives
-   anything from a test. SFS.FROM / SFS.STATUS decide which rows count - sfsProbe() exists
-   to measure that against his live sheet before the switch is flipped. */
+   anything from a test. SFS.FROM / SFS.STATUS decide which rows count and SFS.SHEET_ID /
+   SFS.TABS decide which file they are read from - sfsProbe() measures both against the live
+   sheet before the switch is flipped. */
 const SFS = {
   TO: ['lsabat@pldt.com.ph'],
   CC: ['t-jesnavarro@supplier.pldt.com.ph', 't-jesnavarro@pldt365.onmicrosoft.com', 'abmadlangbayan0510@icloud.com'],
@@ -118,6 +119,8 @@ const SFS = {
   LOGO_ABOVE: true,                  // false puts the picture under the three signature lines
   FOOTER: '',                        // e.g. 'Automated daily report from the 3MDA Logistics dashboard.'
   STATUS: 'SFS VALIDATION',          // the value looked for in SFS.FROM
+  SHEET_ID: '',                      // '' = the same file the agent notices read (DATABASE AUG TO OCT); otherwise the id of the sheet he tags today
+  TABS: [],                          // '' = NOTICE.SALES_TABS (PLDT, RED); set for a file whose tabs have other names
   FROM: ['FINAL STATUS'],            // the owner's rule: the row is endorsed once FINAL STATUS carries the SFS tag
   EXACT: false,                      // false also catches "SFS VALIDATION - WITH UPLOADED DOCS" typed into FINAL STATUS
   HD_TEXT: 'SFS VALIDATION - WITH UPLOADED DOCS',
@@ -376,9 +379,16 @@ function fmtSfs_(v) {
   const d = new Date(s);
   return isNaN(d.getTime()) ? s : Utilities.formatDate(d, tz, SFS.DATE_FORMAT);
 }
+/* The report can read a different spreadsheet from the agent notices, because the Aug-Oct
+   file is closed: SFS.SHEET_ID wins when it is set, otherwise NOTICE.SHEET_ID. */
+function sfsSs_() {
+  const id = String(SFS.SHEET_ID || NOTICE.SHEET_ID || '');
+  return id ? SpreadsheetApp.openById(id) : SpreadsheetApp.getActiveSpreadsheet();
+}
+function sfsTabs_() { return SFS.TABS && SFS.TABS.length ? SFS.TABS : NOTICE.SALES_TABS; }
 function collectSfs_(ss) {
   const want = nk_(SFS.STATUS), out = [], seen = {};
-  NOTICE.SALES_TABS.forEach(name => tab_(ss, name).forEach(r => {
+  sfsTabs_().forEach(name => tab_(ss, name).forEach(r => {
     const st = sfsStatusOf_(r), match = nk_(st);
     if (SFS.EXACT ? match !== want : match.indexOf(want) < 0) return;
     const dv = pick_(r, 'DATE'), raw = dv instanceof Date ? dv.getTime() : new Date(dv).getTime();
@@ -461,7 +471,7 @@ function sfsBuild_(items, logo) {
 /** send=false -> preview only, nothing leaves the account. While SFS.DRY_RUN is true the
  *  report goes to ADMIN_EMAILS and the CC list is ignored, so a test can never reach PLDT. */
 function sendSfs_(send) {
-  const ss = NOTICE.SHEET_ID ? SpreadsheetApp.openById(NOTICE.SHEET_ID) : SpreadsheetApp.getActiveSpreadsheet();
+  const ss = sfsSs_();
   const items = collectSfs_(ss);
   const admins = NOTICE.ADMIN_EMAILS.map(x => String(x).trim().toLowerCase()).filter(Boolean);
   const testTo = admins[0] || Session.getEffectiveUser().getEmail();
@@ -503,6 +513,7 @@ function sfsStatus_() {
     installed: ScriptApp.getProjectTriggers().some(t => t.getHandlerFunction() === 'runSfsNotices'),
     hour: SFS.SEND_HOUR, tz: SFS.TIMEZONE || NOTICE.TIMEZONE, dryRun: SFS.DRY_RUN,
     to: SFS.TO, cc: SFS.CC, status: SFS.STATUS, quota: MailApp.getRemainingDailyQuota(),
+    file: SFS.SHEET_ID || NOTICE.SHEET_ID, tabs: sfsTabs_().join(','),
     rule: SFS.FROM.join(' or ') + (SFS.EXACT ? ' = ' : ' contains ') + SFS.STATUS,
     note: 'Apps Script fires a day trigger somewhere inside the hour, not at an exact minute'
   };
@@ -522,9 +533,11 @@ function installSfsTrigger() {
    SFS.FROM / SFS.EXACT setting is decided by data instead of by guessing. */
 const SFS_PROBE_ = ['MAGILYN MACATANGAY', 'LORAINE MALBAS'];
 function sfsProbe() {
-  const ss = SpreadsheetApp.openById(NOTICE.SHEET_ID);
-  Logger.log('file: ' + ss.getName() + ' | tabs: ' + ss.getSheets().map(s => s.getName() + '=' + Math.max(0, s.getLastRow() - 1)).join(', '));
-  NOTICE.SALES_TABS.concat([NOTICE.VALIDATORS_TAB]).forEach(name => {
+  const ss = sfsSs_();
+  Logger.log('file: ' + ss.getName() + ' | tabs read for the report: ' + sfsTabs_().join(', ') +
+    (SFS.SHEET_ID ? ' (SFS.SHEET_ID)' : ' (same file as the agent notices)'));
+  Logger.log('all tabs in that file: ' + ss.getSheets().map(s => s.getName() + '=' + Math.max(0, s.getLastRow() - 1)).join(', '));
+  sfsTabs_().concat([NOTICE.VALIDATORS_TAB]).forEach(name => {
     const rows = tab_(ss, name);
     if (!rows.length) { Logger.log(name + ': no readable rows (a header line with STATUS and AGENT is needed)'); return; }
     Logger.log(name + ' columns: ' + Object.keys(rows[0]).join(' | '));
@@ -552,7 +565,7 @@ function sfsProbe() {
   });
   SFS_PROBE_.forEach(needle => {
     let found = 0;
-    NOTICE.SALES_TABS.forEach(name => tab_(ss, name).forEach(r => {
+    sfsTabs_().forEach(name => tab_(ss, name).forEach(r => {
       if (nk_(r['SUBSCRIBER NAME']).indexOf(nk_(needle)) < 0) return;
       found++;
       Logger.log('MATCH ' + needle + ' [' + name + ']: ' + Object.keys(r)
