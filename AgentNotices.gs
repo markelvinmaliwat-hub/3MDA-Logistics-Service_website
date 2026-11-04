@@ -34,6 +34,13 @@
  *    tab named Payment_Log is never written to - run  repairLogTabs()  once to
  *    put its original header back and prepare the two tabs above. Nothing else
  *    to run; it is live as soon as you deploy a new version.
+ * 8. It also serves the agent accounts through  action=acct  (op = exists, create,
+ *    login, profile, forgot, check, reset) in an  Accounts  tab, which is what makes the
+ *    dashboard's "Forgot password?" able to email a 6-digit code. The tab holds the
+ *    browser's pwh() digest, never the password, and the web app never returns the
+ *    digest or a live code - so keep that spreadsheet shared only with people you
+ *    trust. Reset emails respect the 8:00 AM notices: they stop when fewer than
+ *    ACCT.QUOTA_FLOOR emails are left for the day.
  */
 const NOTICE = {
   SHEET_ID: '1i7g_Hv6_tmQxqGhjSVzQFa8rFaJriC3wp9zK3wosnw0',  /* "DATABASE AUG TO OCT" (confirmed by the owner) - holds PLDT, RED, VALIDATORS and Agent_Emails */
@@ -64,6 +71,21 @@ const LOG = {
   READ_LIMIT: 600,                 // rows per logRead call (keeps the reply a few KB instead of 13 MB)
   MAX_ROWS: 30000,                 // hard stop so a stranger cannot grow the log forever
   FIELD: 200                       // per-field cap
+};
+
+/* Agent accounts, so a password set on one phone works on a laptop and a forgotten
+   password can be reset with a code emailed to the agent. The browser never sends the
+   password itself - only pwh(email + ':' + password), the same value it checks locally. */
+const ACCT = {
+  SHEET_ID: '',                      // '' = the same file as the logs; put a private spreadsheet id here to keep Accounts away from anyone the logs sheet is shared with
+  TAB: 'Accounts',
+  HEAD: ['Email', 'Hash', 'Code', 'Name', 'Last Login', 'Reset Code', 'Expires', 'Tries', 'Resets', 'Reset Day'],
+  CODE_TTL_MIN: 30,
+  MAX_TRIES: 5,
+  MAX_RESETS_PER_EMAIL: 3,
+  MAX_RESETS_TOTAL: 20,
+  MAX_ROWS: 4000,
+  QUOTA_FLOOR: 25                  // never spend the last 25 emails of the day - the 8:00 AM notices need them
 };
 
 const NT_ = {
@@ -350,6 +372,164 @@ function jsonOut_(obj, cb) {
     .setMimeType(fn ? ContentService.MimeType.JAVASCRIPT : ContentService.MimeType.JSON);
 }
 
+/* ---------------------------------------------------------------- accounts API
+   Sign-up, login and forgot-password for the dashboard. The browser never sends the
+   password: it sends pwh(email + ':' + password), which is the exact string the page
+   compares against its own mm_acc map. Keeping that value on the server instead of
+   only in one browser is what lets an agent log in from a borrowed phone and what
+   makes an emailed reset code possible at all.
+   The tab stores the hash, not the password - but pwh is a 32-bit convenience hash, so
+   treat it as a doorbell, not a vault. Whoever can read this tab can replay the hash,
+   so keep the spreadsheet sharing tight (ACCT.SHEET_ID can point at a private file).
+   The /exec replies never include the hash or the reset code. */
+const acctSs_ = () => SpreadsheetApp.openById(ACCT.SHEET_ID || LOG.SHEET_ID);
+const acctEmail_ = e => /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(String(e || ''));
+const acctHash_ = h => /^[0-9a-z]{4,20}$/.test(String(h || ''));
+const one_ = v => String(v == null ? '' : v).replace(/[\r\n\t]+/g, ' ').trim().slice(0, LOG.FIELD);
+const now_ = () => Utilities.formatDate(new Date(), NOTICE.TIMEZONE, 'yyyy-MM-dd HH:mm:ss');
+const today_ = () => Utilities.formatDate(new Date(), NOTICE.TIMEZONE, 'yyyy-MM-dd');
+
+function acctTab_() {
+  const ss = acctSs_();
+  const sh = ss.getSheetByName(ACCT.TAB) || ss.insertSheet(ACCT.TAB);
+  headRow_(sh, ACCT.HEAD);
+  return sh;
+}
+/* 1-based row of this email, or 0 when it is not registered. */
+function acctFind_(sh, email) {
+  const last = sh.getLastRow();
+  if (last < 2) return 0;
+  const col = sh.getRange(2, 1, last - 1, 1).getValues();
+  for (let i = 0; i < col.length; i++) if (String(col[i][0]).trim().toLowerCase() === email) return i + 2;
+  return 0;
+}
+function acctGet_(sh, r) {
+  const v = sh.getRange(r, 1, 1, ACCT.HEAD.length).getValues()[0];
+  return { email: String(v[0]).trim().toLowerCase(), hash: String(v[1]).trim(), code: String(v[2]).trim(),
+    name: String(v[3]).trim(), last: cell_(v[4]), reset: String(v[5]).trim(), exp: Number(v[6]) || 0,
+    tries: Number(v[7]) || 0, resets: Number(v[8]) || 0, day: String(v[9]).trim() };
+}
+function acctPut_(sh, r, o) {
+  sh.getRange(r, 1, 1, ACCT.HEAD.length).setValues([[o.email, o.hash, o.code, o.name, o.last, o.reset, o.exp, o.tries, o.resets, o.day]]);
+}
+function acctResetsToday_(sh, day) {
+  const last = sh.getLastRow();
+  if (last < 2) return 0;
+  let n = 0;
+  sh.getRange(2, 9, last - 1, 2).getValues().forEach(r => { if (String(r[1]).trim() === day) n += Number(r[0]) || 0; });
+  return n;
+}
+function acctCode_() {
+  try { return String(Utilities.getUniformInteger(100000, 999999)); }
+  catch (e) {
+    const d = String(Utilities.getUuid()).replace(/[^0-9]/g, '');
+    return String(100000 + (parseInt(d.slice(0, 6), 10) || 123456) % 900000);
+  }
+}
+function acctMail_(email, name, code) {
+  const to = NOTICE.DRY_RUN ? NOTICE.ADMIN_EMAILS.join(',') : email;
+  if (!to) return false;
+  MailApp.sendEmail({
+    to: to,
+    name: NOTICE.SENDER_NAME,
+    subject: (NOTICE.DRY_RUN ? '[TEST for ' + email + '] ' : '') + 'Your password reset code - 3MDA Logistics',
+    body: [
+      (name ? 'Dear ' + name + ',' : 'Dear Agent,'),
+      '',
+      'A request to reset the password of the 3MDA Logistics agent dashboard account ' + email + ' has been received.',
+      '',
+      'Your reset code is:  ' + code,
+      '',
+      'This code is valid for ' + ACCT.CODE_TTL_MIN + ' minutes. To set a new password:',
+      '1. Return to the dashboard sign-in page.',
+      '2. Enter the code above.',
+      '3. Choose a new password of at least 6 characters, then confirm it.',
+      '',
+      'If you did not make this request, no action is needed - your current password remains active. Please keep this code private, as anyone who has it can set a new password.',
+      '',
+      NT_.REGARDS,
+      NOTICE.SENDER_NAME,
+      '',
+      'Automated message from the 3MDA Logistics dashboard. Please do not reply to this email.'
+    ].join('\n')
+  });
+  return true;
+}
+function acctHandle_(p) {
+  const op = String(p.op || '').toLowerCase();
+  const email = String(p.email || '').trim().toLowerCase();
+  if (!acctEmail_(email)) return { ok: false, reason: 'bademail' };
+  const sh = acctTab_();
+  const lock = LockService.getScriptLock();
+  let locked = false;
+  try { lock.waitLock(8000); locked = true; } catch (e) { /* a lost race costs one attempt, not a corrupted row */ }
+  try { return acctOp_(sh, op, email, p); }
+  finally { if (locked) { try { lock.releaseLock(); } catch (e) {} } }
+}
+function acctOp_(sh, op, email, p) {
+  const r = acctFind_(sh, email);
+  const o = r ? acctGet_(sh, r) : null;
+  const day = today_();
+  if (op === 'exists') return { ok: true, exists: !!o };
+  if (op === 'create') {
+    if (o) return { ok: false, reason: 'exists' };
+    if (!acctHash_(p.h)) return { ok: false, reason: 'badhash' };
+    if (sh.getLastRow() >= ACCT.MAX_ROWS) return { ok: false, reason: 'full' };
+    sh.appendRow([email, String(p.h), one_(p.code).slice(0, 12), one_(p.name), '', '', 0, 0, 0, '']);
+    return { ok: true };
+  }
+  if (!o || !o.hash) return { ok: false, reason: 'nouser' };
+  if (op === 'login') {
+    if (o.tries >= ACCT.MAX_TRIES) return { ok: false, reason: 'locked' };
+    if (o.hash !== String(p.h || '')) {
+      o.tries += 1; acctPut_(sh, r, o);
+      return { ok: false, reason: 'bad', left: Math.max(0, ACCT.MAX_TRIES - o.tries) };
+    }
+    o.tries = 0; o.last = now_(); acctPut_(sh, r, o);
+    return { ok: true, code: o.code, name: o.name };
+  }
+  if (op === 'profile') {
+    if (o.hash !== String(p.h || '')) return { ok: false, reason: 'bad' };
+    o.code = one_(p.code).slice(0, 12); o.name = one_(p.name).slice(0, 60);
+    acctPut_(sh, r, o);
+    return { ok: true };
+  }
+  if (op === 'forgot') {
+    if (MailApp.getRemainingDailyQuota() < ACCT.QUOTA_FLOOR) return { ok: false, reason: 'quota' };
+    if (acctResetsToday_(sh, day) >= ACCT.MAX_RESETS_TOTAL) return { ok: false, reason: 'quota' };
+    if (o.day === day && o.resets >= ACCT.MAX_RESETS_PER_EMAIL) return { ok: false, reason: 'wait' };
+    const code = acctCode_();
+    o.reset = code; o.exp = Date.now() + ACCT.CODE_TTL_MIN * 60000; o.tries = 0;
+    o.resets = (o.day === day ? o.resets : 0) + 1; o.day = day;
+    acctPut_(sh, r, o);
+    if (!acctMail_(email, o.name, code)) return { ok: false, reason: 'nomail' };
+    return { ok: true, name: o.name };
+  }
+  if (op === 'check' || op === 'reset') {
+    const why = acctCodeOk_(sh, r, o, p);
+    if (why) return { ok: false, reason: why, left: Math.max(0, ACCT.MAX_TRIES - o.tries) };
+    if (op === 'check') return { ok: true, name: o.name };
+    if (!acctHash_(p.h)) return { ok: false, reason: 'badhash' };
+    o.hash = String(p.h); o.reset = ''; o.exp = 0; o.tries = 0; o.last = now_();
+    acctPut_(sh, r, o);
+    return { ok: true, code: o.code, name: o.name };
+  }
+  return { ok: false, reason: 'unknown op' };
+}
+/* '' when the emailed code is still current and was typed correctly. Every wrong try is
+   counted, so a 6-digit code cannot be guessed. check only verifies it (the dashboard uses
+   that to move on to the new-password step); reset swaps the password and burns the code. */
+function acctCodeOk_(sh, r, o, p) {
+  if (!o.reset) return 'nocode';
+  if (o.tries >= ACCT.MAX_TRIES) return 'locked';
+  if (o.exp && o.exp < Date.now()) return 'expired';
+  const c = String(p.c || '').replace(/\D/g, '');
+  if (c.length !== 6) return 'badcode';
+  if (c === o.reset) return '';
+  o.tries += 1; acctPut_(sh, r, o);
+  return 'badcode';
+}
+
 /* ------------------------------------------------------- trigger + web app glue */
 function sendAgentNotices() { sendNotices_(true); }
 function runAgentNotices() { return sendNotices_(true); }
@@ -426,7 +606,12 @@ function doGet(e) {
     } catch (err) { out = a === 'logWrite' ? { success: false, error: String(err) } : { ok: false, error: String(err) }; }
     return jsonOut_(out, p.callback);
   }
+  if (a === 'acct') {
+    let out;
+    try { out = acctHandle_(p); } catch (err) { out = { ok: false, reason: 'error', error: String(err) }; }
+    return jsonOut_(out, p.callback);
+  }
   return ContentService.createTextOutput(JSON.stringify({
-    error: 'unknown action', use: 'noticeStatus | noticePreview | noticeSend | noticeInstall | logRead | logWrite | logStatus'
+    error: 'unknown action', use: 'noticeStatus | noticePreview | noticeSend | noticeInstall | logRead | logWrite | logStatus | acct'
   })).setMimeType(ContentService.MimeType.JSON);
 }

@@ -61,6 +61,37 @@ Before this existed, `LOG_URL` pointed at the sales web app, which answered ever
 request with the entire 13 MB database and no `success` field. Nothing was ever written,
 so the header could only ever show `Online · 1`.
 
+## Agent accounts and Forgot password
+
+Before this, an account existed only as `mm_acc` in the browser that created it. Change
+phone, clear site data, or let Chrome autofill a different password and the server-side
+`Incorrect password` was unavoidable — there was nothing to check against.
+
+Accounts now live in the **`Accounts`** tab of the logs spreadsheet and are reached through
+`action=acct` on the same `/exec` URL. Ops: `exists`, `create`, `login`, `profile`,
+`forgot`, `check`, `reset`.
+
+* Columns: `Email | Hash | Code | Name | Last Login | Reset Code | Expires | Tries | Resets | Reset Day`.
+* `Hash` is the same short convenience digest the dashboard has always computed in
+  JavaScript — **not** a cryptographic password hash. It is enough to stop this kind of
+  mistake, not enough to protect a real password. Never store one here.
+* No reply ever contains the digest or a live reset code; an answer is a few bytes, not a
+  database dump.
+* A reset is a 6-digit code emailed to the agent, valid 30 minutes, usable once, 5 wrong
+  attempts before it locks. Locking applies to the password too — after 5 failed logins
+  even the right password waits until a code is used.
+* `MAX_RESETS_PER_EMAIL` (3/day) and `MAX_RESETS_TOTAL` (20/day) bound the email volume,
+  and `QUOTA_FLOOR` (25) stops reset mail before it can eat the Gmail quota the 8:00 AM
+  notices need. With `DRY_RUN` on, codes go to `ADMIN_EMAILS` labelled `[TEST for <email>]`.
+* If the logs spreadsheet is shared more widely than it should be, set `ACCT.SHEET_ID` to a
+  private spreadsheet so `Accounts` is not visible to everyone who can read the logs.
+
+The dashboard masks the password field by default and adds **Show** and
+**Forgot password?** under it; `autocomplete="off"` plus a mismatched field name keeps
+browsers from silently filling in an old password. Signing up on one device and logging in
+on another now works, because the server returns the stored agent code and signs the agent
+straight in.
+
 ## Manual send token
 
 Anyone who reads the page source can see `NOTICE_APP_URL`, so the send action is gated by
