@@ -71,17 +71,24 @@ day with every application tagged **`SFS VALIDATION`**, shaped like the owner's 
 `DATE | SUBSCRIBER NAME | SR | CSP REMARKS | HD REMARKS` table, `Thank you !`, his
 three-line signature. The `PLDT` and `RED` tabs are read, never the `VALIDATORS` tab.
 
-* **Which column carries the tag is configurable, because it is not settled yet.**
-  `SFS.FROM` is the list of columns to test (default `['FINAL STATUS', 'HD RECOMMENDATION']`)
-  and `SFS.EXACT` picks exact match (`true`) or "contains" (`false`). The rows in the
-  owner's sample email are `HD REMARKS = SFS VALIDATION - WITH UPLOADED DOCS`, so a contains
-  match that includes `HD REMARKS` is what reproduces his list. Run **`sfsProbe`** in Apps
-  Script and read the Execution log: it lists every column, the ten most common values of
-  `FINAL STATUS / HD REMARKS / HD RECOMMENDATION / CSP STATUS`, every value mentioning SFS
-  with its row count, the full contents of the two sample names, and how many rows the
-  current rule would report. Set `SFS.FROM` / `SFS.EXACT` from that output, not from a guess.
-  `CSP STATUS` is deliberately not a default source — it holds reasons (`DUPLICATE SUBS INFO`),
-  not states.
+* **The rule is the owner's own words: the row belongs in the report once `FINAL STATUS`
+  carries the SFS tag.** `SFS.FROM = ['FINAL STATUS']` and `SFS.EXACT = false`, so
+  `SFS VALIDATION` matches whatever the spacing or case, and it also catches a longer wording
+  typed straight into `FINAL STATUS`. `CSP STATUS` is not a source — it holds reasons
+  (`DUPLICATE SUBS INFO`), not states.
+* **There is no `HD REMARKS` column in the sheet** (measured by `sfsProbe` on the live file:
+  PLDT has `CSP STATUS | CSP REMARKS | PAYMENT REFERENCE/ REMARKS | PAYMENT STATUS | FUSE
+  STATUS | OFSC STATUS | HD RECOMMENDATION | FINAL STATUS`, 1,372 rows). The line
+  `SFS VALIDATION - WITH UPLOADED DOCS` in his manual email is something **he types himself**,
+  so `SFS.HD_TEXT` repeats it on every row. Set `SFS.HD_TEXT = ''` to read the real
+  `HD REMARKS` / `HD RECOMMENDATION` cells instead.
+* `sfsProbe` is how both of the above were decided, and it is still the tool to run if the
+  wording ever changes. It sends and writes nothing. Per tab it logs the column names, the ten
+  most common values of the four status columns, every value mentioning SFS with its row count
+  (`>>`), **every column that ever contains the word SFS with its exact wording (`##`)**, the
+  full contents of the two names from the owner's sample email, and how many rows the current
+  rule would report. As measured on 2026-11-04 the live Aug-Oct sheet had **0** rows tagged
+  `SFS VALIDATION`, so an automated run that day correctly sends nothing.
 * Matched after normalising case and spacing; deduped by SR number across the two tabs,
   oldest first, capped at `SFS.MAX_ROWS`; `DATE` renders as `M/D/YYYY` like his email.
 * **A day with no matching row sends nothing.**

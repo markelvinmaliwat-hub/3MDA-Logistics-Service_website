@@ -118,8 +118,11 @@ const SFS = {
   LOGO_ABOVE: true,                  // false puts the picture under the three signature lines
   FOOTER: '',                        // e.g. 'Automated daily report from the 3MDA Logistics dashboard.'
   STATUS: 'SFS VALIDATION',          // the value looked for in SFS.FROM
-  FROM: ['FINAL STATUS', 'HD RECOMMENDATION'],
-  EXACT: true,                       // false = match anywhere in the cell, so "SFS VALIDATION - WITH UPLOADED DOCS" counts too
+  FROM: ['FINAL STATUS'],            // the owner's rule: the row is endorsed once FINAL STATUS carries the SFS tag
+  EXACT: false,                      // false also catches "SFS VALIDATION - WITH UPLOADED DOCS" typed into FINAL STATUS
+  HD_TEXT: 'SFS VALIDATION - WITH UPLOADED DOCS',
+                                     // the PLDT sheet has no HD REMARKS column - the owner writes this line himself
+                                     // when he endorses, so the report repeats it. '' = read HD REMARKS / HD RECOMMENDATION instead.
   COLS: ['DATE', 'SUBSCRIBER NAME', 'SR', 'CSP REMARKS', 'HD REMARKS'],
   DATE_FORMAT: 'M/d/yyyy',           // the owner writes 10/23/2026, not 23 Oct 2026
   SR_LINK: '',                       // 'https://…' prefix if the SR number should be a hyperlink, '' = plain
@@ -348,15 +351,16 @@ function sendNotices_(send) {
 }
 
 /* ---------------------------------------------------------------- SFS VALIDATION
-   One report a day to PLDT listing every application whose FINAL STATUS is exactly
-   "SFS VALIDATION" - in this data those are duplicate submissions waiting to be
-   validated. It reuses the same tab reader, the same red-header table and the same
-   formal English wording as the agent notices, so a column rename in the sheet cannot
-   break one report and not the other. Nothing is emailed when no row matches. */
+   One report a day to PLDT listing every application whose FINAL STATUS carries the
+   "SFS VALIDATION" tag - in this data those are duplicate submissions waiting to be
+   validated. The tab reader and the wording are shared with the agent notices, but the
+   table is the owner's own black-bordered one, and the HD REMARKS column repeats a phrase
+   he types by hand (SFS.HD_TEXT) because the sheet has no such column.
+   Nothing is emailed when no row matches. */
 /* Which column decides that a row belongs in the report? SFS.FROM is tried in order and
-   the first non-empty value wins, so the same rule works whether the sheet tags these rows
-   in FINAL STATUS or only in HD RECOMMENDATION. With SFS.EXACT=false the longer wording the
-   owner uses by hand ("SFS VALIDATION - WITH UPLOADED DOCS") counts too. */
+   the first non-empty value wins, so the rule can be moved to another column without
+   touching anything else. SFS.EXACT=false (the default) also catches the longer wording
+   "SFS VALIDATION - WITH UPLOADED DOCS" if it is ever typed into FINAL STATUS itself. */
 function sfsStatusOf_(r) {
   for (const c of SFS.FROM) {
     const v = r[c];
@@ -393,7 +397,11 @@ function collectSfs_(ss) {
   /* oldest first - a validation queue is worked from the top */
   return out.sort((x, y) => x._t - y._t || nk_(x.sub).localeCompare(nk_(y.sub)));
 }
+/* The HD REMARKS column of his email is not in the sheet - he writes it himself when he
+   endorses - so SFS.HD_TEXT repeats that line for every row. Set it to '' to read the real
+   HD REMARKS / HD RECOMMENDATION cells instead. */
 function sfsHdOf_(r) {
+  if (SFS.HD_TEXT) return String(SFS.HD_TEXT).trim();
   for (const c of ['HD REMARKS', 'HD RECOMMENDATION']) {
     if (r[c] !== undefined && r[c] !== null && String(r[c]).trim() !== '') return String(r[c]).trim();
   }
@@ -507,10 +515,11 @@ function installSfsTrigger() {
 /* Run sfsProbe from the dropdown to check the rule against the LIVE sheet before turning
    SFS.DRY_RUN off. It emails nothing and writes nothing. It logs, per tab: the column names,
    the most common FINAL STATUS / HD REMARKS / HD RECOMMENDATION / CSP STATUS values, every
-   value that
-   mentions SFS with its row count, and the full contents of any row whose subscriber is in
-   SFS_PROBE_ (the two names from the owner's own sample email). Paste that log back and the
-   right SFS.FROM / SFS.EXACT setting is decided by data instead of by guessing. */
+   value that mentions SFS with its row count, EVERY column that ever contains the word SFS
+   with its exact wording (the "##" lines - that is what settles SFS.FROM), the full contents
+   of any row whose subscriber is in SFS_PROBE_ (the two names from the owner's own sample
+   email), and how many rows the current rule would report. Paste that log back and the right
+   SFS.FROM / SFS.EXACT setting is decided by data instead of by guessing. */
 const SFS_PROBE_ = ['MAGILYN MACATANGAY', 'LORAINE MALBAS'];
 function sfsProbe() {
   const ss = SpreadsheetApp.openById(NOTICE.SHEET_ID);
@@ -526,6 +535,20 @@ function sfsProbe() {
       Logger.log(name + ' ' + col + ': ' + keys.sort((a, b) => c[b] - c[a]).slice(0, 10).map(k => k + '=' + c[k]).join(', ') + (keys.length > 10 ? ' ...(' + keys.length + ' distinct)' : ''));
       keys.filter(k => /SFS/i.test(k)).forEach(k => Logger.log('  >> ' + name + ' ' + col + ' "' + k + '" rows=' + c[k]));
     });
+    /* the decisive part: EVERY column, not just the four above, that ever carries the word SFS */
+    const hits = {};
+    Object.keys(rows[0]).forEach(col => {
+      const vals = {};
+      rows.forEach(r => {
+        const v = String(r[col] == null ? '' : r[col]).trim();
+        if (/SFS/i.test(v)) vals[v] = (vals[v] || 0) + 1;
+      });
+      if (Object.keys(vals).length) hits[col] = vals;
+    });
+    const hc = Object.keys(hits);
+    Logger.log(name + ' columns that ever contain "SFS": ' + (hc.length ? hc.join(', ') : 'NONE'));
+    hc.forEach(col => Object.keys(hits[col]).sort((a, b) => hits[col][b] - hits[col][a]).slice(0, 8)
+      .forEach(v => Logger.log('  ## ' + name + ' ' + col + ' = "' + v.slice(0, 70) + '" rows=' + hits[col][v])));
   });
   SFS_PROBE_.forEach(needle => {
     let found = 0;
