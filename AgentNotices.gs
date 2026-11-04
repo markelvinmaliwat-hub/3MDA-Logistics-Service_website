@@ -508,6 +508,30 @@ function sfsPreview() {
   Logger.log(r.text);
   return r;
 }
+/* Dropdown-runnable TEST COPY. PLDT never sees this one: SFS.DRY_RUN is still true, so it
+   goes to NOTICE.ADMIN_EMAILS only and carries [TEST] in the subject. The real tag appears
+   only when a new encode passes SFS, so on most days the live rule has 0 rows and there is
+   nothing to look at - this temporarily matches SFS_TEST.STATUS instead (a FINAL STATUS value
+   that exists today) and lists at most SFS_TEST.MAX_ROWS rows so the sample stays short.
+   SFS.STATUS and SFS.MAX_ROWS are put back before it returns, whatever happens inside. */
+const SFS_TEST = { STATUS: 'REENCODED', MAX_ROWS: 12 };
+function sfsTestReport() {
+  const keepStatus = SFS.STATUS, keepMax = SFS.MAX_ROWS;
+  SFS.STATUS = SFS_TEST.STATUS;
+  SFS.MAX_ROWS = Math.min(SFS_TEST.MAX_ROWS, keepMax);
+  let r;
+  try {
+    r = sendSfs_(true);
+  } finally {
+    SFS.STATUS = keepStatus;
+    SFS.MAX_ROWS = keepMax;
+  }
+  Logger.log('test copy ' + (r.sent ? 'sent to ' + r.to.join(',') : 'NOT sent') +
+    ' | rows listed: ' + r.items + ' | subject: ' + (r.subject || '-') + ' | logo: ' + r.logo);
+  Logger.log('SFS.STATUS is back to "' + SFS.STATUS + '" - the test matched "' + SFS_TEST.STATUS +
+    '" instead' + (r.skipped ? ' | ' + r.skipped : ''));
+  return r;
+}
 function sfsStatus_() {
   return {
     installed: ScriptApp.getProjectTriggers().some(t => t.getHandlerFunction() === 'runSfsNotices'),
@@ -521,7 +545,13 @@ function sfsStatus_() {
 function installSfsTrigger() {
   ScriptApp.getProjectTriggers().filter(t => t.getHandlerFunction() === 'runSfsNotices').forEach(t => ScriptApp.deleteTrigger(t));
   ScriptApp.newTrigger('runSfsNotices').timeBased().everyDays(1).atHour(SFS.SEND_HOUR).create();
-  return sfsStatus_();
+  const st = sfsStatus_();
+  Logger.log('daily SFS trigger: ' + (st.installed ? 'installed' : 'NOT installed') +
+    ' | runs in the ' + st.hour + 'AM hour (' + st.tz + ') | rule: ' + st.rule +
+    ' | file: ' + st.file + ' | tabs: ' + st.tabs +
+    ' | ' + (st.dryRun ? 'DRY_RUN is ON, copies go to ' + NOTICE.ADMIN_EMAILS.join(',') + ' only' : 'LIVE, goes to ' + st.to.join(',')) +
+    ' | ' + st.note);
+  return st;
 }
 /* Run sfsProbe from the dropdown to check the rule against the LIVE sheet before turning
    SFS.DRY_RUN off. It emails nothing and writes nothing. It logs, per tab: the column names,
