@@ -9,6 +9,7 @@ their own PLDT / RED sales, and the owner can trigger the daily sales-status ema
 | --- | --- |
 | `index.html` | The whole app: markup, styles and logic. Published as-is by GitHub Pages. |
 | `AgentNotices.gs` | **Mirror only** of the Google Apps Script file that actually sends the emails. |
+| `assets/mmmda-logo.jpg` | The logo attached to the signature of the PLDT SFS report. |
 
 ## The email code does not live here
 
@@ -90,8 +91,17 @@ three-line signature. The `PLDT` and `RED` tabs are read, never the `VALIDATORS`
 * Apps Script cannot schedule an exact minute — a day trigger fires somewhere inside
   `SFS.SEND_HOUR`, so this is "in the 8AM hour", not 8:30:00. Same limitation as the
   8:00 AM agent notices. `installSfsTrigger` creates (and never duplicates) that trigger.
-* `SFS.SR_LINK`, if set, turns each SR into a link to that URL plus the number. Leave it
+* `SFS.SR_LINK`, if set, turns each SR into a link to that number's page. Leave it
   empty unless the link is safe to hand to PLDT.
+* **The MMMDA logo is part of the signature** (`assets/mmmda-logo.jpg`, 1280x1255). Apps
+  Script fetches it from the published site and attaches it as an inline image
+  (`<img src="cid:mmmda-logo">` + `inlineImages`), so it still shows in mail clients that
+  block pictures loaded from the internet. If the fetch fails the email is still sent with
+  the picture linked by URL instead, and `sfsPreview` logs which of the two happened
+  (`attached inline` / `linked only`). Set `SFS.LOGO_URL` to `''` for no picture at all,
+  `SFS.LOGO_ABOVE = false` to put it under the three lines, `SFS.LOGO_W` / `LOGO_H` for size.
+  This logo is only in the PLDT report — the agent notices are unchanged.
+  Replace the picture by overwriting `assets/mmmda-logo.jpg` and pushing.
 * To change the columns, edit `SFS.COLS`; the header name is mapped to the row field in
   `CELL_` (`Date, Subscriber, SR No., Plan, Status, Remarks, Agent, Team Leader, CSP Status`).
 * A new daily email needs no web-app redeploy — triggers run **Head**. Only a new `/exec`

@@ -47,7 +47,9 @@
  *    While  SFS.DRY_RUN  is true the report goes to the admin only and the CC list is
  *    ignored, so PLDT receives nothing until the owner flips that switch.  sfsPreview
  *    logs the report without sending,  sfsProbe  measures the rule against the live
- *    sheet, and  installSfsTrigger  creates the daily trigger.
+ *    sheet, and  installSfsTrigger  creates the daily trigger. The MMMDA logo is pulled
+ *    from the published site and attached as an inline image (SFS.LOGO_URL), so it is
+ *    visible even when the reader blocks pictures from the internet.
  */
 const NOTICE = {
   SHEET_ID: '1i7g_Hv6_tmQxqGhjSVzQFa8rFaJriC3wp9zK3wosnw0',  /* "DATABASE AUG TO OCT" (confirmed by the owner) - holds PLDT, RED, VALIDATORS and Agent_Emails */
@@ -109,6 +111,11 @@ const SFS = {
   INTRO: 'For endorsement to SFS for proper validation.',
   THANKS: 'Thank you !',
   SIGN: ['Mark Maliwat', 'Sales Validator - MMMDA Logistics', 'Service Cavite Upland'],
+  LOGO_URL: 'https://markelvinmaliwat-hub.github.io/3MDA-Logistics-Service_website/assets/mmmda-logo.jpg',
+  LOGO_KEY: 'mmmda-logo',            // the cid: name used inside the email
+  LOGO_ALT: 'MMMDA Logistics Service',
+  LOGO_W: 150, LOGO_H: 147,          // the file is 1280x1255, so these keep its shape
+  LOGO_ABOVE: true,                  // false puts the picture under the three signature lines
   FOOTER: '',                        // e.g. 'Automated daily report from the 3MDA Logistics dashboard.'
   STATUS: 'SFS VALIDATION',          // the value looked for in SFS.FROM
   FROM: ['FINAL STATUS', 'HD RECOMMENDATION'],
@@ -404,7 +411,32 @@ function sfsTable_(items) {
       return `<td ${td}>${esc_(v) || '&mdash;'}</td>`;
     }).join('') + '</tr>').join('') + '</table>';
 }
-function sfsBuild_(items) {
+/* The MMMDA logo is fetched from the dashboard site and attached as an inline image, so it
+   shows even when PLDT's mail client blocks pictures from the internet. If the fetch ever
+   fails the email still goes out - it just links to the picture instead - and an empty
+   SFS.LOGO_URL leaves the signature as plain text. */
+function sfsLogo_() {
+  if (!SFS.LOGO_URL) return { src: '', blob: null };
+  try {
+    const blob = UrlFetchApp.fetch(SFS.LOGO_URL, { muteHttpExceptions: true });
+    const code = blob.getResponseCode ? blob.getResponseCode() : 200;
+    if (code !== 200) throw new Error('HTTP ' + code);
+    return { src: 'cid:' + SFS.LOGO_KEY, blob: blob };
+  } catch (err) {
+    Logger.log('SFS logo could not be attached (' + err + ') - the email will link to it instead');
+    return { src: SFS.LOGO_URL, blob: null };
+  }
+}
+function sfsSig_(logo) {
+  const img = logo && logo.src
+    ? `<img src="${esc_(logo.src)}" width="${Number(SFS.LOGO_W) || 150}" height="${Number(SFS.LOGO_H) || 147}" ` +
+      `alt="${esc_(SFS.LOGO_ALT)}" style="border:0;display:block;margin:0 0 10px 0">`
+    : '';
+  const lines = `<p><b>${SFS.SIGN.map(x => esc_(x)).join('<br>')}</b></p>`;
+  if (!img) return lines;
+  return SFS.LOGO_ABOVE === false ? lines + `<p>${img}</p>` : `<p>${img}</p>` + lines;
+}
+function sfsBuild_(items, logo) {
   const max = SFS.MAX_ROWS || 300, shown = items.slice(0, max);
   const stamp = Utilities.formatDate(new Date(), SFS.TIMEZONE || NOTICE.TIMEZONE, 'MMMyyyy').toUpperCase();
   const subject = `3MDA_SFS_VALIDATION_${stamp}`;
@@ -412,8 +444,7 @@ function sfsBuild_(items) {
   const h = `<div style="font-family:Calibri,Arial,sans-serif;font-size:14px;color:#000;max-width:900px">` +
     `<p>${esc_(SFS.GREET)}</p><p>${esc_(SFS.INTRO)}</p>` + sfsTable_(shown) +
     (extra > 0 ? `<p style="color:#667085;font-size:12px">&hellip;and ${extra} more not listed here.</p>` : '') +
-    `<p style="margin-top:18px"><b>${esc_(SFS.THANKS)}</b></p>` +
-    `<p><b>${SFS.SIGN.map(x => esc_(x)).join('<br>')}</b></p>` +
+    `<p style="margin-top:18px"><b>${esc_(SFS.THANKS)}</b></p>` + sfsSig_(logo) +
     (SFS.FOOTER ? `<p style="color:#667085;font-size:12px">${esc_(SFS.FOOTER)}</p>` : '') + '</div>';
   const t = `${SFS.GREET}\n\n${SFS.INTRO}\n\n${rowsText_(items, max, SFS.COLS)}` +
     (extra > 0 ? `\n...and ${extra} more.` : '') + `\n\n${SFS.THANKS}\n\n${SFS.SIGN.join('\n')}`;
@@ -432,8 +463,10 @@ function sendSfs_(send) {
     to: SFS.DRY_RUN ? [testTo] : SFS.TO, cc: SFS.DRY_RUN ? [] : SFS.CC
   };
   if (!items.length) { res.skipped = 'no rows tagged ' + SFS.STATUS + ' - nothing sent'; return res; }
-  const m = sfsBuild_(items);
+  const logo = sfsLogo_();
+  const m = sfsBuild_(items, logo);
   res.subject = m.subject; res.htmlChars = m.html.length;
+  res.logo = logo.blob ? 'attached inline' : logo.src ? 'linked only' : 'none';
   if (!send) { res.text = m.text; return res; }
   if (MailApp.getRemainingDailyQuota() < 1) { res.skipped = 'daily Gmail quota reached'; return res; }
   const opt = {
@@ -441,6 +474,7 @@ function sendSfs_(send) {
     subject: (SFS.DRY_RUN ? '[TEST] ' : '') + m.subject, body: m.text, htmlBody: m.html
   };
   if (res.cc.length) opt.cc = res.cc.join(',');
+  if (logo.blob) opt.inlineImages = (function () { const o = {}; o[SFS.LOGO_KEY] = logo.blob; return o; })();
   try { MailApp.sendEmail(opt); res.sent = true; } catch (err) { res.error = String(err); }
   return res;
 }
@@ -450,7 +484,7 @@ function sendSfsReport() { return sendSfs_(true); }
 /* Dropdown-runnable: logs exactly what PLDT would receive, without sending anything. */
 function sfsPreview() {
   const r = sendSfs_(false);
-  Logger.log('rows tagged ' + SFS.STATUS + ': ' + r.items + ' | would go to: ' + r.to.join(',') + (r.cc.length ? ' | cc: ' + r.cc.join(',') : ' | cc: none while DRY_RUN is on'));
+  Logger.log('rows tagged ' + SFS.STATUS + ': ' + r.items + ' | logo: ' + r.logo + ' | would go to: ' + r.to.join(',') + (r.cc.length ? ' | cc: ' + r.cc.join(',') : ' | cc: none while DRY_RUN is on'));
   if (!r.items) { Logger.log('Nothing to report today - the daily run would send no email.'); return r; }
   Logger.log('subject: ' + r.subject + ' | html chars: ' + r.htmlChars);
   Logger.log(r.text);
