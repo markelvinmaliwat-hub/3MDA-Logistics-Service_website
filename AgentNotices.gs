@@ -41,6 +41,12 @@
  *    digest or a live code - so keep that spreadsheet shared only with people you
  *    trust. Reset emails respect the 8:00 AM notices: they stop when fewer than
  *    ACCT.QUOTA_FLOOR emails are left for the day.
+ * 9. SFS.VALIDATION@PLDT: every day,  runSfsNotices  emails the applications whose
+ *    FINAL STATUS is exactly "SFS VALIDATION" to SFS.TO with SFS.CC. It sends nothing
+ *    on a day with no such row. While  SFS.DRY_RUN  is true the report goes to the
+ *    admin only and the CC list is ignored, so PLDT receives nothing until the owner
+ *    flips that switch.  sfsPreview  logs the report without sending, and
+ *    installSfsTrigger  creates the daily trigger.
  */
 const NOTICE = {
   SHEET_ID: '1i7g_Hv6_tmQxqGhjSVzQFa8rFaJriC3wp9zK3wosnw0',  /* "DATABASE AUG TO OCT" (confirmed by the owner) - holds PLDT, RED, VALIDATORS and Agent_Emails */
@@ -88,6 +94,24 @@ const ACCT = {
   QUOTA_FLOOR: 25                  // never spend the last 25 emails of the day - the 8:00 AM notices need them
 };
 
+/* The SFS VALIDATION report: one email a day to PLDT listing the applications whose
+   FINAL STATUS is exactly "SFS VALIDATION" - in this data those are the duplicate
+   submissions waiting to be validated. DRY_RUN must stay true until the owner has seen
+   a real copy: while it is true the report goes to ADMIN_EMAILS and the CC list below
+   is NOT used, so PLDT never receives anything from a test run. */
+const SFS = {
+  TO: ['lsabat@pldt.com.ph'],
+  CC: ['t-jesnavarro@supplier.pldt.com.ph', 't-jesnavarro@pldt365.onmicrosoft.com', 'abmadlangbayan0510@icloud.com'],
+  STATUS: 'SFS VALIDATION',        // compared after nk_(), so spacing and case do not matter
+  COLS: ['Date', 'Subscriber', 'SR No.', 'Plan', 'Status', 'Remarks'],
+  SEND_HOUR: 8,                    // Apps Script fires a day trigger somewhere inside this hour, not at an exact minute
+  DRY_RUN: true,
+  MAX_ROWS: 300,                   // rows listed; the rest are summarised
+  TIMEZONE: '',                    // '' = NOTICE.TIMEZONE
+  INTRO: 'This is to formally submit the applications listed below, which are currently tagged as SFS VALIDATION in our records. Kindly review and confirm the validation status of each application at your earliest convenience so that the concerned subscribers may proceed.',
+  CLOSE: 'Should you require further details or supporting documents for any of the applications listed above, please coordinate with the undersigned. Thank you for your continued assistance.'
+};
+
 const NT_ = {
   GREET: 'Dear',
   FP_INTRO: 'This is to formally inform you that the following sale(s) endorsed under your account are currently tagged as FOR PAYMENT. Kindly coordinate with the concerned subscriber(s) and ensure that the required payment is settled at the earliest possible time to avoid delays or cancellation of the application.',
@@ -116,10 +140,13 @@ const ALIAS_ = {
   DATE: ['DATE', 'SALE DATE', 'DATE ENCODED'],
   PLAN: ['AVAILED PLAN', 'PLAN AVAILED', 'PLAN'],
   PAYREM: ['PAYMENT REMARKS', 'CSP REMARKS', 'REMARKS'],
-  ADMREM: ['ADMIN REMARKS', 'CSP REMARKS', 'REMARKS']
+  ADMREM: ['ADMIN REMARKS', 'CSP REMARKS', 'REMARKS'],
+  SR: ['SR', 'SR NO', 'SR NO.', 'SR NUMBER', 'SERVICE REQUEST'],
+  CSP: ['CSP STATUS', 'CSP'],
+  TL: ['TEAM LEADER', 'TL', 'TEAM LEAD']
 };
 function pick_(r, key) {
-  for (const n of ALIAS_[key]) { const v = r[n]; if (v !== undefined && v !== '' && v !== null) return v; }
+  for (const n of ALIAS_[key] || []) { const v = r[n]; if (v !== undefined && v !== '' && v !== null) return v; }
   return '';
 }
 /* header row = first row (within the top 10) carrying both STATUS and AGENT */
@@ -209,27 +236,36 @@ function collect_(ss) {
 }
 
 /* ------------------------------------------------------------- build the email */
-function table_(items) {
-  const th = 'style="background:#d9001b;color:#fff;text-align:left;padding:8px 10px;font-size:12px"';
-  const td = 'style="padding:7px 10px;border-bottom:1px solid #e3e8f0;font-size:13px;vertical-align:top"';
+/* One table style for every email: red header, alternating rows. A column name is looked
+   up in CELL_, which is what lets the SFS report add SR / agent columns without a second
+   builder. Anything not listed there renders as an empty cell. */
+const CELL_ = {
+  'Date': 'date', 'Subscriber': 'sub', 'Plan': 'plan', 'Status': 'status', 'Remarks': 'remarks',
+  'SR No.': 'sr', 'Agent': 'agent', 'Team Leader': 'tl', 'CSP Status': 'csp'
+};
+const TH_ = 'style="background:#d9001b;color:#fff;text-align:left;padding:8px 10px;font-size:12px"';
+const TD_ = 'style="padding:7px 10px;border-bottom:1px solid #e3e8f0;font-size:13px;vertical-align:top"';
+const cellOf_ = (x, c) => String(x[CELL_[c] || ''] == null ? '' : x[CELL_[c] || '']);
+function table_(items, cols) {
+  const C = cols || COL_;
   return '<table cellpadding="6" style="border-collapse:collapse;border:1px solid #e3e8f0;width:100%">' +
-    '<tr>' + COL_.map(c => `<th ${th}>${c}</th>`).join('') + '</tr>' +
+    '<tr>' + C.map(c => `<th ${TH_}>${c}</th>`).join('') + '</tr>' +
     items.map((x, i) => `<tr style="background:${i % 2 ? '#f4f7fc' : '#fff'}">` +
-      [x.date, x.sub, x.plan, x.status, x.remarks].map((v, j) =>
-        `<td ${td}>${j === 1 ? '<b>' + esc_(v) + '</b>' : esc_(v) || '&mdash;'}</td>`).join('') + '</tr>').join('') +
+      C.map((c, j) => { const v = cellOf_(x, c);
+        return `<td ${TD_}>${j === 1 ? '<b>' + esc_(v) + '</b>' : esc_(v) || '&mdash;'}</td>`; }).join('') + '</tr>').join('') +
     '</table>';
 }
 function moreNote_(items, shown) {
   const extra = items.length - shown.length;
   return extra > 0 ? `<p style="color:#667085;font-size:12px">&hellip;and ${extra} more ${extra === 1 ? 'sale' : 'sales'} not listed here. Check the dashboard or ask your Team Leader for the full list.</p>` : '';
 }
-function section_(label, items, max) {
+function section_(label, items, max, cols) {
   const shown = items.slice(0, max);
-  return `<p style="margin:18px 0 4px"><b>${label} (${items.length})</b></p>` + table_(shown) + moreNote_(items, shown);
+  return `<p style="margin:18px 0 4px"><b>${label} (${items.length})</b></p>` + table_(shown, cols) + moreNote_(items, shown);
 }
-function rowsText_(items, max) {
-  const shown = items.slice(0, max);
-  return shown.map(x => `- ${[x.date, x.sub, x.plan, x.status, x.remarks].filter(Boolean).join(' | ')}`).join('\n') +
+function rowsText_(items, max, cols) {
+  const C = cols || COL_, shown = items.slice(0, max);
+  return shown.map(x => `- ${C.map(c => cellOf_(x, c)).filter(Boolean).join(' | ')}`).join('\n') +
     (items.length > shown.length ? `\n...and ${items.length - shown.length} more.` : '');
 }
 function build_(agent, fp, rt) {
@@ -289,6 +325,102 @@ function sendNotices_(send) {
   }
   res.failed = res.sent.filter(x => x.error).length;
   return res;
+}
+
+/* ---------------------------------------------------------------- SFS VALIDATION
+   One report a day to PLDT listing every application whose FINAL STATUS is exactly
+   "SFS VALIDATION" - in this data those are duplicate submissions waiting to be
+   validated. It reuses the same tab reader, the same red-header table and the same
+   formal English wording as the agent notices, so a column rename in the sheet cannot
+   break one report and not the other. Nothing is emailed when no row matches. */
+function collectSfs_(ss) {
+  const want = nk_(SFS.STATUS), out = [], seen = {};
+  NOTICE.SALES_TABS.forEach(name => tab_(ss, name).forEach(r => {
+    /* Strictly FINAL STATUS (or a plain STATUS column when the sheet has no FINAL STATUS):
+       pick_(r,'STATUS') would fall back to CSP STATUS, and that column says things like
+       "DUPLICATE SUBS INFO" - never a validation state we should report to PLDT. */
+    const fstSrc = r['FINAL STATUS'] === undefined ? r['STATUS'] : r['FINAL STATUS'];
+    const fst = String(fstSrc == null ? '' : fstSrc).trim();
+    if (nk_(fst) !== want) return;
+    const dv = pick_(r, 'DATE'), raw = dv instanceof Date ? dv.getTime() : new Date(dv).getTime();
+    const it = {
+      date: fmtD_(dv), sub: String(pick_(r, 'SUB')).trim(), plan: String(pick_(r, 'PLAN')).trim(),
+      status: fst, remarks: String(pick_(r, 'PAYREM')).trim(),
+      sr: String(pick_(r, 'SR')).replace(/\.0$/, '').trim(), agent: String(pick_(r, 'AGENT')).trim(),
+      tl: String(pick_(r, 'TL')).trim(), csp: String(pick_(r, 'CSP')).trim(), _t: isNaN(raw) ? 0 : raw
+    };
+    const k = it.sr || (it.date + '|' + it.sub + '|' + it.plan);
+    if (seen[k]) return;
+    seen[k] = 1;
+    out.push(it);
+  }));
+  /* oldest first - a validation queue is worked from the top */
+  return out.sort((x, y) => x._t - y._t || nk_(x.sub).localeCompare(nk_(y.sub)));
+}
+function sfsBuild_(items) {
+  const max = SFS.MAX_ROWS || 300, today = fmtD_(new Date());
+  const subject = `SFS Validation Report - ${today} (${items.length} item${items.length === 1 ? '' : 's'})`;
+  const h = `<div style="font-family:Segoe UI,Arial,sans-serif;font-size:14px;color:#1a2233;max-width:820px">` +
+    `<div style="border-top:5px solid #d9001b;background:#111;color:#fff;padding:12px 16px;font-weight:700">` +
+    `${esc_(NOTICE.SENDER_NAME)} &middot; SFS Validation Report</div>` +
+    `<div style="padding:16px;border:1px solid #e3e8f0;border-top:0">` +
+    `<p>${NT_.GREET} Sir / Madam,</p><p>${SFS.INTRO}</p>` +
+    section_('SFS VALIDATION', items, max, SFS.COLS) +
+    `<p style="margin-top:18px">${SFS.CLOSE}</p><p>${NT_.REGARDS}<br><b>${esc_(NOTICE.SENDER_NAME)}</b></p>` +
+    `<p style="color:#667085;font-size:12px">This report is generated automatically from the ${esc_(NOTICE.SENDER_NAME)} dashboard every day.</p>` +
+    `</div></div>`;
+  const t = `${NT_.GREET} Sir / Madam,\n\n${SFS.INTRO}\n\nSFS VALIDATION (${items.length})\n${rowsText_(items, max, SFS.COLS)}\n\n${SFS.CLOSE}\n\n${NT_.REGARDS}\n${NOTICE.SENDER_NAME}`;
+  return { subject: subject, html: h, text: t };
+}
+/** send=false -> preview only, nothing leaves the account. While SFS.DRY_RUN is true the
+ *  report goes to ADMIN_EMAILS and the CC list is ignored, so a test can never reach PLDT. */
+function sendSfs_(send) {
+  const ss = NOTICE.SHEET_ID ? SpreadsheetApp.openById(NOTICE.SHEET_ID) : SpreadsheetApp.getActiveSpreadsheet();
+  const items = collectSfs_(ss);
+  const admins = NOTICE.ADMIN_EMAILS.map(x => String(x).trim().toLowerCase()).filter(Boolean);
+  const testTo = admins[0] || Session.getEffectiveUser().getEmail();
+  const res = {
+    items: items.length, date: fmtD_(new Date()), dryRun: SFS.DRY_RUN,
+    mode: send ? (SFS.DRY_RUN ? 'test' : 'live') : 'preview', quota: MailApp.getRemainingDailyQuota(),
+    to: SFS.DRY_RUN ? [testTo] : SFS.TO, cc: SFS.DRY_RUN ? [] : SFS.CC
+  };
+  if (!items.length) { res.skipped = 'no rows tagged ' + SFS.STATUS + ' - nothing sent'; return res; }
+  const m = sfsBuild_(items);
+  res.subject = m.subject; res.htmlChars = m.html.length;
+  if (!send) { res.text = m.text; return res; }
+  if (MailApp.getRemainingDailyQuota() < 1) { res.skipped = 'daily Gmail quota reached'; return res; }
+  const opt = {
+    to: res.to.join(','), name: NOTICE.SENDER_NAME,
+    subject: (SFS.DRY_RUN ? '[TEST] ' : '') + m.subject, body: m.text, htmlBody: m.html
+  };
+  if (res.cc.length) opt.cc = res.cc.join(',');
+  try { MailApp.sendEmail(opt); res.sent = true; } catch (err) { res.error = String(err); }
+  return res;
+}
+function runSfsNotices() { return sendSfs_(true); }
+/* Dropdown-runnable: sends today's report once, right now, honouring SFS.DRY_RUN. */
+function sendSfsReport() { return sendSfs_(true); }
+/* Dropdown-runnable: logs exactly what PLDT would receive, without sending anything. */
+function sfsPreview() {
+  const r = sendSfs_(false);
+  Logger.log('rows tagged ' + SFS.STATUS + ': ' + r.items + ' | would go to: ' + r.to.join(',') + (r.cc.length ? ' | cc: ' + r.cc.join(',') : ' | cc: none while DRY_RUN is on'));
+  if (!r.items) { Logger.log('Nothing to report today - the daily run would send no email.'); return r; }
+  Logger.log('subject: ' + r.subject + ' | html chars: ' + r.htmlChars);
+  Logger.log(r.text);
+  return r;
+}
+function sfsStatus_() {
+  return {
+    installed: ScriptApp.getProjectTriggers().some(t => t.getHandlerFunction() === 'runSfsNotices'),
+    hour: SFS.SEND_HOUR, tz: SFS.TIMEZONE || NOTICE.TIMEZONE, dryRun: SFS.DRY_RUN,
+    to: SFS.TO, cc: SFS.CC, status: SFS.STATUS, quota: MailApp.getRemainingDailyQuota(),
+    note: 'Apps Script fires a day trigger somewhere inside the hour, not at an exact minute'
+  };
+}
+function installSfsTrigger() {
+  ScriptApp.getProjectTriggers().filter(t => t.getHandlerFunction() === 'runSfsNotices').forEach(t => ScriptApp.deleteTrigger(t));
+  ScriptApp.newTrigger('runSfsNotices').timeBased().everyDays(1).atHour(SFS.SEND_HOUR).create();
+  return sfsStatus_();
 }
 
 /* --------------------------------------------------------------------- log API

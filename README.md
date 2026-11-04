@@ -61,6 +61,26 @@ Before this existed, `LOG_URL` pointed at the sales web app, which answered ever
 request with the entire 13 MB database and no `success` field. Nothing was ever written,
 so the header could only ever show `Online · 1`.
 
+## SFS VALIDATION report to PLDT
+
+`runSfsNotices` emails **`lsabat@pldt.com.ph`** (CC: the three addresses in `SFS.CC`) once a
+day with every application whose **`FINAL STATUS` is exactly `SFS VALIDATION`** in the
+`PLDT` and `RED` tabs — in this data those are duplicate submissions waiting on validation.
+
+* Matched after normalising case and spacing, and read from `FINAL STATUS` only. The
+  `CSP STATUS` column says things like `DUPLICATE SUBS INFO`, which is a reason, not a
+  state to report, so a blank `FINAL STATUS` never matches.
+* Deduped by SR number across the two tabs, oldest first, capped at `SFS.MAX_ROWS`.
+* **A day with no matching row sends nothing.**
+* `SFS.DRY_RUN` must stay `true` until the owner has seen a real copy: while it is true the
+  report goes to `ADMIN_EMAILS` only and the CC list is ignored, so PLDT receives nothing
+  from a test. `sfsPreview` logs the exact body without sending anything.
+* Apps Script cannot schedule an exact minute — a day trigger fires somewhere inside
+  `SFS.SEND_HOUR`, so this is "in the 8AM hour", not 8:30:00. Same limitation as the
+  8:00 AM agent notices.
+* To change the columns, edit `SFS.COLS`; the header name is mapped to the row field in
+  `CELL_` (`Date, Subscriber, SR No., Plan, Status, Remarks, Agent, Team Leader, CSP Status`).
+
 ## Agent accounts and Forgot password
 
 Before this, an account existed only as `mm_acc` in the browser that created it. Change
