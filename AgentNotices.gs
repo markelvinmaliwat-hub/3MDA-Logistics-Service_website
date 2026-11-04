@@ -97,16 +97,18 @@ const ACCT = {
   QUOTA_FLOOR: 25                  // never spend the last 25 emails of the day - the 8:00 AM notices need them
 };
 
-/* The SFS VALIDATION report: one email a day to PLDT listing the applications waiting to
-   be validated, in the same shape as the owner's manual "3MDA_SFS_VALIDATION_OCT2026"
-   mail - greeting, one line, a bordered table, Thank you, his signature block.
-   DRY_RUN is the gate: while it is true the report goes to ADMIN_EMAILS and the CC list
-   below is NOT used, so PLDT never receives anything from a test. The owner approved the
-   live switch on 2026-11-04 after reviewing the sfsTestReport copy, so it is now false -
-   set it back to true any time you want to stop PLDT receiving it. SFS.FROM / SFS.STATUS
-   decide which rows count and SFS.SHEET_ID / SFS.TABS decide which file they are read from;
-   sfsProbe() measures both against the live sheet. */
+/* The two endorsement reports the owner mails to PLDT by hand - SFS VALIDATION and CREDIT
+   VALIDATION. Each is one config object below and every report function takes that object,
+   so wording, rule, recipients, schedule and test settings are data, not code. Both run
+   twice a day (SFS.SEND_HOURS / CV.SEND_HOURS) and each keeps its own list of what it already
+   mailed that day, so the 2PM copy carries only what arrived after 8AM.
+   DRY_RUN is the gate per report: while it is true the report goes to ADMIN_EMAILS and the CC
+   list is NOT used, so PLDT never receives anything from a test. The owner approved the SFS
+   live switch on 2026-11-04 after reviewing the sfsTestReport copy. FROM / STATUS decide
+   which rows count and SHEET_ID / TABS decide which file they are read from; sfsProbe() and
+   cvProbe() measure both against the live sheet. */
 const SFS = {
+  NAME: 'SFS',
   TO: ['lsabat@pldt.com.ph'],
   CC: ['t-jesnavarro@supplier.pldt.com.ph', 't-jesnavarro@pldt365.onmicrosoft.com', 'abmadlangbayan0510@icloud.com'],
   GREET: 'Hi Sir ABAT, Leonard S.,',
@@ -130,10 +132,51 @@ const SFS = {
   COLS: ['DATE', 'SUBSCRIBER NAME', 'SR', 'CSP REMARKS', 'HD REMARKS'],
   DATE_FORMAT: 'M/d/yyyy',           // the owner writes 10/23/2026, not 23 Oct 2026
   SR_LINK: '',                       // 'https://…' prefix if the SR number should be a hyperlink, '' = plain
-  SEND_HOUR: 8,                      // Apps Script fires a day trigger somewhere inside this hour, not at an exact minute
+  SEND_HOURS: [8, 14],               // two runs a day; Apps Script fires somewhere inside each hour, not at an exact minute
   DRY_RUN: false,                    // true = the report goes to ADMIN_EMAILS only, labelled [TEST]; PLDT receives nothing
   MAX_ROWS: 300,                     // rows listed; the rest are summarised
-  TIMEZONE: ''                       // '' = NOTICE.TIMEZONE
+  TIMEZONE: '',                      // '' = NOTICE.TIMEZONE
+  SUBJECT: '3MDA_SFS_VALIDATION_',   // + MMMYYYY, the owner's own convention
+  SENT_PREFIX: 'SFS_SENT_',          // Script Properties key holding the SR numbers already mailed today
+  PROBE: ['SFS'],                    // what sfsProbe hunts for when it suggests a rule
+  TEST: { STATUS: 'REENCODED', MAX_ROWS: 12 }   // what sfsTestReport borrows so there is a sample to look at
+};
+
+/* The CREDIT VALIDATION report - same shape, different queue. The owner's manual mail reads
+   "For credit validation and approval." over rows whose CSP REMARKS says ESCALATED TO CVAA,
+   and it goes to the four people he addressed it to, not to the agents. DRY_RUN is true:
+   cvTestReport shows him a real copy first, and only cvProbe/his "go" turns it live. */
+const CV = {
+  NAME: 'CV',
+  TO: ['lsabat@pldt.com.ph', 't-jesnavarro@supplier.pldt.com.ph', 't-jesnavarro@pldt365.onmicrosoft.com', 'abmadlangbayan0510@icloud.com'],
+  CC: [],
+  GREET: 'Hi Sir ABAT, Leonard S.,',
+  INTRO: 'For credit validation and approval.',
+  THANKS: 'Thank you !',
+  SIGN: ['Mark Maliwat', 'Sales Validator - MMMDA Logistics', 'Service Cavite Upland'],
+  LOGO_URL: 'https://markelvinmaliwat-hub.github.io/3MDA-Logistics-Service_website/assets/mmmda-logo.jpg',
+  LOGO_KEY: 'mmmda-logo',
+  LOGO_ALT: 'MMMDA Logistics Service',
+  LOGO_W: 150, LOGO_H: 147,
+  LOGO_ABOVE: true,
+  FOOTER: '',
+  STATUS: 'ESCALATED TO CVAA',
+  SHEET_ID: '',
+  TABS: [],
+  FROM: ['CSP REMARKS'],             // the owner's rule: the row is a credit-validation item once CSP REMARKS says so
+  EXACT: false,
+  HD_TEXT: 'FOR CREDIT VALIDATION AND APPROVAL',
+  COLS: ['DATE', 'SUBSCRIBER NAME', 'SR', 'CSP REMARKS', 'HD REMARKS'],
+  DATE_FORMAT: 'M/d/yyyy',
+  SR_LINK: '',
+  SEND_HOURS: [8, 14],
+  DRY_RUN: true,
+  MAX_ROWS: 300,
+  TIMEZONE: '',
+  SUBJECT: '3MDA_CREDIT_VALIDATION_',
+  SENT_PREFIX: 'CV_SENT_',
+  PROBE: ['CVAA', 'CREDIT', 'COMPLIANCE'],
+  TEST: { STATUS: 'ESCALATED', MAX_ROWS: 12 }
 };
 
 const NT_ = {
@@ -354,258 +397,298 @@ function sendNotices_(send) {
   return res;
 }
 
-/* ---------------------------------------------------------------- SFS VALIDATION
-   One report a day to PLDT listing every application whose FINAL STATUS carries the
-   "SFS VALIDATION" tag - in this data those are duplicate submissions waiting to be
-   validated. The tab reader and the wording are shared with the agent notices, but the
-   table is the owner's own black-bordered one, and the HD REMARKS column repeats a phrase
-   he types by hand (SFS.HD_TEXT) because the sheet has no such column.
-   Nothing is emailed when no row matches. */
-/* Which column decides that a row belongs in the report? SFS.FROM is tried in order and
-   the first non-empty value wins, so the rule can be moved to another column without
-   touching anything else. SFS.EXACT=false (the default) also catches the longer wording
-   "SFS VALIDATION - WITH UPLOADED DOCS" if it is ever typed into FINAL STATUS itself. */
-function sfsStatusOf_(r) {
-  for (const c of SFS.FROM) {
+/* --------------------------------------------------- PLDT ENDORSEMENT REPORT ENGINE
+   Everything here takes a report config (SFS or CV). The tab reader and the field names are
+   shared with the agent notices, but the table is the owner's own black-bordered one, and the
+   HD REMARKS column repeats a phrase he types by hand (cfg.HD_TEXT) because the sheet has no
+   such column. Nothing is emailed when no row matches. */
+/* Which column decides that a row belongs in the report? cfg.FROM is tried in order and the
+   first non-empty value wins, so the rule can be moved to another column without touching
+   anything else. cfg.EXACT=false (the default) also catches a longer wording typed straight
+   into the same column - "SFS VALIDATION - WITH UPLOADED DOCS" in FINAL STATUS, for instance. */
+function reportStatusOf_(r, cfg) {
+  for (const c of cfg.FROM) {
     const v = r[c];
     if (v !== undefined && v !== null && String(v).trim() !== '') return String(v).trim();
   }
   return '';
 }
-function fmtSfs_(v) {
-  const tz = SFS.TIMEZONE || NOTICE.TIMEZONE;
-  if (v instanceof Date) return Utilities.formatDate(v, tz, SFS.DATE_FORMAT);
+function fmtReportDate_(v, cfg) {
+  const tz = cfg.TIMEZONE || NOTICE.TIMEZONE;
+  if (v instanceof Date) return Utilities.formatDate(v, tz, cfg.DATE_FORMAT);
   const s = String(v == null ? '' : v).trim();
   if (!s) return '';
   const d = new Date(s);
-  return isNaN(d.getTime()) ? s : Utilities.formatDate(d, tz, SFS.DATE_FORMAT);
+  return isNaN(d.getTime()) ? s : Utilities.formatDate(d, tz, cfg.DATE_FORMAT);
 }
-/* The report can read a different spreadsheet from the agent notices, because the Aug-Oct
-   file is closed: SFS.SHEET_ID wins when it is set, otherwise NOTICE.SHEET_ID. */
-function sfsSs_() {
-  const id = String(SFS.SHEET_ID || NOTICE.SHEET_ID || '');
+/* A report can read a different spreadsheet from the agent notices, because the Aug-Oct file
+   is closed: cfg.SHEET_ID wins when it is set, otherwise NOTICE.SHEET_ID. */
+function reportSs_(cfg) {
+  const id = String(cfg.SHEET_ID || NOTICE.SHEET_ID || '');
   return id ? SpreadsheetApp.openById(id) : SpreadsheetApp.getActiveSpreadsheet();
 }
-function sfsTabs_() { return SFS.TABS && SFS.TABS.length ? SFS.TABS : NOTICE.SALES_TABS; }
-function collectSfs_(ss) {
-  const want = nk_(SFS.STATUS), out = [], seen = {};
-  sfsTabs_().forEach(name => tab_(ss, name).forEach(r => {
-    const st = sfsStatusOf_(r), match = nk_(st);
-    if (SFS.EXACT ? match !== want : match.indexOf(want) < 0) return;
+function reportTabs_(cfg) { return cfg.TABS && cfg.TABS.length ? cfg.TABS : NOTICE.SALES_TABS; }
+function collectReport_(ss, cfg) {
+  const want = nk_(cfg.STATUS), out = [], seen = {};
+  reportTabs_(cfg).forEach(name => tab_(ss, name).forEach(r => {
+    const st = reportStatusOf_(r, cfg), match = nk_(st);
+    if (cfg.EXACT ? match !== want : match.indexOf(want) < 0) return;
     const dv = pick_(r, 'DATE'), raw = dv instanceof Date ? dv.getTime() : new Date(dv).getTime();
     const it = {
-      date: fmtSfs_(dv), sub: String(pick_(r, 'SUB')).trim(), plan: String(pick_(r, 'PLAN')).trim(),
+      date: fmtReportDate_(dv, cfg), sub: String(pick_(r, 'SUB')).trim(), plan: String(pick_(r, 'PLAN')).trim(),
       status: st, remarks: String(pick_(r, 'PAYREM')).trim(),
       sr: String(pick_(r, 'SR')).replace(/\.0$/, '').trim(), agent: String(pick_(r, 'AGENT')).trim(),
       tl: String(pick_(r, 'TL')).trim(), csp: String(pick_(r, 'CSP')).trim(),
-      cspRem: String(pick_(r, 'CSPREM')).trim(), hd: sfsHdOf_(r), _t: isNaN(raw) ? 0 : raw
+      cspRem: String(pick_(r, 'CSPREM')).trim(), hd: hdOf_(r, cfg), _t: isNaN(raw) ? 0 : raw
     };
-    const k = it.sr || (it.date + '|' + it.sub + '|' + it.plan);
-    if (seen[k]) return;
-    seen[k] = 1;
+    it.key = it.sr || (it.date + '|' + it.sub + '|' + it.plan);
+    if (seen[it.key]) return;
+    seen[it.key] = 1;
     out.push(it);
   }));
   /* oldest first - a validation queue is worked from the top */
   return out.sort((x, y) => x._t - y._t || nk_(x.sub).localeCompare(nk_(y.sub)));
 }
 /* The HD REMARKS column of his email is not in the sheet - he writes it himself when he
-   endorses - so SFS.HD_TEXT repeats that line for every row. Set it to '' to read the real
+   endorses - so cfg.HD_TEXT repeats that line for every row. Set it to '' to read the real
    HD REMARKS / HD RECOMMENDATION cells instead. */
-function sfsHdOf_(r) {
-  if (SFS.HD_TEXT) return String(SFS.HD_TEXT).trim();
+function hdOf_(r, cfg) {
+  if (cfg.HD_TEXT) return String(cfg.HD_TEXT).trim();
   for (const c of ['HD REMARKS', 'HD RECOMMENDATION']) {
     if (r[c] !== undefined && r[c] !== null && String(r[c]).trim() !== '') return String(r[c]).trim();
   }
   return '';
 }
 /* The owner's own table style: thin black borders, centred bold caps headers, no banner. */
-function sfsTable_(items) {
+function reportTable_(items, cfg) {
   const th = 'style="border:1px solid #4d4d4d;padding:8px 10px;font-size:12px;font-weight:700;text-align:center"';
   const td = 'style="border:1px solid #4d4d4d;padding:8px 10px;font-size:13px;text-align:center;vertical-align:top"';
   return '<table cellpadding="6" cellspacing="0" style="border-collapse:collapse">' +
-    '<tr>' + SFS.COLS.map(c => `<th ${th}>${esc_(c)}</th>`).join('') + '</tr>' +
-    items.map(x => '<tr>' + SFS.COLS.map(c => {
+    '<tr>' + cfg.COLS.map(c => `<th ${th}>${esc_(c)}</th>`).join('') + '</tr>' +
+    items.map(x => '<tr>' + cfg.COLS.map(c => {
       const v = cellOf_(x, c);
-      if (c === 'SR' && SFS.SR_LINK && v) return `<td ${td}><a href="${esc_(SFS.SR_LINK + v)}">${esc_(v)}</a></td>`;
+      if (c === 'SR' && cfg.SR_LINK && v) return `<td ${td}><a href="${esc_(cfg.SR_LINK + v)}">${esc_(v)}</a></td>`;
       return `<td ${td}>${esc_(v) || '&mdash;'}</td>`;
     }).join('') + '</tr>').join('') + '</table>';
 }
 /* The MMMDA logo is fetched from the dashboard site and attached as an inline image, so it
    shows even when PLDT's mail client blocks pictures from the internet. If the fetch ever
    fails the email still goes out - it just links to the picture instead - and an empty
-   SFS.LOGO_URL leaves the signature as plain text. */
-function sfsLogo_() {
-  if (!SFS.LOGO_URL) return { src: '', blob: null };
+   LOGO_URL leaves the signature as plain text. */
+function reportLogo_(cfg) {
+  if (!cfg.LOGO_URL) return { src: '', blob: null };
   try {
-    const blob = UrlFetchApp.fetch(SFS.LOGO_URL, { muteHttpExceptions: true });
+    const blob = UrlFetchApp.fetch(cfg.LOGO_URL, { muteHttpExceptions: true });
     const code = blob.getResponseCode ? blob.getResponseCode() : 200;
     if (code !== 200) throw new Error('HTTP ' + code);
-    return { src: 'cid:' + SFS.LOGO_KEY, blob: blob };
+    return { src: 'cid:' + cfg.LOGO_KEY, blob: blob };
   } catch (err) {
-    Logger.log('SFS logo could not be attached (' + err + ') - the email will link to it instead');
-    return { src: SFS.LOGO_URL, blob: null };
+    Logger.log(cfg.NAME + ' logo could not be attached (' + err + ') - the email will link to it instead');
+    return { src: cfg.LOGO_URL, blob: null };
   }
 }
-function sfsSig_(logo) {
+function reportSig_(logo, cfg) {
   const img = logo && logo.src
-    ? `<img src="${esc_(logo.src)}" width="${Number(SFS.LOGO_W) || 150}" height="${Number(SFS.LOGO_H) || 147}" ` +
-      `alt="${esc_(SFS.LOGO_ALT)}" style="border:0;display:block;margin:0 0 10px 0">`
+    ? `<img src="${esc_(logo.src)}" width="${Number(cfg.LOGO_W) || 150}" height="${Number(cfg.LOGO_H) || 147}" ` +
+      `alt="${esc_(cfg.LOGO_ALT)}" style="border:0;display:block;margin:0 0 10px 0">`
     : '';
-  const lines = `<p><b>${SFS.SIGN.map(x => esc_(x)).join('<br>')}</b></p>`;
+  const lines = `<p><b>${cfg.SIGN.map(x => esc_(x)).join('<br>')}</b></p>`;
   if (!img) return lines;
-  return SFS.LOGO_ABOVE === false ? lines + `<p>${img}</p>` : `<p>${img}</p>` + lines;
+  return cfg.LOGO_ABOVE === false ? lines + `<p>${img}</p>` : `<p>${img}</p>` + lines;
 }
-function sfsBuild_(items, logo) {
-  const max = SFS.MAX_ROWS || 300, shown = items.slice(0, max);
-  const stamp = Utilities.formatDate(new Date(), SFS.TIMEZONE || NOTICE.TIMEZONE, 'MMMyyyy').toUpperCase();
-  const subject = `3MDA_SFS_VALIDATION_${stamp}`;
+function buildReportMail_(items, logo, cfg) {
+  const max = cfg.MAX_ROWS || 300, shown = items.slice(0, max);
+  const stamp = Utilities.formatDate(new Date(), cfg.TIMEZONE || NOTICE.TIMEZONE, 'MMMyyyy').toUpperCase();
+  const subject = cfg.SUBJECT + stamp;
   const extra = items.length - shown.length;
   const h = `<div style="font-family:Calibri,Arial,sans-serif;font-size:14px;color:#000;max-width:900px">` +
-    `<p>${esc_(SFS.GREET)}</p><p>${esc_(SFS.INTRO)}</p>` + sfsTable_(shown) +
+    `<p>${esc_(cfg.GREET)}</p><p>${esc_(cfg.INTRO)}</p>` + reportTable_(shown, cfg) +
     (extra > 0 ? `<p style="color:#667085;font-size:12px">&hellip;and ${extra} more not listed here.</p>` : '') +
-    `<p style="margin-top:18px"><b>${esc_(SFS.THANKS)}</b></p>` + sfsSig_(logo) +
-    (SFS.FOOTER ? `<p style="color:#667085;font-size:12px">${esc_(SFS.FOOTER)}</p>` : '') + '</div>';
-  const t = `${SFS.GREET}\n\n${SFS.INTRO}\n\n${rowsText_(items, max, SFS.COLS)}` +
-    (extra > 0 ? `\n...and ${extra} more.` : '') + `\n\n${SFS.THANKS}\n\n${SFS.SIGN.join('\n')}`;
+    `<p style="margin-top:18px"><b>${esc_(cfg.THANKS)}</b></p>` + reportSig_(logo, cfg) +
+    (cfg.FOOTER ? `<p style="color:#667085;font-size:12px">${esc_(cfg.FOOTER)}</p>` : '') + '</div>';
+  const t = `${cfg.GREET}\n\n${cfg.INTRO}\n\n${rowsText_(items, max, cfg.COLS)}` +
+    (extra > 0 ? `\n...and ${extra} more.` : '') + `\n\n${cfg.THANKS}\n\n${cfg.SIGN.join('\n')}`;
   return { subject: subject, html: h, text: t };
 }
-/** send=false -> preview only, nothing leaves the account. While SFS.DRY_RUN is true the
+/* Two runs a day would mail the same pending row twice, so each report remembers the SR numbers
+   it already sent that day in Script Properties (cfg.SENT_PREFIX + yyyyMMdd) and the next run
+   drops them: the 2PM copy carries only what arrived after 8AM. The key is rebuilt daily and
+   the older key is deleted, so a row still pending tomorrow is reported again. Only a real
+   live send writes to it - a preview, a test copy or a DRY_RUN send never touches it. */
+function sentKey_(cfg, d) { return cfg.SENT_PREFIX + Utilities.formatDate(d, cfg.TIMEZONE || NOTICE.TIMEZONE, 'yyyyMMdd'); }
+function sentToday_(cfg) {
+  const raw = String(PropertiesService.getScriptProperties().getProperty(sentKey_(cfg, new Date())) || '');
+  const o = {};
+  raw.split(',').forEach(k => { if (k) o[k] = 1; });
+  return o;
+}
+function markSent_(cfg, items) {
+  if (!items.length) return;
+  const p = PropertiesService.getScriptProperties(), key = sentKey_(cfg, new Date());
+  const list = String(p.getProperty(key) || '').split(',').filter(Boolean);
+  items.forEach(i => { if (i.key && list.indexOf(i.key) < 0) list.push(i.key); });
+  if (list.length > 700) Logger.log(cfg.NAME + ' dedupe list is at its 700 SR limit - the oldest rows may be listed again next run');
+  p.setProperty(key, list.slice(-700).join(','));
+  Object.keys(p.getProperties()).forEach(k => { if (k.indexOf(cfg.SENT_PREFIX) === 0 && k !== key) p.deleteProperty(k); });
+}
+/** send=false -> preview only, nothing leaves the account. While cfg.DRY_RUN is true the
  *  report goes to ADMIN_EMAILS and the CC list is ignored, so a test can never reach PLDT. */
-function sendSfs_(send) {
-  const ss = sfsSs_();
-  const items = collectSfs_(ss);
+function sendReport_(send, cfg) {
+  const ss = reportSs_(cfg);
+  const items = collectReport_(ss, cfg);
+  const sent = sentToday_(cfg);
+  const fresh = items.filter(i => !sent[i.key]);
   const admins = NOTICE.ADMIN_EMAILS.map(x => String(x).trim().toLowerCase()).filter(Boolean);
   const testTo = admins[0] || Session.getEffectiveUser().getEmail();
+  const max = cfg.MAX_ROWS || 300;
   const res = {
-    items: items.length, date: fmtD_(new Date()), dryRun: SFS.DRY_RUN,
-    shown: Math.min(items.length, SFS.MAX_ROWS || 300),
-    mode: send ? (SFS.DRY_RUN ? 'test' : 'live') : 'preview', quota: MailApp.getRemainingDailyQuota(),
-    to: SFS.DRY_RUN ? [testTo] : SFS.TO, cc: SFS.DRY_RUN ? [] : SFS.CC
+    report: cfg.NAME, items: items.length, already: items.length - fresh.length, fresh: fresh.length,
+    date: fmtD_(new Date()), dryRun: cfg.DRY_RUN, shown: Math.min(fresh.length, max),
+    mode: send ? (cfg.DRY_RUN ? 'test' : 'live') : 'preview', quota: MailApp.getRemainingDailyQuota(),
+    to: cfg.DRY_RUN ? [testTo] : cfg.TO, cc: cfg.DRY_RUN ? [] : cfg.CC
   };
-  if (!items.length) { res.skipped = 'no rows tagged ' + SFS.STATUS + ' - nothing sent'; return res; }
-  const logo = sfsLogo_();
-  const m = sfsBuild_(items, logo);
+  if (!items.length) { res.skipped = 'no rows tagged ' + cfg.STATUS + ' - nothing sent'; return res; }
+  if (!fresh.length) { res.skipped = items.length + ' row(s) already reported today - nothing new, nothing sent'; return res; }
+  const logo = reportLogo_(cfg);
+  const m = buildReportMail_(fresh, logo, cfg);
   res.subject = m.subject; res.htmlChars = m.html.length;
   res.logo = logo.blob ? 'attached inline' : logo.src ? 'linked only' : 'none';
   if (!send) { res.text = m.text; return res; }
   if (MailApp.getRemainingDailyQuota() < 1) { res.skipped = 'daily Gmail quota reached'; return res; }
   const opt = {
     to: res.to.join(','), name: NOTICE.SENDER_NAME,
-    subject: (SFS.DRY_RUN ? '[TEST] ' : '') + m.subject, body: m.text, htmlBody: m.html
+    subject: (cfg.DRY_RUN ? '[TEST] ' : '') + m.subject, body: m.text, htmlBody: m.html
   };
   if (res.cc.length) opt.cc = res.cc.join(',');
-  if (logo.blob) opt.inlineImages = (function () { const o = {}; o[SFS.LOGO_KEY] = logo.blob; return o; })();
-  try { MailApp.sendEmail(opt); res.sent = true; } catch (err) { res.error = String(err); }
+  if (logo.blob) opt.inlineImages = (function () { const o = {}; o[cfg.LOGO_KEY] = logo.blob; return o; })();
+  try {
+    MailApp.sendEmail(opt);
+    res.sent = true;
+    if (!cfg.DRY_RUN) { markSent_(cfg, fresh.slice(0, max)); res.marked = Math.min(fresh.length, max); }
+  } catch (err) { res.error = String(err); }
   return res;
 }
-function runSfsNotices() { return sendSfs_(true); }
-/* Dropdown-runnable: sends today's report once, right now, honouring SFS.DRY_RUN. */
-function sendSfsReport() { return sendSfs_(true); }
-/* Dropdown-runnable: logs exactly what PLDT would receive, without sending anything. */
-function sfsPreview() {
-  const r = sendSfs_(false);
-  Logger.log('rows tagged ' + SFS.STATUS + ': ' + r.items + (r.items ? ' | shown in the table: ' + r.shown : '') +
+function runSfsNotices() { return sendReport_(true, SFS); }
+function runCvNotices() { return sendReport_(true, CV); }
+/* Dropdown-runnable: sends today's report once, right now, honouring that report's DRY_RUN. */
+function sendSfsReport() { return sendReport_(true, SFS); }
+function sendCvReport() { return sendReport_(true, CV); }
+/* Dropdown-runnable: logs exactly what PLDT would receive, without sending anything and
+   without touching the dedupe list. */
+function previewReport_(cfg) {
+  const r = sendReport_(false, cfg);
+  Logger.log(cfg.NAME + ' | rows tagged ' + cfg.STATUS + ': ' + r.items + ' | new since the last run: ' + r.fresh +
+    (r.fresh ? ' | shown in the table: ' + r.shown : '') +
     ' | logo: ' + (r.logo || 'not fetched - no rows, so there was no email to build') +
-    ' | would go to: ' + r.to.join(',') + ' | cc: ' + (r.cc.length ? r.cc.join(',') : 'none (DRY_RUN is on)'));
-  if (!r.items) { Logger.log('Nothing to report today - the daily run would send no email.'); return r; }
+    ' | would go to: ' + r.to.join(',') + ' | cc: ' + (r.cc.length ? r.cc.join(',')
+      : cfg.DRY_RUN ? 'none (DRY_RUN is on)' : 'none - every address is in the To line'));
+  if (!r.fresh) { Logger.log(r.skipped); return r; }
   Logger.log('subject: ' + r.subject + ' | html chars: ' + r.htmlChars);
   Logger.log(r.text);
   return r;
 }
-/* Dropdown-runnable TEST COPY. It forces SFS.DRY_RUN on while it runs, so this can never
-   reach PLDT even now that the daily report is live - without that, the borrowed rows below
-   would go out to lsabat@pldt.com.ph as if they were endorsements. The real tag appears only
-   when a new encode passes SFS, so on most days the live rule has 0 rows and there is nothing
-   to look at: this temporarily matches SFS_TEST.STATUS instead (a FINAL STATUS value that
-   exists today) and lists at most SFS_TEST.MAX_ROWS rows so the sample stays short.
-   SFS.STATUS, SFS.MAX_ROWS and SFS.DRY_RUN are put back before it returns, whatever happens
-   inside - the last log line prints what they went back to. */
-const SFS_TEST = { STATUS: 'REENCODED', MAX_ROWS: 12 };
-function sfsTestReport() {
-  const keepStatus = SFS.STATUS, keepMax = SFS.MAX_ROWS, keepDry = SFS.DRY_RUN;
-  SFS.STATUS = SFS_TEST.STATUS;
-  SFS.MAX_ROWS = Math.min(SFS_TEST.MAX_ROWS, keepMax);
-  SFS.DRY_RUN = true;
+function sfsPreview() { return previewReport_(SFS); }
+function cvPreview() { return previewReport_(CV); }
+/* Dropdown-runnable TEST COPY, one per report. It forces that report's DRY_RUN on while it
+   runs, so it can never reach PLDT even while the real report is live - without that, the
+   borrowed rows below would go out as endorsements. On most days the live rule has 0 rows and
+   there is nothing to look at, so it temporarily matches cfg.TEST.STATUS instead (a value that
+   exists today) and lists at most cfg.TEST.MAX_ROWS rows so the sample stays short. STATUS,
+   MAX_ROWS and DRY_RUN are restored before it returns, whatever happens inside, and the last
+   log line prints what they went back to. */
+function testReport_(cfg) {
+  const keepStatus = cfg.STATUS, keepMax = cfg.MAX_ROWS, keepDry = cfg.DRY_RUN;
+  cfg.STATUS = cfg.TEST.STATUS;
+  cfg.MAX_ROWS = Math.min(cfg.TEST.MAX_ROWS, keepMax);
+  cfg.DRY_RUN = true;
   let r;
   try {
-    r = sendSfs_(true);
+    r = sendReport_(true, cfg);
   } finally {
-    SFS.STATUS = keepStatus;
-    SFS.MAX_ROWS = keepMax;
-    SFS.DRY_RUN = keepDry;
+    cfg.STATUS = keepStatus;
+    cfg.MAX_ROWS = keepMax;
+    cfg.DRY_RUN = keepDry;
   }
-  Logger.log('test copy ' + (r.sent ? 'sent to ' + r.to.join(',') : 'NOT sent') +
+  Logger.log(cfg.NAME + ' test copy ' + (r.sent ? 'sent to ' + r.to.join(',') : 'NOT sent') +
     ' | rows matched: ' + r.items + ' | shown in the table: ' + r.shown +
-    ' | subject: ' + (r.subject || '-') + ' | logo: ' + r.logo);
-  Logger.log('settings restored: ' + SFS.STATUS + ' / max ' + SFS.MAX_ROWS + ' / DRY_RUN ' + SFS.DRY_RUN +
-    (SFS.DRY_RUN ? '' : ' (LIVE - PLDT receives the daily report)') +
-    ' - the test matched "' + SFS_TEST.STATUS + '" instead' + (r.skipped ? ' | ' + r.skipped : ''));
+    ' | subject: ' + (r.subject || '-') + ' | logo: ' + (r.logo || '-'));
+  Logger.log('settings restored: ' + cfg.STATUS + ' / max ' + cfg.MAX_ROWS + ' / DRY_RUN ' + cfg.DRY_RUN +
+    (cfg.DRY_RUN ? '' : ' (LIVE - goes to ' + cfg.TO.join(',') + ')') +
+    ' - the test matched "' + cfg.TEST.STATUS + '" instead' + (r.skipped ? ' | ' + r.skipped : ''));
   return r;
 }
-function sfsStatus_() {
+function sfsTestReport() { return testReport_(SFS); }
+function cvTestReport() { return testReport_(CV); }
+function hoursText_(cfg) { return cfg.SEND_HOURS.map(h => (h % 12 || 12) + (h < 12 ? 'AM' : 'PM')).join(' and '); }
+function reportStatus_(cfg, handler) {
   return {
-    installed: ScriptApp.getProjectTriggers().some(t => t.getHandlerFunction() === 'runSfsNotices'),
-    hour: SFS.SEND_HOUR, tz: SFS.TIMEZONE || NOTICE.TIMEZONE, dryRun: SFS.DRY_RUN,
-    to: SFS.TO, cc: SFS.CC, status: SFS.STATUS, quota: MailApp.getRemainingDailyQuota(),
-    file: SFS.SHEET_ID || NOTICE.SHEET_ID, tabs: sfsTabs_().join(','),
-    rule: SFS.FROM.join(' or ') + (SFS.EXACT ? ' = ' : ' contains ') + SFS.STATUS,
-    note: 'Apps Script fires a day trigger somewhere inside the hour, not at an exact minute'
+    report: cfg.NAME,
+    installed: ScriptApp.getProjectTriggers().some(t => t.getHandlerFunction() === handler),
+    hours: cfg.SEND_HOURS, hour: cfg.SEND_HOURS[0], tz: cfg.TIMEZONE || NOTICE.TIMEZONE, dryRun: cfg.DRY_RUN,
+    to: cfg.TO, cc: cfg.CC, status: cfg.STATUS, quota: MailApp.getRemainingDailyQuota(),
+    file: cfg.SHEET_ID || NOTICE.SHEET_ID, tabs: reportTabs_(cfg).join(','),
+    rule: cfg.FROM.join(' or ') + (cfg.EXACT ? ' = ' : ' contains ') + cfg.STATUS,
+    dedupe: 'rows already mailed today are skipped; the list resets each day',
+    note: 'Apps Script fires a day trigger somewhere inside each hour, not at an exact minute'
   };
 }
-function installSfsTrigger() {
-  ScriptApp.getProjectTriggers().filter(t => t.getHandlerFunction() === 'runSfsNotices').forEach(t => ScriptApp.deleteTrigger(t));
-  ScriptApp.newTrigger('runSfsNotices').timeBased().everyDays(1).atHour(SFS.SEND_HOUR).create();
-  const st = sfsStatus_();
-  Logger.log('daily SFS trigger: ' + (st.installed ? 'installed' : 'NOT installed') +
-    ' | runs in the ' + st.hour + 'AM hour (' + st.tz + ') | rule: ' + st.rule +
+/* One day trigger per hour in cfg.SEND_HOURS, and never a duplicate: every trigger already
+   pointing at this handler is deleted first, so running this twice is safe. */
+function installReportTrigger_(cfg, handler) {
+  ScriptApp.getProjectTriggers().filter(t => t.getHandlerFunction() === handler).forEach(t => ScriptApp.deleteTrigger(t));
+  cfg.SEND_HOURS.forEach(h => ScriptApp.newTrigger(handler).timeBased().everyDays(1).atHour(h).create());
+  const st = reportStatus_(cfg, handler);
+  Logger.log(cfg.NAME + ' trigger: ' + (st.installed ? 'installed' : 'NOT installed') +
+    ' | runs in the ' + hoursText_(cfg) + ' hour (' + st.tz + ') | rule: ' + st.rule +
     ' | file: ' + st.file + ' | tabs: ' + st.tabs +
     ' | ' + (st.dryRun ? 'DRY_RUN is ON, copies go to ' + NOTICE.ADMIN_EMAILS.join(',') + ' only' : 'LIVE, goes to ' + st.to.join(',')) +
-    ' | ' + st.note);
+    ' | ' + st.dedupe + ' | ' + st.note);
   return st;
 }
-/* Run sfsProbe from the dropdown to check the rule against the LIVE sheet before turning
-   SFS.DRY_RUN off. It emails nothing and writes nothing. It logs, per tab: the column names,
-   the most common FINAL STATUS / HD REMARKS / HD RECOMMENDATION / CSP STATUS values, every
-   value that mentions SFS with its row count, EVERY column that ever contains the word SFS
-   with its exact wording (the "##" lines - that is what settles SFS.FROM), the full contents
-   of any row whose subscriber is in SFS_PROBE_ (the two names from the owner's own sample
-   email), and how many rows the current rule would report. Paste that log back and the right
-   SFS.FROM / SFS.EXACT setting is decided by data instead of by guessing. */
-const SFS_PROBE_ = ['MAGILYN MACATANGAY', 'LORAINE MALBAS'];
-function sfsProbe() {
-  const ss = sfsSs_();
-  Logger.log('file: ' + ss.getName() + ' | tabs read for the report: ' + sfsTabs_().join(', ') +
-    (SFS.SHEET_ID ? ' (SFS.SHEET_ID)' : ' (same file as the agent notices)'));
+function installSfsTrigger() { return installReportTrigger_(SFS, 'runSfsNotices'); }
+function installCvTrigger() { return installReportTrigger_(CV, 'runCvNotices'); }
+/* Run sfsProbe or cvProbe from the dropdown to check a rule against the LIVE sheet before
+   trusting it. It emails nothing and writes nothing. Per tab it logs the column names, the ten
+   most common values of the status and remarks columns, every value mentioning cfg.PROBE with
+   its row count (">>"), EVERY column that ever carries those words with its exact wording
+   ("##" - that is what settles cfg.FROM), the full contents of any row whose subscriber is in
+   PROBE_NAMES_, and how many rows the current rule would report. Paste that log back and the
+   right cfg.FROM / cfg.EXACT / cfg.STATUS setting is decided by data instead of by guessing. */
+const PROBE_NAMES_ = ['MAGILYN MACATANGAY', 'LORAINE MALBAS'];
+function probeReport_(cfg) {
+  const ss = reportSs_(cfg), re = new RegExp(cfg.PROBE.join('|'), 'i');
+  Logger.log(cfg.NAME + ' | file: ' + ss.getName() + ' | tabs read for the report: ' + reportTabs_(cfg).join(', ') +
+    (cfg.SHEET_ID ? ' (' + cfg.NAME + '.SHEET_ID)' : ' (same file as the agent notices)'));
   Logger.log('all tabs in that file: ' + ss.getSheets().map(s => s.getName() + '=' + Math.max(0, s.getLastRow() - 1)).join(', '));
-  sfsTabs_().concat([NOTICE.VALIDATORS_TAB]).forEach(name => {
+  reportTabs_(cfg).concat([NOTICE.VALIDATORS_TAB]).forEach(name => {
     const rows = tab_(ss, name);
     if (!rows.length) { Logger.log(name + ': no readable rows (a header line with STATUS and AGENT is needed)'); return; }
     Logger.log(name + ' columns: ' + Object.keys(rows[0]).join(' | '));
-    ['FINAL STATUS', 'HD REMARKS', 'HD RECOMMENDATION', 'CSP STATUS'].forEach(col => {
+    ['FINAL STATUS', 'CSP REMARKS', 'HD REMARKS', 'HD RECOMMENDATION', 'CSP STATUS'].forEach(col => {
       const c = {};
       rows.forEach(r => { const k = String(r[col] == null ? '' : r[col]).trim() || '(blank)'; c[k] = (c[k] || 0) + 1; });
       const keys = Object.keys(c);
       Logger.log(name + ' ' + col + ': ' + keys.sort((a, b) => c[b] - c[a]).slice(0, 10).map(k => k + '=' + c[k]).join(', ') + (keys.length > 10 ? ' ...(' + keys.length + ' distinct)' : ''));
-      keys.filter(k => /SFS/i.test(k)).forEach(k => Logger.log('  >> ' + name + ' ' + col + ' "' + k + '" rows=' + c[k]));
+      keys.filter(k => re.test(k)).forEach(k => Logger.log('  >> ' + name + ' ' + col + ' "' + k + '" rows=' + c[k]));
     });
-    /* the decisive part: EVERY column, not just the four above, that ever carries the word SFS */
+    /* the decisive part: EVERY column, not just the five above, that ever carries those words */
     const hits = {};
     Object.keys(rows[0]).forEach(col => {
       const vals = {};
       rows.forEach(r => {
         const v = String(r[col] == null ? '' : r[col]).trim();
-        if (/SFS/i.test(v)) vals[v] = (vals[v] || 0) + 1;
+        if (re.test(v)) vals[v] = (vals[v] || 0) + 1;
       });
       if (Object.keys(vals).length) hits[col] = vals;
     });
     const hc = Object.keys(hits);
-    Logger.log(name + ' columns that ever contain "SFS": ' + (hc.length ? hc.join(', ') : 'NONE'));
+    Logger.log(name + ' columns that ever contain "' + cfg.PROBE.join('/') + '": ' + (hc.length ? hc.join(', ') : 'NONE'));
     hc.forEach(col => Object.keys(hits[col]).sort((a, b) => hits[col][b] - hits[col][a]).slice(0, 8)
       .forEach(v => Logger.log('  ## ' + name + ' ' + col + ' = "' + v.slice(0, 70) + '" rows=' + hits[col][v])));
   });
-  SFS_PROBE_.forEach(needle => {
+  PROBE_NAMES_.forEach(needle => {
     let found = 0;
-    sfsTabs_().forEach(name => tab_(ss, name).forEach(r => {
+    reportTabs_(cfg).forEach(name => tab_(ss, name).forEach(r => {
       if (nk_(r['SUBSCRIBER NAME']).indexOf(nk_(needle)) < 0) return;
       found++;
       Logger.log('MATCH ' + needle + ' [' + name + ']: ' + Object.keys(r)
@@ -613,8 +696,11 @@ function sfsProbe() {
     }));
     Logger.log('rows matched for ' + needle + ': ' + found);
   });
-  Logger.log('current rule would report ' + collectSfs_(ss).length + ' row(s): ' + SFS.FROM.join(' or ') + (SFS.EXACT ? ' = ' : ' contains ') + SFS.STATUS);
+  Logger.log('current rule would report ' + collectReport_(ss, cfg).length + ' row(s): ' +
+    cfg.FROM.join(' or ') + (cfg.EXACT ? ' = ' : ' contains ') + cfg.STATUS);
 }
+function sfsProbe() { return probeReport_(SFS); }
+function cvProbe() { return probeReport_(CV); }
 
 /* --------------------------------------------------------------------- log API
    The dashboard reads and writes its shared activity + payment log through this
