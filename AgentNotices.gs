@@ -145,8 +145,9 @@ const SFS = {
 /* The CREDIT VALIDATION report - same shape, same recipients, different queue. The owner's
    manual mail reads "For credit validation and approval." over rows whose CSP REMARKS says
    ESCALATED TO CVAA. He confirmed on 2026-11-04 that BOTH daily reports go to Leonard alone on
-   the To line with the same three CCs, so CV.TO / CV.CC mirror SFS exactly. DRY_RUN is true:
-   cvTestReport shows him a real copy first, and only his "go" turns it live. */
+   the To line with the same three CCs, so CV.TO / CV.CC mirror SFS exactly. DRY_RUN is false since
+   2026-11-05: he read the cvTestReport copy and gave the go, so CV now endorses to PLDT on the same
+   8AM + 2PM schedule as SFS. */
 const CV = {
   NAME: 'CV',
   TO: ['lsabat@pldt.com.ph'],
@@ -171,7 +172,7 @@ const CV = {
   DATE_FORMAT: 'M/d/yyyy',
   SR_LINK: '',
   SEND_HOURS: [8, 14],
-  DRY_RUN: true,
+  DRY_RUN: false,                    // LIVE since 2026-11-05 - the owner read the cvTestReport copy and said "OO, GO CV LIVE"
   MAX_ROWS: 300,
   TIMEZONE: '',
   SUBJECT: '3MDA_CREDIT_VALIDATION_',

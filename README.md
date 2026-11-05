@@ -85,7 +85,7 @@ mail on the same engine: four conditions instead of one, and it sends **at or af
   owner confirmed on 2026-11-04 that both daily reports go to `lsabat@pldt.com.ph` on the To line
   with the same three CCs. Intro `For credit validation and approval.`, HD REMARKS line
   `FOR CREDIT VALIDATION AND APPROVAL`, subject `3MDA_CREDIT_VALIDATION_` + `MMMYYYY`.
-  **Still `DRY_RUN = true`** — it goes live only after he reviews a `cvTestReport` copy.
+  **`DRY_RUN = false` since 2026-11-05** — he read a `cvTestReport` copy and said *"OO, GO CV LIVE"*.
 * **Its rule is the owner's own words too: `CSP REMARKS` contains `ESCALATED TO CVAA`.** Note
   what that excludes: the `FOR COMPLIANCE VERIFICATION RCM` row visible in his screenshot is
   *not* reported by this rule. If he wants it, `CV.STATUS` becomes that wording (or `CV.FROM`
@@ -228,8 +228,8 @@ mail on the same engine: four conditions instead of one, and it sends **at or af
 * **SFS is LIVE since 2026-11-04** — the owner approved it after reviewing a real copy, so
   `SFS.DRY_RUN` is `false` and the report goes to `SFS.TO` + `SFS.CC`. **AFD is LIVE since
   2026-11-05** (same approval path: he read an `afdTestReport` copy, then set `AFD.DRY_RUN = false`
-  and ran `installAfdTrigger`). **CV still has `DRY_RUN = true`** — it goes live only after he
-  reviews a `cvTestReport` copy. Set either
+  and ran `installAfdTrigger`). **CV is LIVE since 2026-11-05** (`CV.DRY_RUN = false`, on the same
+  approval path). **All four reports now mail PLDT on their own.** Set any of them
   back to `true` any time to stop PLDT receiving it: while it is true every copy goes to
   `NOTICE.ADMIN_EMAILS` only, the CC list is ignored, and the subject gains `[TEST] `.
   `sfsPreview` / `cvPreview` log the exact body without sending anything and without touching
@@ -267,7 +267,8 @@ mail on the same engine: four conditions instead of one, and it sends **at or af
   daily dedupe absorbs (`nothing new, nothing sent`). The whole check is wrapped in `try/catch`
   so a trigger-quota failure logs a line and the report still goes out. When it is the **CV**
   pair that was new and CV is still on `DRY_RUN`, `cvReviewCopy_()` posts him one `[TEST]` copy
-  — at most once per day, keyed by `CV_REVIEW_yyyyMMdd` in Script Properties.
+  — at most once per day, keyed by `CV_REVIEW_yyyyMMdd` in Script Properties. Since CV went live on
+  2026-11-05 that copy no longer fires: it only exists to show him the wording before the switch.
 * `cfg.SR_LINK`, if set, turns each SR into a link to that number's page. Both are shipped
   empty because the owner asked for plain numbers ("Hindi na kailangan, plain number lang"),
   and a link should only be handed to PLDT if it is safe to show.
@@ -286,11 +287,12 @@ mail on the same engine: four conditions instead of one, and it sends **at or af
   Remarks, Agent, Team Leader, CSP Status`).
 * A new daily email needs no web-app redeploy — triggers run **Head**. Only a new `/exec`
   action would need Deploy > New version.
-* Putting this revision in is one paste and one `Ctrl+S`: then `installSfsTrigger()` and
-  `installCvTrigger()` once each (four day triggers in total), `cvProbe()` to see the CVAA
-  wording and row counts on the live file, `cvPreview()` for the body, and `cvTestReport()`
-  for a real copy in his own inbox. `CV.DRY_RUN = false` — after he reads that copy — is the
-  only line that makes PLDT receive it.
+* Putting this revision in is one paste and one `Ctrl+S`: then `installSfsTrigger()`,
+  `installCvTrigger()`, `installAfdTrigger()` and `installAfd12Trigger()` — each deletes every
+  trigger of its own handler before creating its pair, so a short or duplicated pair is fixed by
+  re-running it, never by hand. On 2026-11-05 the owner's Triggers page went from **SFS 1 + CV 3**
+  to exactly **2 + 2 + 2 + 2 + 1 = 9**. All four reports are past the `DRY_RUN` gate now, so a paste
+  is the only thing standing between a rule change and PLDT receiving it.
 * **AFD is live and on its own schedule.** The path the owner took on 2026-11-05: `afdProbe()` to
   measure the columns on the live file, `afdTestReport()` for a copy in his own inbox, then
   `AFD.DRY_RUN = false` in the editor and `installAfdTrigger()` (the 10AM + 11AM pair, so the mail
