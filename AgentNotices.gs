@@ -758,6 +758,19 @@ function markSent_(cfg, items) {
 /** send=false -> preview only, nothing leaves the account. While cfg.DRY_RUN is true the
  *  report goes to ADMIN_EMAILS and the CC list is ignored, so a test can never reach PLDT.
  *  force=true bypasses cfg.SEND_FROM, for the click-it-now entries. */
+/* The send path used to answer only in its return value, so a screenshot of a pressed
+   sendAfd12Report looked IDENTICAL whether PLDT got the rows or the day was simply empty: both
+   printed nothing but the unreadable-date lines. Every send now says its own outcome out loud. */
+function logSendOutcome_(cfg, res) {
+  Logger.log(cfg.NAME + ' | ' + (res.sent ? 'SENT' : 'NOT SENT') + ': ' + res.shown + ' row(s) in the mail' +
+    (res.subject ? ' | subject ' + res.subject : '') +
+    ' | ' + (res.dryRun ? 'DRY_RUN test copy, went to ' : 'went to ') + res.to.join(',') +
+    (res.cc.length ? ' | cc ' + res.cc.join(',') : ' | no cc') +
+    (res.logo ? ' | logo ' + res.logo : '') +
+    (res.marked ? ' | marked as reported today: ' + res.marked : '') +
+    (res.error ? ' | ERROR ' + res.error : '') +
+    (res.skipped ? ' | ' + res.skipped : ''));
+}
 function sendReport_(send, cfg, force) {
   /* Apps Script can only say "somewhere in the 10 o'clock hour", never "at 10:30", so a
      scheduled AFD run can wake up at 10:05 while the call-out is still going on. Such a run
@@ -802,9 +815,10 @@ function sendReport_(send, cfg, force) {
     /* on an AFD day with rows tagged but none due today, "no rows tagged" alone would be the
        wrong explanation, so the date condition is named too */
     res.skipped = 'no rows tagged ' + statusWords_(cfg) + (cfg.ON_DAY ? ' whose ' + cfg.ON_DAY + ' is today' : '') + ' - nothing sent';
+    if (send) logSendOutcome_(cfg, res);
     return res;
   }
-  if (!fresh.length) { res.skipped = items.length + ' row(s) already reported today - nothing new, nothing sent'; return res; }
+  if (!fresh.length) { res.skipped = items.length + ' row(s) already reported today - nothing new, nothing sent'; if (send) logSendOutcome_(cfg, res); return res; }
   const logo = reportLogo_(cfg);
   const m = buildReportMail_(fresh, logo, cfg);
   res.subject = m.subject; res.htmlChars = m.html.length;
@@ -812,7 +826,7 @@ function sendReport_(send, cfg, force) {
   const tbl = fresh.slice(0, max);
   res.blankCols = cfg.COLS.filter(c => tbl.every(x => cellOf_(x, c) === ''));
   if (!send) { res.text = m.text; return res; }
-  if (MailApp.getRemainingDailyQuota() < 1) { res.skipped = 'daily Gmail quota reached'; return res; }
+  if (MailApp.getRemainingDailyQuota() < 1) { res.skipped = 'daily Gmail quota reached'; logSendOutcome_(cfg, res); return res; }
   const opt = {
     to: res.to.join(','), name: NOTICE.SENDER_NAME,
     subject: (cfg.DRY_RUN ? '[TEST] ' : '') + m.subject, body: m.text, htmlBody: m.html
@@ -824,6 +838,7 @@ function sendReport_(send, cfg, force) {
     res.sent = true;
     if (!cfg.DRY_RUN) { markSent_(cfg, fresh.slice(0, max)); res.marked = Math.min(fresh.length, max); }
   } catch (err) { res.error = String(err); }
+  logSendOutcome_(cfg, res);
   return res;
 }
 function runSfsNotices() { ensureReportTriggers_(); return sendReport_(true, SFS); }

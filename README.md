@@ -314,6 +314,17 @@ mail on the same engine: four conditions instead of one, and it sends **at or af
   that day they are gone from the rule. Two steps are still his to press in Apps Script after the
   paste: `sendAfd12Report()` for today, and `installAfd12Trigger()` for the 10AM + 11AM pair that
   makes every later day automatic. Until the second one runs, cluster 12 mails nobody on its own.
+  He pressed `sendAfd12Report` at 2:53 PM and the log named the two dateless rows
+  (`?? PLDT | SR 2313229824`, `?? PLDT | SR 2313368081`) — but said nothing about the two that were
+  due, which is the gap below.
+* **Every send now prints its own verdict.** Until then a pressed `sendAfd12Report` logged only the
+  unreadable-date lines, so the screenshot looked identical whether PLDT received the rows or the day
+  was empty. `logSendOutcome_` adds one line per send: `AFD12 | SENT: 2 row(s) in the mail | subject
+  3MDA_AFD12_RESCHEDULE_NOV2026 | went to lsabat@pldt.com.ph | cc … | marked as reported today: 2`,
+  or `NOT SENT: 0 row(s) … | <the reason>` — including `already reported today`, `daily Gmail quota
+  reached` and a thrown `MailApp` error. It is guarded by `send`, so `afd12Preview` keeps its own
+  `would go to:` lines and never claims to have sent anything, and a `DRY_RUN` copy says
+  `DRY_RUN test copy, went to …` instead of naming PLDT.
 
 ## Agent accounts and Forgot password
 
