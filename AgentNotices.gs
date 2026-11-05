@@ -180,11 +180,14 @@ const CV = {
   TEST: { STATUS: 'ESCALATED', MAX_ROWS: 12 }
 };
 
-/* The AFD RESCHEDULE report - the third queue, and the only one with three conditions instead
+/* The AFD RESCHEDULE report - the third queue, and the only one with four conditions instead
    of one, exactly as the owner described it on 2026-11-05: FINAL STATUS says "AFD - RESCHEDULE",
-   the CLUSTER column says 11, and the revisit day is written by hand in HD RECOMMENDATION as
-   "AFD - NOV 5". STATUS is a list because of that dash - the row counts only when BOTH words are
-   in the same cell, so it is caught whatever he types around them. The mail goes to the same
+   the CLUSTER column says 11, HD RECOMMENDATION does NOT say RPR, and the revisit day is written
+   by hand in HD RECOMMENDATION as "AFD - NOV 5". STATUS is a list because of that dash - the row
+   counts only when BOTH words are in the same cell, so it is caught whatever he types around
+   them. The RPR exclusion came from the same day's probe: a cluster 11 row tagged AFD +
+   RESCHEDULE had "RPR - RESCHEDULE" written in HD RECOMMENDATION, and he said RPR is rescheduled
+   another way, so it is not this mail's queue. The mail goes to the same
    four addresses as SFS and CV, and ON_DAY is the filter he chose: only rows whose revisit date
    IS the day the report runs. DRY_RUN is true: he has not yet said the AFD mail is live.
    GREET / INTRO / HD_TEXT / COLS follow his own AFD email, so the only thing the machine
@@ -221,6 +224,11 @@ const AFD = {
   FROM: ['FINAL STATUS'],
   EXACT: false,
   WHERE: [{ COL: 'CLUSTER', IS: '11' }],  // extra equality filters, tolerant of 11 / '11' / '11.0' / 'CLUSTER 11'
+  /* cfg.NOT: wording that must be ABSENT. Measured on the live sheet 2026-11-05: one cluster 11
+     row tagged AFD + RESCHEDULE in FINAL STATUS has "RPR - RESCHEDULE" in HD RECOMMENDATION, and
+     the owner said RPR is rescheduled another way - it does not belong in this mail. Checked
+     before the cluster and the date, so an RPR row never lands in the "no readable date" list. */
+  NOT: [{ COL: 'HD RECOMMENDATION', HAS: 'RPR' }],
   ON_DAY: 'HD RECOMMENDATION',            // the revisit day is read from this cell and must be today
   HD_TEXT: 'PART OF AFD {DATE} - SUBS WANT TO REQUEST FOR REVISIT',
   COLS: ['DATE', 'SUBSCRIBER NAME', 'SR', 'ACCT', 'PR', 'CSP STATUS', 'BRGY', 'CITY', 'CLUSTER', 'HD REMARKS'],
@@ -285,6 +293,11 @@ function pick_(r, key) {
 }
 /* a filter column may be a real header (HD RECOMMENDATION) or one of the ALIAS_ keys above */
 const colOf_ = (r, col) => String((ALIAS_[col] ? pick_(r, col) : r[col]) == null ? '' : (ALIAS_[col] ? pick_(r, col) : r[col]));
+/* cfg.NOT: a row carrying this wording in this column is NOT part of the queue, whatever
+   FINAL STATUS says. The owner's RPR exclusion (2026-11-05): "ang RPR - RESCHEDULE ay hindi
+   kasama, dahil may ibang paraan ng reschedule dito". Compared the same loose way as the rest
+   of the rule, so RPR / rpr / "RPR - RESCHEDULE" all land the same. */
+const notOut_ = (r, cfg) => !!cfg.NOT && cfg.NOT.some(n => nk_(colOf_(r, n.COL)).indexOf(nk_(n.HAS)) >= 0);
 /* header row = first row (within the top 10) carrying both STATUS and AGENT */
 function tab_(ss, name, plain) {
   const sh = ss.getSheetByName(name);
@@ -523,6 +536,7 @@ function revisitDay_(v, tz) {
 function ruleText_(cfg) {
   return cfg.FROM.join(' or ') + (cfg.EXACT ? ' = ' : ' contains ') + statusWords_(cfg) +
     (cfg.WHERE && cfg.WHERE.length ? ', ' + cfg.WHERE.map(w => w.COL + ' = ' + w.IS).join(' and ') : '') +
+    (cfg.NOT && cfg.NOT.length ? ', ' + cfg.NOT.map(n => n.COL + ' is not ' + n.HAS).join(' and ') : '') +
     (cfg.ON_DAY ? ', ' + cfg.ON_DAY + ' is the day the report runs' : '');
 }
 function fmtReportDate_(v, cfg) {
@@ -548,6 +562,7 @@ function collectReport_(ss, cfg, miss) {
     const st = reportStatusOf_(r, cfg);
     let got = null;
     if (!statusHit_(nk_(st), cfg)) return;
+    if (notOut_(r, cfg)) return;
     if (cfg.WHERE && !cfg.WHERE.every(w => cellEq_(colOf_(r, w.COL), w.IS))) return;
     if (cfg.ON_DAY) {
       got = revisitDay_(colOf_(r, cfg.ON_DAY), tz);
@@ -800,17 +815,18 @@ function previewReport_(cfg) {
    today. Nothing is sent and the dedupe list is not touched. */
 function diagnoseReport_(cfg) {
   const ss = reportSs_(cfg), tz = cfg.TIMEZONE || NOTICE.TIMEZONE;
-  const c = { rows: 0, tagged: 0, cluster: 0, otherDay: {}, unread: 0, sample: '' };
+  const c = { rows: 0, tagged: 0, excluded: 0, cluster: 0, otherDay: {}, unread: 0, sample: '' };
   reportTabs_(cfg).forEach(name => tab_(ss, name).forEach(r => {
     c.rows++;
     const st = reportStatusOf_(r, cfg);
     if (!statusHit_(nk_(st), cfg)) return;
     c.tagged++;
-    if (cfg.WHERE && !cfg.WHERE.every(w => cellEq_(r[w.COL], w.IS))) return;
+    if (notOut_(r, cfg)) { c.excluded++; return; }
+    if (cfg.WHERE && !cfg.WHERE.every(w => cellEq_(colOf_(r, w.COL), w.IS))) return;
     c.cluster++;
     if (!cfg.ON_DAY) return;
-    const got = revisitDay_(r[cfg.ON_DAY], tz);
-    if (!got) { c.unread++; c.sample = c.sample || name + ' ' + cfg.ON_DAY + '="' + String(r[cfg.ON_DAY] == null ? '' : r[cfg.ON_DAY]).slice(0, 50) + '"'; return; }
+    const got = revisitDay_(colOf_(r, cfg.ON_DAY), tz);
+    if (!got) { c.unread++; c.sample = c.sample || name + ' ' + cfg.ON_DAY + '="' + colOf_(r, cfg.ON_DAY).slice(0, 50) + '"'; return; }
     if (got.md !== Utilities.formatDate(new Date(), tz, 'M-d')) c.otherDay[got.text] = (c.otherDay[got.text] || 0) + 1;
   }));
   const days = Object.keys(c.otherDay).sort();
@@ -818,6 +834,7 @@ function diagnoseReport_(cfg) {
     Utilities.formatDate(new Date(), tz, 'yyyy-MM-dd') + ' in ' + tz);
   Logger.log(cfg.NAME + ' count | file: ' + ss.getName() + ' | tabs: ' + reportTabs_(cfg).join(',') + ' | rows read: ' + c.rows +
     ' | tagged ' + statusWords_(cfg) + ': ' + c.tagged +
+    (cfg.NOT && cfg.NOT.length ? ' | ' + cfg.NOT.map(n => n.HAS).join('+') + ' excluded: ' + c.excluded : '') +
     (cfg.WHERE && cfg.WHERE.length ? ' | ' + cfg.WHERE.map(w => w.COL + ' ' + w.IS).join(' + ') + ': ' + c.cluster : '') +
     (cfg.ON_DAY ? ' | revisit today: ' + (c.cluster - c.unread - days.reduce((s, d) => s + c.otherDay[d], 0)) : ''));
   if (cfg.ON_DAY && days.length) Logger.log(cfg.NAME + ' right cluster but NOT due today (' + days.length +
@@ -1078,7 +1095,7 @@ function afdProbe() {
   Logger.log('AFD rule: ' + ruleText_(AFD) + ' | today is ' +
     Utilities.formatDate(new Date(), AFD.TIMEZONE || NOTICE.TIMEZONE, 'yyyy-MM-dd') + ' in ' + (AFD.TIMEZONE || NOTICE.TIMEZONE));
   const ssA = reportSs_(AFD), today = Utilities.formatDate(new Date(), AFD.TIMEZONE || NOTICE.TIMEZONE, 'M-d');
-  const cnt = { rows: 0, tagged: 0, cluster: 0, due: 0 }, otherDay = {}, unread = {};
+  const cnt = { rows: 0, tagged: 0, excluded: 0, cluster: 0, due: 0 }, otherDay = {}, unread = {};
   let peek = 0;
   reportTabs_(AFD).forEach(name => {
     const rows = tab_(ssA, name);
@@ -1091,8 +1108,10 @@ function afdProbe() {
       if (peek < 5) {
         peek++;
         Logger.log('  tagged [' + name + ']: FINAL STATUS="' + String(st).slice(0, 40) + '" | ' + AFD.WHERE[0].COL + '="' +
-          cv + '" | ' + AFD.ON_DAY + '="' + colOf_(r, AFD.ON_DAY).slice(0, 40) + '"');
+          cv + '" | ' + AFD.ON_DAY + '="' + colOf_(r, AFD.ON_DAY).slice(0, 40) + '"' +
+          (notOut_(r, AFD) ? ' | EXCLUDED (' + AFD.NOT.map(n => n.HAS).join('+') + ')' : ''));
       }
+      if (notOut_(r, AFD)) { cnt.excluded++; return; }
       if (!cellEq_(colOf_(r, AFD.WHERE[0].COL), AFD.WHERE[0].IS)) return;
       cnt.cluster++;
       const got = revisitDay_(colOf_(r, AFD.ON_DAY), AFD.TIMEZONE || NOTICE.TIMEZONE);
@@ -1101,8 +1120,12 @@ function afdProbe() {
       cnt.due++;
     });
   });
+  const notWords_ = cfg => (cfg.NOT || []).map(n => n.HAS).join('+');
   Logger.log('AFD count | rows read: ' + cnt.rows + ' | FINAL STATUS tagged AFD + RESCHEDULE: ' + cnt.tagged +
+    ' | ' + notWords_(AFD) + ' excluded: ' + cnt.excluded +
     ' | ' + AFD.WHERE[0].COL + ' ' + AFD.WHERE[0].IS + ': ' + cnt.cluster + ' | revisit today: ' + cnt.due);
+  if (cnt.excluded) Logger.log('AFD ' + cnt.excluded + ' tagged row(s) left out because ' + AFD.NOT[0].COL +
+    ' says ' + AFD.NOT[0].HAS + ' - may ibang paraan ng reschedule, hindi AFD queue');
   const od = Object.keys(otherDay).sort();
   if (od.length) Logger.log('AFD right cluster but NOT due today: ' + od.map(d => d + '=' + otherDay[d]).join(', '));
   const ur = Object.keys(unread);

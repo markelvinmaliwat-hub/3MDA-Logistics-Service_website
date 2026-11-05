@@ -32,7 +32,8 @@ In `AgentNotices.gs`: `DRY_RUN` (true = every notice goes to `ADMIN_EMAILS` labe
 `[TEST for <agent>]`), `SEND_HOUR`, `MAX_ROWS` per section, `SHEET_ID`, `ADMIN_EMAILS` —
 and one config object per PLDT report (`SFS`, `CV`, `AFD`): `DRY_RUN`, `TO`, `CC`, `FROM`, `STATUS`
 (one phrase, or a list that must all be in the same cell), `EXACT`, `WHERE` (extra column = value
-filters), `ON_DAY` (the column whose date must be today), `GREET`, `INTRO` and `CLOSE` (may contain
+filters), `NOT` (column + wording that must be **absent**, e.g. the RPR rows in AFD), `ON_DAY` (the
+column whose date must be today), `GREET`, `INTRO` and `CLOSE` (may contain
 `{CLUSTER}`), `HD_TEXT` (may contain `{DATE}`), `COLS`, `SEND_HOURS`, `SEND_FROM` (the earliest
 clock time a scheduled run may mail), `SHEET_ID`, `TABS`, `TEST`.
 
@@ -75,7 +76,7 @@ code. Both mail the owner's own shape: greeting, one-line intro, a black-bordere
 `DATE | SUBSCRIBER NAME | SR | CSP REMARKS | HD REMARKS` table, `Thank you !`, his three-line
 signature with the MMMDA logo inline. Both read the `PLDT` and `RED` tabs, never `VALIDATORS`,
 and both run **twice a day** (`SEND_HOURS = [8, 14]`). The third config, `AFD`, is a third
-mail on the same engine: three conditions instead of one, and it sends **at or after
+mail on the same engine: four conditions instead of one, and it sends **at or after
 10:30 AM**, not at 8AM — both of those are explained in its own bullet below.
 
 * **SFS** (`runSfsNotices`): To `lsabat@pldt.com.ph`, CC the three addresses in `SFS.CC`,
@@ -107,13 +108,24 @@ mail on the same engine: three conditions instead of one, and it sends **at or a
   the previous day's key is deleted, so a row still pending tomorrow is reported again. Only a
   live send writes the list — a preview, a test copy and any `DRY_RUN` send never touch it, and
   the list is capped at 700 SRs (it logs a warning before it would forget rows).
-* **AFD RESCHEDULE is the third report, and the first with three conditions.** The owner's rule,
-  given on 2026-11-05: `FINAL STATUS` says `AFD - RESCHEDULE`, the `CLUSTER` column says 11, and
-  the revisit day is typed by hand in `HD RECOMMENDATION` as `AFD - NOV 5`. So `AFD.STATUS` is a
+* **AFD RESCHEDULE is the third report, and the first with four conditions.** The owner's rule,
+  given on 2026-11-05: `FINAL STATUS` says `AFD - RESCHEDULE`, the `CLUSTER` column says 11, the
+  revisit day is typed by hand in `HD RECOMMENDATION` as `AFD - NOV 5`, and a row whose
+  `HD RECOMMENDATION` says `RPR - RESCHEDULE` is **not** in this mail. So `AFD.STATUS` is a
   **list** (`['AFD','RESCHEDULE']` - both words must be in the same cell, because the dash and the
   spacing around it are not stable, and one long phrase would break on them), `AFD.WHERE` is
-  `[{ COL: 'CLUSTER', IS: '11' }]` and `AFD.ON_DAY` is `'HD RECOMMENDATION'`, meaning only rows
-  whose revisit **is the day the report runs** go in the mail. `collectReport_` applies all three.
+  `[{ COL: 'CLUSTER', IS: '11' }]`, `AFD.NOT` is `[{ COL: 'HD RECOMMENDATION', HAS: 'RPR' }]` and
+  `AFD.ON_DAY` is `'HD RECOMMENDATION'`, meaning only rows whose revisit **is the day the report
+  runs** go in the mail. `collectReport_` applies all four, in the order tag → NOT → cluster → day,
+  so an RPR row never reaches the "this cell has no readable date" list either.
+  **Why RPR is out:** `afdProbe` on the live sheet 2026-11-05 found exactly one cluster 11 row
+  tagged `AFD - RESCHEDULE` whose `HD RECOMMENDATION` reads `RPR - RESCHEDULE`, and the owner's
+  answer was *"ang RPR - RESCHEDULE ay hindi kasama, dahil may ibang paraan ng reschedule dito"* —
+  RPR is rescheduled through another queue, so its rows must never appear in the AFD endorsement.
+  `NOT` is a generic config key (any report can declare one), matched on the same normalised cell
+  text as `STATUS`, so `RPR - RESCHEDULE`, `rpr reschedule` and `RPR` alone are all excluded. The
+  probe and the empty-day diagnosis both print `RPR excluded: N`, so a row dropped here is counted,
+  never silently lost.
   `cellEq_` compares on the digits when the two sides are not the same word, so `11`, `'11'`,
   `'11.0'` and `'CLUSTER 11'` all count as cluster 11, and a blank never does. `revisitDay_` reads
   `AFD - NOV 5`, `AFD - NOVEMBER 5`, `11/5` or a real date cell and returns month + day - the text
@@ -136,17 +148,17 @@ mail on the same engine: three conditions instead of one, and it sends **at or a
   revisit day** read out of `HD RECOMMENDATION` and always written the same way (`11/5/2026`) — he
   types `AFD - NOV 5`, `AFD - 11/5` and `AFD - NOVEMBER 5` on different rows, and a table that mixes
   them reads like a mistake. ACCT / PR / BRGY / CITY / CLUSTER are read through new `ALIAS_`
-  entries — those four header names are still a guess
-  until `afdProbe` prints the real ones, which is why the probe now maps **every** column of the
-  table to the header it found, or `MISSING`, and `afdPreview` names any column that came out empty
-  in every row instead of letting an empty column reach PLDT.
+  entries; `afdProbe` on the live sheet 2026-11-05 confirmed every one of them resolves to a real
+  header (`ACCT=ACCT | PR=PR | BRGY=BRGY | CITY=CITY | CLUSTER=CLUSTER`), which is why the probe now
+  maps **every** column of the table to the header it found, or `MISSING`, and `afdPreview` names
+  any column that came out empty in every row instead of letting an empty column reach PLDT.
   Recipients mirror SFS exactly because that is what he confirmed on 2026-11-05 — if the mail that
   greets Sir Jack goes to a different address, only `AFD.TO` / `AFD.CC` change. `DRY_RUN` is on,
   and `afdProbe` / `afdPreview` / `afdTestReport` / `installAfdTrigger` are the dropdown entries.
   `AFD` is **not** in `ensureReportTriggers_`: unlike SFS and CV it will not appear on the schedule
   until he installs it. `afdPreview` also runs `diagnoseReport_` when the table is empty, which
-  counts how many rows each condition removed - tagged but wrong cluster, right cluster but another
-  day, and the rows whose date cannot be read.
+  counts how many rows each condition removed - tagged but excluded (RPR), tagged but wrong
+  cluster, right cluster but another day, and the rows whose date cannot be read.
 * **AFD mails at 10:30 AM, not before, and an empty AFD day mails nothing.** His reason is the
   call-out: the report is only true once the morning call-out is finished. Apps Script cannot be
   given a minute — `atHour(10)` means "somewhere inside the 10 o'clock hour", which can be 10:02 —
@@ -175,8 +187,9 @@ mail on the same engine: three conditions instead of one, and it sends **at or a
   how many rows each cluster value has, whether a date column holds real dates or text (the same
   day arrives in the sheet both ways), and up to five whole sample rows - then it measures the
   shipped `AFD` rule on the same file and logs what each condition removed. It emails nothing,
-  writes nothing and changes no setting. Run it before trusting `AFD.WHERE` / `AFD.ON_DAY`: if the
-  counts are 0, the column name in the sheet is different and the log shows the real header.
+  writes nothing and changes no setting. Run it before trusting `AFD.WHERE` / `AFD.NOT` /
+  `AFD.ON_DAY`: if the counts are 0, the column name in the sheet is different and the log shows
+  the real header.
 * **Which spreadsheet is read is per report.** `cfg.SHEET_ID` (`''` = the same file the
   agent notices use, `DATABASE AUG TO OCT`) and `cfg.TABS` (`[]` = `NOTICE.SALES_TABS`) let a
   report follow the owner's *current* file once Aug–Oct is closed, without touching the notices.
@@ -257,6 +270,11 @@ mail on the same engine: three conditions instead of one, and it sends **at or a
   out at or after 10:30 and never before) and
   `AFD.DRY_RUN = false`. `runAfdNotices` is the handler, separate from `runSfsNotices` and
   `runCvNotices`, and it does not call `ensureReportTriggers_`.
+  The probe has been run on the live file (2026-11-05): 1,684 rows read, **13** tagged
+  `AFD` + `RESCHEDULE`, **8** of them cluster 11, **0** due on the day it ran, 1 due `NOV 6`, and 7
+  cluster 11 rows with no readable date in `HD RECOMMENDATION` — 6 typed `AFD - RESCHEDULE` (no day)
+  and 1 `RPR - RESCHEDULE`, which is now excluded by `AFD.NOT`. Those six stay out of every mail
+  until a day is written into their `HD RECOMMENDATION`.
 
 ## Agent accounts and Forgot password
 
