@@ -180,6 +180,49 @@ const CV = {
   TEST: { STATUS: 'ESCALATED', MAX_ROWS: 12 }
 };
 
+/* The AFD RESCHEDULE report - the third queue, and the only one with three conditions instead
+   of one, exactly as the owner described it on 2026-11-05: FINAL STATUS says "AFD - RESCHEDULE",
+   the CLUSTER column says 11, and the revisit day is written by hand in HD RECOMMENDATION as
+   "AFD - NOV 5". STATUS is a list because of that dash - the row counts only when BOTH words are
+   in the same cell, so it is caught whatever he types around them. The mail goes to the same
+   four addresses as SFS and CV, and ON_DAY is the filter he chose: only rows whose revisit date
+   IS the day the report runs. DRY_RUN is true: he has no manual AFD email for me to copy, so
+   INTRO below is my wording and afdPreview shows him the shape before anything is live. */
+const AFD = {
+  NAME: 'AFD',
+  TO: ['lsabat@pldt.com.ph'],
+  CC: ['t-jesnavarro@supplier.pldt.com.ph', 't-jesnavarro@pldt365.onmicrosoft.com', 'abmadlangbayan0510@icloud.com'],
+  GREET: 'Hi Sir ABAT, Leonard S.,',
+  INTRO: 'For AFD reschedule revisit (cluster 11) on the scheduled date.',
+  THANKS: 'Thank you !',
+  SIGN: ['Mark Maliwat', 'Sales Validator - MMMDA Logistics', 'Service Cavite Upland'],
+  LOGO_URL: 'https://markelvinmaliwat-hub.github.io/3MDA-Logistics-Service_website/assets/mmmda-logo.jpg',
+  LOGO_KEY: 'mmmda-logo',
+  LOGO_ALT: 'MMMDA Logistics Service',
+  LOGO_W: 150, LOGO_H: 147,
+  LOGO_ABOVE: true,
+  FOOTER: '',
+  STATUS: ['AFD', 'RESCHEDULE'],        // both words, in the same cell of FROM
+  SHEET_ID: '',
+  TABS: [],
+  FROM: ['FINAL STATUS'],
+  EXACT: false,
+  WHERE: [{ COL: 'CLUSTER', IS: '11' }],  // extra equality filters, tolerant of 11 / '11' / '11.0' / 'CLUSTER 11'
+  ON_DAY: 'HD RECOMMENDATION',            // the revisit day is read from this cell and must be today
+  HD_TEXT: '',                            // read the real HD RECOMMENDATION so the "AFD - NOV 5" line is in the table
+  COLS: ['DATE', 'SUBSCRIBER NAME', 'SR', 'FINAL STATUS', 'HD RECOMMENDATION'],
+  DATE_FORMAT: 'M/d/yyyy',
+  SR_LINK: '',
+  SEND_HOURS: [8, 14],
+  DRY_RUN: true,
+  MAX_ROWS: 300,
+  TIMEZONE: '',
+  SUBJECT: '3MDA_AFD_RESCHEDULE_',
+  SENT_PREFIX: 'AFD_SENT_',
+  PROBE: ['AFD', 'RESCHEDULE', 'CLUSTER'],
+  TEST: { STATUS: 'AFD', MAX_ROWS: 12 }
+};
+
 const NT_ = {
   GREET: 'Dear',
   FP_INTRO: 'This is to formally inform you that the following sale(s) endorsed under your account are currently tagged as FOR PAYMENT. Kindly coordinate with the concerned subscriber(s) and ensure that the required payment is settled at the earliest possible time to avoid delays or cancellation of the application.',
@@ -414,6 +457,49 @@ function reportStatusOf_(r, cfg) {
   }
   return '';
 }
+/* cfg.STATUS is one phrase, or a list of phrases that must ALL be in the same cell. The AFD
+   queue is written "AFD - RESCHEDULE", and nk_ turns the dash into a space, so two words in one
+   phrase would break on the spacing he happens to use - two words checked separately do not. */
+function statusHit_(match, cfg) {
+  const want = [].concat(cfg.STATUS).map(nk_);
+  return cfg.EXACT ? want.every(w => match === w) : want.every(w => match.indexOf(w) >= 0);
+}
+const statusWords_ = cfg => [].concat(cfg.STATUS).join(' + ');
+/* cfg.WHERE: the extra columns a row must also match, e.g. CLUSTER = 11. Apps Script hands back
+   a number cell as 11 and a text cell as '11', '11.0' or 'CLUSTER 11', so when the two sides are
+   not the same word the comparison falls back to the digits. A blank cell never matches. */
+function cellEq_(v, want) {
+  const a = nk_(String(v == null ? '' : v).replace(/\.0+$/, '')), b = nk_(want);
+  if (!a) return false;
+  return a === b || a.replace(/[^0-9]/g, '') === b.replace(/[^0-9]/g, '');
+}
+const MON_ = { JAN: 1, JANUARY: 1, FEB: 2, FEBRUARY: 2, MAR: 3, MARCH: 3, APR: 4, APRIL: 4, MAY: 5, JUN: 6, JUNE: 6, JUL: 7, JULY: 7, AUG: 8, AUGUST: 8, SEP: 9, SEPTEMBER: 9, OCT: 10, OCTOBER: 10, NOV: 11, NOVEMBER: 11, DEC: 12, DECEMBER: 12 };
+/* cfg.ON_DAY: the revisit day the owner types by hand - 'AFD - NOV 5', 'AFD - NOVEMBER 5',
+   '11/5', or a real date cell. The text carries no year and does not need one: the mail only
+   asks whether that month and day is today. Returns {md:'11-5', text:'NOV 5'} or null when the
+   cell says AFD but no date can be read from it - a null is never silently dropped. */
+function revisitDay_(v, tz) {
+  if (v instanceof Date) {
+    return isNaN(v.getTime()) ? null : { md: Utilities.formatDate(v, tz, 'M-d'), text: Utilities.formatDate(v, tz, 'MMM d') };
+  }
+  const s = String(v == null ? '' : v).trim();
+  if (!s) return null;
+  const m = s.toUpperCase().match(/(JANUARY|FEBRUARY|MARCH|APRIL|MAY|JUNE|JULY|AUGUST|SEPTEMBER|OCTOBER|NOVEMBER|DECEMBER|JAN|FEB|MAR|APR|JUN|JUL|AUG|SEP|OCT|NOV|DEC)\.?[-/ ]?\s*(\d{1,2})\b/);
+  if (m && MON_[m[1]] && Number(m[2]) >= 1 && Number(m[2]) <= 31) return { md: MON_[m[1]] + '-' + Number(m[2]), text: m[1] + ' ' + Number(m[2]) };
+  const d = s.match(/\b(\d{1,2})[/-](\d{1,2})\b/);
+  if (d && Number(d[1]) >= 1 && Number(d[1]) <= 12 && Number(d[2]) >= 1 && Number(d[2]) <= 31) {
+    return { md: Number(d[1]) + '-' + Number(d[2]), text: Number(d[1]) + '/' + Number(d[2]) };
+  }
+  const p = new Date(s);
+  return isNaN(p.getTime()) ? null : { md: Utilities.formatDate(p, tz, 'M-d'), text: Utilities.formatDate(p, tz, 'M/d/yyyy') };
+}
+/* One line that says what a report actually selects, so the log, the status object and the
+   probe all describe the same rule instead of three half-truths. */
+function ruleText_(cfg) {
+  return cfg.FROM.join(' or ') + (cfg.EXACT ? ' = ' : ' contains ') + statusWords_(cfg) +
+    (cfg.WHERE && cfg.WHERE.length ? ', ' + cfg.WHERE.map(w => w.COL + ' = ' + w.IS).join(' and ') : '') +
+    (cfg.ON_DAY ? ', ' + cfg.ON_DAY + ' is the day the report runs' : '');
+}
 function fmtReportDate_(v, cfg) {
   const tz = cfg.TIMEZONE || NOTICE.TIMEZONE;
   if (v instanceof Date) return Utilities.formatDate(v, tz, cfg.DATE_FORMAT);
@@ -429,11 +515,23 @@ function reportSs_(cfg) {
   return id ? SpreadsheetApp.openById(id) : SpreadsheetApp.getActiveSpreadsheet();
 }
 function reportTabs_(cfg) { return cfg.TABS && cfg.TABS.length ? cfg.TABS : NOTICE.SALES_TABS; }
-function collectReport_(ss, cfg) {
-  const want = nk_(cfg.STATUS), out = [], seen = {};
+function collectReport_(ss, cfg, miss) {
+  const tz = cfg.TIMEZONE || NOTICE.TIMEZONE;
+  const today = cfg.ON_DAY ? Utilities.formatDate(new Date(), tz, 'M-d') : '';
+  const out = [], seen = {};
   reportTabs_(cfg).forEach(name => tab_(ss, name).forEach(r => {
-    const st = reportStatusOf_(r, cfg), match = nk_(st);
-    if (cfg.EXACT ? match !== want : match.indexOf(want) < 0) return;
+    const st = reportStatusOf_(r, cfg);
+    if (!statusHit_(nk_(st), cfg)) return;
+    if (cfg.WHERE && !cfg.WHERE.every(w => cellEq_(r[w.COL], w.IS))) return;
+    if (cfg.ON_DAY) {
+      const got = revisitDay_(r[cfg.ON_DAY], tz);
+      if (!got) {
+        if (miss) miss.push(name + ' | SR ' + String(pick_(r, 'SR')).replace(/\.0$/, '') + ' | ' +
+          cfg.ON_DAY + ' = "' + String(r[cfg.ON_DAY] == null ? '' : r[cfg.ON_DAY]).slice(0, 50) + '"');
+        return;
+      }
+      if (got.md !== today) return;
+    }
     const dv = pick_(r, 'DATE'), raw = dv instanceof Date ? dv.getTime() : new Date(dv).getTime();
     const it = {
       date: fmtReportDate_(dv, cfg), sub: String(pick_(r, 'SUB')).trim(), plan: String(pick_(r, 'PLAN')).trim(),
@@ -536,7 +634,16 @@ function markSent_(cfg, items) {
  *  report goes to ADMIN_EMAILS and the CC list is ignored, so a test can never reach PLDT. */
 function sendReport_(send, cfg) {
   const ss = reportSs_(cfg);
-  const items = collectReport_(ss, cfg);
+  const miss = [];
+  const items = collectReport_(ss, cfg, miss);
+  /* A row that is tagged and in the right cluster but whose date cell cannot be read would
+     otherwise vanish with no trace, so it is named in the log instead. */
+  if (miss.length) {
+    Logger.log(cfg.NAME + ' | ' + miss.length + ' row(s) match the wording but have no readable date in ' +
+      cfg.ON_DAY + ', so they are NOT in the mail - fix the cell or widen AFD.ON_DAY:');
+    miss.slice(0, 10).forEach(m => Logger.log('  ?? ' + m));
+    if (miss.length > 10) Logger.log('  ?? ...and ' + (miss.length - 10) + ' more');
+  }
   const sent = sentToday_(cfg);
   const fresh = items.filter(i => !sent[i.key]);
   const admins = NOTICE.ADMIN_EMAILS.map(x => String(x).trim().toLowerCase()).filter(Boolean);
@@ -548,7 +655,8 @@ function sendReport_(send, cfg) {
     mode: send ? (cfg.DRY_RUN ? 'test' : 'live') : 'preview', quota: MailApp.getRemainingDailyQuota(),
     to: cfg.DRY_RUN ? [testTo] : cfg.TO, cc: cfg.DRY_RUN ? [] : cfg.CC
   };
-  if (!items.length) { res.skipped = 'no rows tagged ' + cfg.STATUS + ' - nothing sent'; return res; }
+  if (cfg.ON_DAY) res.unreadable = miss.length;
+  if (!items.length) { res.skipped = 'no rows tagged ' + statusWords_(cfg) + ' - nothing sent'; return res; }
   if (!fresh.length) { res.skipped = items.length + ' row(s) already reported today - nothing new, nothing sent'; return res; }
   const logo = reportLogo_(cfg);
   const m = buildReportMail_(fresh, logo, cfg);
@@ -571,25 +679,66 @@ function sendReport_(send, cfg) {
 }
 function runSfsNotices() { ensureReportTriggers_(); return sendReport_(true, SFS); }
 function runCvNotices() { ensureReportTriggers_(); return sendReport_(true, CV); }
+/* AFD deliberately does NOT self-heal and is not in ensureReportTriggers_: it is brand new and
+   still on DRY_RUN, so nothing about it goes on the schedule until he runs installAfdTrigger.
+   The daily SFS and CV runs are never disturbed by a rule he has not approved yet. */
+function runAfdNotices() { return sendReport_(true, AFD); }
 /* Dropdown-runnable: sends today's report once, right now, honouring that report's DRY_RUN. */
 function sendSfsReport() { return sendReport_(true, SFS); }
 function sendCvReport() { return sendReport_(true, CV); }
+function sendAfdReport() { return sendReport_(true, AFD); }
 /* Dropdown-runnable: logs exactly what PLDT would receive, without sending anything and
    without touching the dedupe list. */
 function previewReport_(cfg) {
   const r = sendReport_(false, cfg);
-  Logger.log(cfg.NAME + ' | rows tagged ' + cfg.STATUS + ': ' + r.items + ' | new since the last run: ' + r.fresh +
+  Logger.log(cfg.NAME + ' | rows tagged ' + statusWords_(cfg) + ': ' + r.items + ' | new since the last run: ' + r.fresh +
     (r.fresh ? ' | shown in the table: ' + r.shown : '') +
     ' | logo: ' + (r.logo || 'not fetched - no rows, so there was no email to build') +
     ' | would go to: ' + r.to.join(',') + ' | cc: ' + (r.cc.length ? r.cc.join(',')
       : cfg.DRY_RUN ? 'none (DRY_RUN is on)' : 'none - every address is in the To line'));
-  if (!r.fresh) { Logger.log(r.skipped); return r; }
+  if (!r.fresh) {
+    Logger.log(r.skipped);
+    if (cfg.ON_DAY || (cfg.WHERE && cfg.WHERE.length)) diagnoseReport_(cfg);
+    return r;
+  }
   Logger.log('subject: ' + r.subject + ' | html chars: ' + r.htmlChars);
   Logger.log(r.text);
   return r;
 }
+/* Run from the dropdown to see what PLDT would get, with that report's own rule. For AFD the
+   rule has three conditions, so when the table comes back empty the log also says which of them
+   removed the rows - tagged but wrong cluster, or the right cluster but the revisit date is not
+   today. Nothing is sent and the dedupe list is not touched. */
+function diagnoseReport_(cfg) {
+  const ss = reportSs_(cfg), tz = cfg.TIMEZONE || NOTICE.TIMEZONE;
+  const c = { rows: 0, tagged: 0, cluster: 0, otherDay: {}, unread: 0, sample: '' };
+  reportTabs_(cfg).forEach(name => tab_(ss, name).forEach(r => {
+    c.rows++;
+    const st = reportStatusOf_(r, cfg);
+    if (!statusHit_(nk_(st), cfg)) return;
+    c.tagged++;
+    if (cfg.WHERE && !cfg.WHERE.every(w => cellEq_(r[w.COL], w.IS))) return;
+    c.cluster++;
+    if (!cfg.ON_DAY) return;
+    const got = revisitDay_(r[cfg.ON_DAY], tz);
+    if (!got) { c.unread++; c.sample = c.sample || name + ' ' + cfg.ON_DAY + '="' + String(r[cfg.ON_DAY] == null ? '' : r[cfg.ON_DAY]).slice(0, 50) + '"'; return; }
+    if (got.md !== Utilities.formatDate(new Date(), tz, 'M-d')) c.otherDay[got.text] = (c.otherDay[got.text] || 0) + 1;
+  }));
+  const days = Object.keys(c.otherDay).sort();
+  Logger.log(cfg.NAME + ' rule: ' + ruleText_(cfg) + ' | today is ' +
+    Utilities.formatDate(new Date(), tz, 'yyyy-MM-dd') + ' in ' + tz);
+  Logger.log(cfg.NAME + ' count | file: ' + ss.getName() + ' | tabs: ' + reportTabs_(cfg).join(',') + ' | rows read: ' + c.rows +
+    ' | tagged ' + statusWords_(cfg) + ': ' + c.tagged +
+    (cfg.WHERE && cfg.WHERE.length ? ' | ' + cfg.WHERE.map(w => w.COL + ' ' + w.IS).join(' + ') + ': ' + c.cluster : '') +
+    (cfg.ON_DAY ? ' | revisit today: ' + (c.cluster - c.unread - days.reduce((s, d) => s + c.otherDay[d], 0)) : ''));
+  if (cfg.ON_DAY && days.length) Logger.log(cfg.NAME + ' right cluster but NOT due today (' + days.length +
+    ' other day(s) in the sheet): ' + days.slice(0, 12).map(d => d + '=' + c.otherDay[d]).join(', ') + (days.length > 12 ? ' ...' : ''));
+  if (cfg.ON_DAY && c.unread) Logger.log(cfg.NAME + ' ' + c.unread + ' row(s) with no readable date in ' + cfg.ON_DAY + ', e.g. ' + c.sample);
+  return c;
+}
 function sfsPreview() { return previewReport_(SFS); }
 function cvPreview() { return previewReport_(CV); }
+function afdPreview() { return previewReport_(AFD); }
 /* Dropdown-runnable TEST COPY, one per report. It forces that report's DRY_RUN on while it
    runs, so it can never reach PLDT even while the real report is live - without that, the
    borrowed rows below would go out as endorsements. On most days the live rule has 0 rows and
@@ -598,10 +747,14 @@ function cvPreview() { return previewReport_(CV); }
    MAX_ROWS and DRY_RUN are restored before it returns, whatever happens inside, and the last
    log line prints what they went back to. */
 function testReport_(cfg) {
-  const keepStatus = cfg.STATUS, keepMax = cfg.MAX_ROWS, keepDry = cfg.DRY_RUN;
+  const keepStatus = cfg.STATUS, keepMax = cfg.MAX_ROWS, keepDry = cfg.DRY_RUN, keepDay = cfg.ON_DAY;
   cfg.STATUS = cfg.TEST.STATUS;
   cfg.MAX_ROWS = Math.min(cfg.TEST.MAX_ROWS, keepMax);
   cfg.DRY_RUN = true;
+  /* AFD's own rule is due-today only, so on most days there is no sample to look at. The date
+     condition is lifted for the test copy - the cluster filter is NOT, so what he reads is still
+     a cluster 11 row - and put back before the function returns. */
+  cfg.ON_DAY = '';
   let r;
   try {
     r = sendReport_(true, cfg);
@@ -609,17 +762,20 @@ function testReport_(cfg) {
     cfg.STATUS = keepStatus;
     cfg.MAX_ROWS = keepMax;
     cfg.DRY_RUN = keepDry;
+    cfg.ON_DAY = keepDay;
   }
   Logger.log(cfg.NAME + ' test copy ' + (r.sent ? 'sent to ' + r.to.join(',') : 'NOT sent') +
     ' | rows matched: ' + r.items + ' | shown in the table: ' + r.shown +
     ' | subject: ' + (r.subject || '-') + ' | logo: ' + (r.logo || '-'));
-  Logger.log('settings restored: ' + cfg.STATUS + ' / max ' + cfg.MAX_ROWS + ' / DRY_RUN ' + cfg.DRY_RUN +
+  Logger.log('settings restored: ' + statusWords_(cfg) + ' / max ' + cfg.MAX_ROWS + ' / DRY_RUN ' + cfg.DRY_RUN +
     (cfg.DRY_RUN ? '' : ' (LIVE - goes to ' + cfg.TO.join(',') + ')') +
+    (keepDay ? ' / the ' + keepDay + ' must-be-today filter is back on' : '') +
     ' - the test matched "' + cfg.TEST.STATUS + '" instead' + (r.skipped ? ' | ' + r.skipped : ''));
   return r;
 }
 function sfsTestReport() { return testReport_(SFS); }
 function cvTestReport() { return testReport_(CV); }
+function afdTestReport() { return testReport_(AFD); }
 function hoursText_(cfg) { return cfg.SEND_HOURS.map(h => (h % 12 || 12) + (h < 12 ? 'AM' : 'PM')).join(' and '); }
 function reportStatus_(cfg, handler) {
   return {
@@ -628,7 +784,7 @@ function reportStatus_(cfg, handler) {
     hours: cfg.SEND_HOURS, hour: cfg.SEND_HOURS[0], tz: cfg.TIMEZONE || NOTICE.TIMEZONE, dryRun: cfg.DRY_RUN,
     to: cfg.TO, cc: cfg.CC, status: cfg.STATUS, quota: MailApp.getRemainingDailyQuota(),
     file: cfg.SHEET_ID || NOTICE.SHEET_ID, tabs: reportTabs_(cfg).join(','),
-    rule: cfg.FROM.join(' or ') + (cfg.EXACT ? ' = ' : ' contains ') + cfg.STATUS,
+    rule: ruleText_(cfg),
     dedupe: 'rows already mailed today are skipped; the list resets each day',
     note: 'Apps Script fires a day trigger somewhere inside each hour, not at an exact minute'
   };
@@ -648,6 +804,7 @@ function installReportTrigger_(cfg, handler) {
 }
 function installSfsTrigger() { return installReportTrigger_(SFS, 'runSfsNotices'); }
 function installCvTrigger() { return installReportTrigger_(CV, 'runCvNotices'); }
+function installAfdTrigger() { return installReportTrigger_(AFD, 'runAfdNotices'); }
 /* Self-repairing schedule. The owner should not have to press Run for the plan to exist:
    every scheduled run (the agent notices and both reports) checks its own report triggers
    first and rebuilds only the ones whose count does not match cfg.SEND_HOURS. Apps Script
@@ -734,8 +891,7 @@ function probeReport_(cfg) {
     }));
     Logger.log('rows matched for ' + needle + ': ' + found);
   });
-  Logger.log('current rule would report ' + collectReport_(ss, cfg).length + ' row(s): ' +
-    cfg.FROM.join(' or ') + (cfg.EXACT ? ' = ' : ' contains ') + cfg.STATUS);
+  Logger.log('current rule would report ' + collectReport_(ss, cfg).length + ' row(s): ' + ruleText_(cfg));
 }
 function sfsProbe() { return probeReport_(SFS); }
 function cvProbe() { return probeReport_(CV); }
@@ -819,8 +975,49 @@ function afdProbe() {
       shown++;
     }
   }
-  Logger.log('rows that mention AFD shown: ' + shown + (shown >= 5 ? ' (capped at 5)' : '') +
-    ' - i-paste ang buong log na ito kapag tapos, doon puputol ang rule: aling column, anong exact wording ng AFD RESCHEDULE, anong value ng cluster 11, at anong date.');
+  Logger.log('rows that mention AFD shown: ' + shown + (shown >= 5 ? ' (capped at 5)' : ''));
+  /* The rule is written now (FINAL STATUS has AFD + RESCHEDULE, CLUSTER = 11, the revisit day
+     read from HD RECOMMENDATION), so this measures it against the same file instead of only
+     describing it: how many rows each condition removes, which other days are in the sheet, and
+     what the mail would carry today. Still nothing sent and nothing written. */
+  Logger.log('--- the rule as the owner described it, measured on this file (nothing sent):');
+  Logger.log('AFD rule: ' + ruleText_(AFD) + ' | today is ' +
+    Utilities.formatDate(new Date(), AFD.TIMEZONE || NOTICE.TIMEZONE, 'yyyy-MM-dd') + ' in ' + (AFD.TIMEZONE || NOTICE.TIMEZONE));
+  const ssA = reportSs_(AFD), today = Utilities.formatDate(new Date(), AFD.TIMEZONE || NOTICE.TIMEZONE, 'M-d');
+  const cnt = { rows: 0, tagged: 0, cluster: 0, due: 0 }, otherDay = {}, unread = {};
+  let peek = 0;
+  reportTabs_(AFD).forEach(name => {
+    const rows = tab_(ssA, name);
+    cnt.rows += rows.length;
+    rows.forEach(r => {
+      const st = reportStatusOf_(r, AFD);
+      if (!statusHit_(nk_(st), AFD)) return;
+      cnt.tagged++;
+      const cv = r[AFD.WHERE[0].COL];
+      if (peek < 5) {
+        peek++;
+        Logger.log('  tagged [' + name + ']: FINAL STATUS="' + String(st).slice(0, 40) + '" | ' + AFD.WHERE[0].COL + '="' +
+          String(cv == null ? '' : cv) + '" | ' + AFD.ON_DAY + '="' + String(r[AFD.ON_DAY] == null ? '' : r[AFD.ON_DAY]).slice(0, 40) + '"');
+      }
+      if (!cellEq_(cv, AFD.WHERE[0].IS)) return;
+      cnt.cluster++;
+      const got = revisitDay_(r[AFD.ON_DAY], AFD.TIMEZONE || NOTICE.TIMEZONE);
+      if (!got) { const k = name + ' "' + String(r[AFD.ON_DAY] == null ? '' : r[AFD.ON_DAY]).slice(0, 30) + '"'; unread[k] = (unread[k] || 0) + 1; return; }
+      if (got.md !== today) { otherDay[got.text] = (otherDay[got.text] || 0) + 1; return; }
+      cnt.due++;
+    });
+  });
+  Logger.log('AFD count | rows read: ' + cnt.rows + ' | FINAL STATUS tagged AFD + RESCHEDULE: ' + cnt.tagged +
+    ' | ' + AFD.WHERE[0].COL + ' ' + AFD.WHERE[0].IS + ': ' + cnt.cluster + ' | revisit today: ' + cnt.due);
+  const od = Object.keys(otherDay).sort();
+  if (od.length) Logger.log('AFD right cluster but NOT due today: ' + od.map(d => d + '=' + otherDay[d]).join(', '));
+  const ur = Object.keys(unread);
+  if (ur.length) Logger.log('AFD no readable date in ' + AFD.ON_DAY + ', so those rows are left out until the cell can be read: ' +
+    ur.slice(0, 10).map(k => k + ' x' + unread[k]).join(', ') + (ur.length > 10 ? ' ...(' + ur.length + ' kinds)' : ''));
+  if (!cnt.tagged) Logger.log('AFD nothing in ' + AFD.FROM.join('/') + ' says AFD + RESCHEDULE in the tabs read (' + reportTabs_(AFD).join(',') + ') - mali ang column name o nasa ibang file ang data');
+  else if (!cnt.cluster) Logger.log('AFD no cluster ' + AFD.WHERE[0].IS + ' row among them - check the ' + AFD.WHERE[0].COL + ' values logged above');
+  Logger.log('the mail would carry ' + collectReport_(ssA, AFD).length + ' row(s) today');
+  Logger.log('i-paste ang buong log na ito kapag tapos - kung 0 ang "tagged AFD + RESCHEDULE" o ang "CLUSTER 11", mali ang column name sa AFD.FROM / AFD.WHERE at dito mo makikita ang tunay na header; kung may "revisit today" naman, tama na ang rule at afdPreview na lang ang susunod.');
 }
 
 /* --------------------------------------------------------------------- log API

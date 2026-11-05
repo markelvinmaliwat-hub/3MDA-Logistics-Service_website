@@ -30,8 +30,10 @@ Script and saved. Keep the two copies in step by pasting from this file.
 
 In `AgentNotices.gs`: `DRY_RUN` (true = every notice goes to `ADMIN_EMAILS` labelled
 `[TEST for <agent>]`), `SEND_HOUR`, `MAX_ROWS` per section, `SHEET_ID`, `ADMIN_EMAILS` —
-and one config object per PLDT report (`SFS`, `CV`): `DRY_RUN`, `TO`, `CC`, `FROM`, `STATUS`,
-`EXACT`, `HD_TEXT`, `COLS`, `SEND_HOURS`, `SHEET_ID`, `TABS`, `TEST`.
+and one config object per PLDT report (`SFS`, `CV`, `AFD`): `DRY_RUN`, `TO`, `CC`, `FROM`, `STATUS`
+(one phrase, or a list that must all be in the same cell), `EXACT`, `WHERE` (extra column = value
+filters), `ON_DAY` (the column whose date must be today), `HD_TEXT`, `COLS`, `SEND_HOURS`,
+`SHEET_ID`, `TABS`, `TEST`.
 
 In `index.html`: `WEB_APP_URL` (sales data only, via the `getAllData` JSONP call),
 `NOTICE_APP_URL` (notices **and** the shared log API), `LOG_URL` (defaults to
@@ -64,7 +66,7 @@ Before this existed, `LOG_URL` pointed at the sales web app, which answered ever
 request with the entire 13 MB database and no `success` field. Nothing was ever written,
 so the header could only ever show `Online · 1`.
 
-## Endorsement reports to PLDT — SFS VALIDATION and CREDIT VALIDATION
+## Endorsement reports to PLDT — SFS VALIDATION, CREDIT VALIDATION and AFD RESCHEDULE
 
 Two reports leave this script on their own schedule, and everything about each one — wording,
 rule, recipients, schedule, test settings — is a config object (`SFS` and `CV`) rather than
@@ -102,6 +104,25 @@ and both run **twice a day** (`SEND_HOURS = [8, 14]`).
   the previous day's key is deleted, so a row still pending tomorrow is reported again. Only a
   live send writes the list — a preview, a test copy and any `DRY_RUN` send never touch it, and
   the list is capped at 700 SRs (it logs a warning before it would forget rows).
+* **AFD RESCHEDULE is the third report, and the first with three conditions.** The owner's rule,
+  given on 2026-11-05: `FINAL STATUS` says `AFD - RESCHEDULE`, the `CLUSTER` column says 11, and
+  the revisit day is typed by hand in `HD RECOMMENDATION` as `AFD - NOV 5`. So `AFD.STATUS` is a
+  **list** (`['AFD','RESCHEDULE']` - both words must be in the same cell, because the dash and the
+  spacing around it are not stable, and one long phrase would break on them), `AFD.WHERE` is
+  `[{ COL: 'CLUSTER', IS: '11' }]` and `AFD.ON_DAY` is `'HD RECOMMENDATION'`, meaning only rows
+  whose revisit **is the day the report runs** go in the mail. `collectReport_` applies all three.
+  `cellEq_` compares on the digits when the two sides are not the same word, so `11`, `'11'`,
+  `'11.0'` and `'CLUSTER 11'` all count as cluster 11, and a blank never does. `revisitDay_` reads
+  `AFD - NOV 5`, `AFD - NOVEMBER 5`, `11/5` or a real date cell and returns month + day - the text
+  carries no year and does not need one. When a row is tagged and in the right cluster but its date
+  cell cannot be read, it is **named in the log** (`?? PLDT | SR 2314100005 | HD RECOMMENDATION =
+  "AFD - TBD"`) instead of vanishing. `AFD.HD_TEXT` is empty, so the table shows his own
+  `AFD - NOV 5` wording instead of a repeated line. Recipients mirror SFS exactly, `DRY_RUN` is on,
+  and `afdProbe` / `afdPreview` / `afdTestReport` / `installAfdTrigger` are the dropdown entries.
+  `AFD` is **not** in `ensureReportTriggers_`: unlike SFS and CV it will not appear on the schedule
+  until he installs it. `afdPreview` also runs `diagnoseReport_` when the table is empty, which
+  counts how many rows each condition removed - tagged but wrong cluster, right cluster but another
+  day, and the rows whose date cannot be read.
 * `sfsProbe` / `cvProbe` are how the rules were decided, and they are still the tool to run if
   the wording ever changes. They send and write nothing. Per tab they log the column names, the
   ten most common values of the five status and remarks columns, every value mentioning the
@@ -109,14 +130,13 @@ and both run **twice a day** (`SEND_HOURS = [8, 14]`).
   words with its exact wording (`##`)**, the full contents of the sample rows, and how many rows
   the current rule would report. As measured on 2026-11-04 the live Aug-Oct sheet had **0** rows
   tagged `SFS VALIDATION`, so an automated run that day correctly sends nothing.
-* `afdProbe` is the scout for the requested **AFD RESCHEDULE / cluster 11** mail. Nothing is
-  decided yet because no AFD or CLUSTER column has ever been read from this file, so this
-  function only looks: it lists every tab that mentions `AFD` / `RESCHEDULE` / `CLUSTER`, the
-  columns named for them, the exact wording with row counts, how many rows each cluster value
-  has, whether the AFD date is stored as a real date or as text (the same day arrives in the
-  sheet both ways), and up to five whole sample rows. It emails nothing, writes nothing and
-  changes no setting. The rule for the third report — which column, which cluster value, which
-  date — is cut from its log, not guessed.
+* `afdProbe` is the read-only scout behind that rule. It lists every tab that mentions
+  `AFD` / `RESCHEDULE` / `CLUSTER`, the columns named for them, the exact wording with row counts,
+  how many rows each cluster value has, whether a date column holds real dates or text (the same
+  day arrives in the sheet both ways), and up to five whole sample rows - then it measures the
+  shipped `AFD` rule on the same file and logs what each condition removed. It emails nothing,
+  writes nothing and changes no setting. Run it before trusting `AFD.WHERE` / `AFD.ON_DAY`: if the
+  counts are 0, the column name in the sheet is different and the log shows the real header.
 * **Which spreadsheet is read is per report.** `cfg.SHEET_ID` (`''` = the same file the
   agent notices use, `DATABASE AUG TO OCT`) and `cfg.TABS` (`[]` = `NOTICE.SALES_TABS`) let a
   report follow the owner's *current* file once Aug–Oct is closed, without touching the notices.
@@ -189,6 +209,11 @@ and both run **twice a day** (`SEND_HOURS = [8, 14]`).
   wording and row counts on the live file, `cvPreview()` for the body, and `cvTestReport()`
   for a real copy in his own inbox. `CV.DRY_RUN = false` — after he reads that copy — is the
   only line that makes PLDT receive it.
+* The AFD mail is deliberately left off the schedule until he puts it there: `afdProbe()` to
+  measure the cluster/date columns on the live file, `afdPreview()` for the body, `afdTestReport()`
+  for a copy in his own inbox, then `installAfdTrigger()` (two more day triggers) and
+  `AFD.DRY_RUN = false`. `runAfdNotices` is the handler, separate from `runSfsNotices` and
+  `runCvNotices`, and it does not call `ensureReportTriggers_`.
 
 ## Agent accounts and Forgot password
 
