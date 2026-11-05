@@ -32,8 +32,8 @@ In `AgentNotices.gs`: `DRY_RUN` (true = every notice goes to `ADMIN_EMAILS` labe
 `[TEST for <agent>]`), `SEND_HOUR`, `MAX_ROWS` per section, `SHEET_ID`, `ADMIN_EMAILS` —
 and one config object per PLDT report (`SFS`, `CV`, `AFD`): `DRY_RUN`, `TO`, `CC`, `FROM`, `STATUS`
 (one phrase, or a list that must all be in the same cell), `EXACT`, `WHERE` (extra column = value
-filters), `ON_DAY` (the column whose date must be today), `GREET`, `INTRO` (may contain
-`{CLUSTER}`), `HD_TEXT`, `COLS`, `SEND_HOURS`, `SHEET_ID`, `TABS`, `TEST`.
+filters), `ON_DAY` (the column whose date must be today), `GREET`, `INTRO` and `CLOSE` (may contain
+`{CLUSTER}`), `HD_TEXT` (may contain `{DATE}`), `COLS`, `SEND_HOURS`, `SHEET_ID`, `TABS`, `TEST`.
 
 In `index.html`: `WEB_APP_URL` (sales data only, via the `getAllData` JSONP call),
 `NOTICE_APP_URL` (notices **and** the shared log API), `LOG_URL` (defaults to
@@ -116,16 +116,24 @@ and both run **twice a day** (`SEND_HOURS = [8, 14]`).
   `AFD - NOV 5`, `AFD - NOVEMBER 5`, `11/5` or a real date cell and returns month + day - the text
   carries no year and does not need one. When a row is tagged and in the right cluster but its date
   cell cannot be read, it is **named in the log** (`?? PLDT | SR 2314100005 | HD RECOMMENDATION =
-  "AFD - TBD"`) instead of vanishing. `AFD.ON_DAY` only ever *filters* on that date — the mail does
-  not show it, because his own email does not have that column.
-  **The mail is copied from his own AFD email (2026-11-05):** `Hi Sir Jack,`, then
-  `For endorsement to CLUSTER {CLUSTER} for revisit already done call out as per subs available po
-  sila 10am to 11am today sana daw mabalikan sila.` — `introOf_` fills `{CLUSTER}` from the rows, so
-  changing `AFD.WHERE` alone moves the number in the sentence — then his ten columns in his order
-  (`DATE, SUBSCRIBER NAME, SR, ACCT, PR, CSP STATUS, BRGY, CITY, CLUSTER, HD REMARKS`), `Thank you !`
-  and the logo/signature. `AFD.HD_TEXT` carries his `PART OF AFD - FOR REVISIT TOK TO SOR AVAILABLE
-  PO SILA TODAY 10AM TO 11AM` line for every row, the same way `SFS.HD_TEXT` does. ACCT / PR / BRGY /
-  CITY / CLUSTER are read through new `ALIAS_` entries — those four header names are still a guess
+  "AFD - TBD"`) instead of vanishing. `AFD.ON_DAY` both **filters** on that date and feeds the
+  `{DATE}` in `HD_TEXT` — there is no revisit-date column in his table, the day is written into the
+  remarks line instead.
+  **The mail follows his own AFD email (2026-11-05), in formal English because operations bosses
+  receive it:** `Hi Sir Jack,`, then
+  `For endorsement to CLUSTER {CLUSTER} for revisit. The call-out has already been completed and the
+  subscribers are available today; we would appreciate your assistance in having them revisited.` —
+  `{CLUSTER}` is filled from the rows, so changing `AFD.WHERE` alone moves the number in the
+  sentence — then his ten columns in his order (`DATE, SUBSCRIBER NAME, SR, ACCT, PR, CSP STATUS,
+  BRGY, CITY, CLUSTER, HD REMARKS`), `AFD.CLOSE` (`Should you have any concerns regarding the
+  scheduled revisit, please kindly reply to this email so that we may address them immediately.`,
+  placed after the table and before `Thank you !`; empty for SFS and CV, whose wording he approved
+  verbatim), the logo and his signature. `AFD.HD_TEXT` is
+  `PART OF AFD {DATE} - SUBS WANT TO REQUEST FOR REVISIT`, where `{DATE}` is **that row's own
+  revisit day** read out of `HD RECOMMENDATION` and always written the same way (`11/5/2026`) — he
+  types `AFD - NOV 5`, `AFD - 11/5` and `AFD - NOVEMBER 5` on different rows, and a table that mixes
+  them reads like a mistake. ACCT / PR / BRGY / CITY / CLUSTER are read through new `ALIAS_`
+  entries — those four header names are still a guess
   until `afdProbe` prints the real ones, which is why the probe now maps **every** column of the
   table to the header it found, or `MISSING`, and `afdPreview` names any column that came out empty
   in every row instead of letting an empty column reach PLDT.

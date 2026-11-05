@@ -187,16 +187,20 @@ const CV = {
    in the same cell, so it is caught whatever he types around them. The mail goes to the same
    four addresses as SFS and CV, and ON_DAY is the filter he chose: only rows whose revisit date
    IS the day the report runs. DRY_RUN is true: he has not yet said the AFD mail is live.
-   GREET / INTRO / HD_TEXT / COLS are copied from his own AFD email, so the only thing the
-   machine decides is WHICH rows go in - the words around them are his. INTRO carries
-   {CLUSTER}, which is filled from the rows, so changing WHERE alone moves the number in the
-   sentence. */
+   GREET / INTRO / HD_TEXT / COLS follow his own AFD email, so the only thing the machine
+   decides is WHICH rows go in - the words around them are his, put into formal English at his
+   request because operations bosses receive it. INTRO carries {CLUSTER} (filled from the rows)
+   and HD_TEXT carries {DATE} (the revisit day read out of HD RECOMMENDATION, always written the
+   same way: 11/5/2026, whether he typed "AFD - NOV 5", "AFD - 11/5" or "AFD - NOVEMBER 5"). */
 const AFD = {
   NAME: 'AFD',
   TO: ['lsabat@pldt.com.ph'],
   CC: ['t-jesnavarro@supplier.pldt.com.ph', 't-jesnavarro@pldt365.onmicrosoft.com', 'abmadlangbayan0510@icloud.com'],
   GREET: 'Hi Sir Jack,',
-  INTRO: 'For endorsement to CLUSTER {CLUSTER} for revisit already done call out as per subs available po sila 10am to 11am today sana daw mabalikan sila.',
+  /* His wording, put into formal English because operations bosses are copied on it. {CLUSTER}
+     is filled from the rows, so changing AFD.WHERE alone moves the number in the sentence. */
+  INTRO: 'For endorsement to CLUSTER {CLUSTER} for revisit. The call-out has already been completed and the subscribers are available today; we would appreciate your assistance in having them revisited.',
+  CLOSE: 'Should you have any concerns regarding the scheduled revisit, please kindly reply to this email so that we may address them immediately.',
   THANKS: 'Thank you !',
   SIGN: ['Mark Maliwat', 'Sales Validator - MMMDA Logistics', 'Service Cavite Upland'],
   LOGO_URL: 'https://markelvinmaliwat-hub.github.io/3MDA-Logistics-Service_website/assets/mmmda-logo.jpg',
@@ -212,7 +216,7 @@ const AFD = {
   EXACT: false,
   WHERE: [{ COL: 'CLUSTER', IS: '11' }],  // extra equality filters, tolerant of 11 / '11' / '11.0' / 'CLUSTER 11'
   ON_DAY: 'HD RECOMMENDATION',            // the revisit day is read from this cell and must be today
-  HD_TEXT: 'PART OF AFD - FOR REVISIT TOK TO SOR AVAILABLE PO SILA TODAY 10AM TO 11AM',
+  HD_TEXT: 'PART OF AFD {DATE} - SUBS WANT TO REQUEST FOR REVISIT',
   COLS: ['DATE', 'SUBSCRIBER NAME', 'SR', 'ACCT', 'PR', 'CSP STATUS', 'BRGY', 'CITY', 'CLUSTER', 'HD REMARKS'],
   DATE_FORMAT: 'M/d/yyyy',
   SR_LINK: '',
@@ -535,16 +539,17 @@ function collectReport_(ss, cfg, miss) {
   const out = [], seen = {};
   reportTabs_(cfg).forEach(name => tab_(ss, name).forEach(r => {
     const st = reportStatusOf_(r, cfg);
+    let got = null;
     if (!statusHit_(nk_(st), cfg)) return;
     if (cfg.WHERE && !cfg.WHERE.every(w => cellEq_(colOf_(r, w.COL), w.IS))) return;
     if (cfg.ON_DAY) {
-      const got = revisitDay_(colOf_(r, cfg.ON_DAY), tz);
+      got = revisitDay_(colOf_(r, cfg.ON_DAY), tz);
       if (!got) {
         if (miss) miss.push(name + ' | SR ' + String(pick_(r, 'SR')).replace(/\.0$/, '') + ' | ' +
           cfg.ON_DAY + ' = "' + colOf_(r, cfg.ON_DAY).slice(0, 50) + '"');
         return;
       }
-      if (got.md !== today) return;
+      if (!cfg.IGNORE_DAY && got.md !== today) return;
     }
     const dv = pick_(r, 'DATE'), raw = dv instanceof Date ? dv.getTime() : new Date(dv).getTime();
     const it = {
@@ -552,7 +557,8 @@ function collectReport_(ss, cfg, miss) {
       status: st, remarks: String(pick_(r, 'PAYREM')).trim(),
       sr: String(pick_(r, 'SR')).replace(/\.0$/, '').trim(), agent: String(pick_(r, 'AGENT')).trim(),
       tl: String(pick_(r, 'TL')).trim(), csp: String(pick_(r, 'CSP')).trim(),
-      cspRem: String(pick_(r, 'CSPREM')).trim(), hd: hdOf_(r, cfg),
+      cspRem: String(pick_(r, 'CSPREM')).trim(), hd: hdOf_(r, cfg, revisitDate_(got, tz)),
+      revisit: revisitDate_(got, tz),
       acct: String(pick_(r, 'ACCT')).trim(), pr: String(pick_(r, 'PR')).trim(),
       brgy: String(pick_(r, 'BRGY')).trim(), city: String(pick_(r, 'CITY')).trim(),
       cluster: String(pick_(r, 'CLUSTER')).trim(), _t: isNaN(raw) ? 0 : raw
@@ -567,9 +573,20 @@ function collectReport_(ss, cfg, miss) {
 }
 /* The HD REMARKS column of his email is not in the sheet - he writes it himself when he
    endorses - so cfg.HD_TEXT repeats that line for every row. Set it to '' to read the real
-   HD REMARKS / HD RECOMMENDATION cells instead. */
-function hdOf_(r, cfg) {
-  return cfg.HD_TEXT ? String(cfg.HD_TEXT).trim() : String(pick_(r, 'HD')).trim();
+   HD REMARKS / HD RECOMMENDATION cells instead. {DATE} inside HD_TEXT is the revisit day read
+   out of the ON_DAY column, so each row carries its own date. */
+function hdOf_(r, cfg, day) {
+  const text = cfg.HD_TEXT ? String(cfg.HD_TEXT).trim() : String(pick_(r, 'HD')).trim();
+  if (text.indexOf('{DATE}') < 0) return text;
+  return text.split('{DATE}').join(day || '').replace(/[ \t]{2,}/g, ' ').trim();
+}
+/* One uniform date for the whole mail. He types "AFD - NOV 5" on one row and "AFD - 11/5" on the
+   next, and a table that mixes both reads like a mistake to an operations boss; the rule only ever
+   admits rows whose revisit is the day the report runs, so the year is that run's year. */
+function revisitDate_(got, tz) {
+  if (!got) return '';
+  const m = String(got.md).split('-');
+  return m[0] + '/' + m[1] + '/' + Utilities.formatDate(new Date(), tz, 'yyyy');
 }
 /* Which ALIAS_ key each table column reads through - the diagnostics use it to say whether the
    sheet actually has that header, before an empty column can ship to PLDT. */
@@ -616,14 +633,15 @@ function reportSig_(logo, cfg) {
   if (!img) return lines;
   return cfg.LOGO_ABOVE === false ? lines + `<p>${img}</p>` : `<p>${img}</p>` + lines;
 }
-/* His AFD sentence names the cluster, so {CLUSTER} is filled from the rows themselves - the
-   digits are taken from the first row, or from the WHERE filter when the day has no rows yet. */
-function introOf_(cfg, items) {
-  const s = String(cfg.INTRO || '');
+/* His AFD sentences name the cluster, so {CLUSTER} is filled from the rows themselves - the
+   digits come from the first row, or from the WHERE filter when the day has no rows yet. */
+const fill_ = (text, cfg, items) => {
+  const s = String(text || '');
   if (s.indexOf('{CLUSTER}') < 0) return s;
   const from = (items && items.length ? items[0].cluster : '') || (cfg.WHERE && cfg.WHERE.length ? cfg.WHERE[0].IS : '');
   return s.split('{CLUSTER}').join(String(from).replace(/[^0-9]/g, ''));
-}
+};
+const introOf_ = (cfg, items) => fill_(cfg.INTRO, cfg, items);
 function buildReportMail_(items, logo, cfg) {
   const max = cfg.MAX_ROWS || 300, shown = items.slice(0, max);
   const stamp = Utilities.formatDate(new Date(), cfg.TIMEZONE || NOTICE.TIMEZONE, 'MMMyyyy').toUpperCase();
@@ -633,10 +651,12 @@ function buildReportMail_(items, logo, cfg) {
   const h = `<div style="font-family:Calibri,Arial,sans-serif;font-size:14px;color:#000;max-width:900px">` +
     `<p>${esc_(cfg.GREET)}</p><p>${esc_(intro)}</p>` + reportTable_(shown, cfg) +
     (extra > 0 ? `<p style="color:#667085;font-size:12px">&hellip;and ${extra} more not listed here.</p>` : '') +
+    (cfg.CLOSE ? `<p style="margin-top:18px">${esc_(fill_(cfg.CLOSE, cfg, items))}</p>` : '') +
     `<p style="margin-top:18px"><b>${esc_(cfg.THANKS)}</b></p>` + reportSig_(logo, cfg) +
     (cfg.FOOTER ? `<p style="color:#667085;font-size:12px">${esc_(cfg.FOOTER)}</p>` : '') + '</div>';
   const t = `${cfg.GREET}\n\n${intro}\n\n${rowsText_(items, max, cfg.COLS)}` +
-    (extra > 0 ? `\n...and ${extra} more.` : '') + `\n\n${cfg.THANKS}\n\n${cfg.SIGN.join('\n')}`;
+    (extra > 0 ? `\n...and ${extra} more.` : '') +
+    (cfg.CLOSE ? `\n\n${fill_(cfg.CLOSE, cfg, items)}` : '') + `\n\n${cfg.THANKS}\n\n${cfg.SIGN.join('\n')}`;
   return { subject: subject, html: h, text: t };
 }
 /* Two runs a day would mail the same pending row twice, so each report remembers the SR numbers
@@ -784,14 +804,15 @@ function afdPreview() { return previewReport_(AFD); }
    MAX_ROWS and DRY_RUN are restored before it returns, whatever happens inside, and the last
    log line prints what they went back to. */
 function testReport_(cfg) {
-  const keepStatus = cfg.STATUS, keepMax = cfg.MAX_ROWS, keepDry = cfg.DRY_RUN, keepDay = cfg.ON_DAY;
+  const keepStatus = cfg.STATUS, keepMax = cfg.MAX_ROWS, keepDry = cfg.DRY_RUN, keepDay = cfg.IGNORE_DAY;
   cfg.STATUS = cfg.TEST.STATUS;
   cfg.MAX_ROWS = Math.min(cfg.TEST.MAX_ROWS, keepMax);
   cfg.DRY_RUN = true;
   /* AFD's own rule is due-today only, so on most days there is no sample to look at. The date
-     condition is lifted for the test copy - the cluster filter is NOT, so what he reads is still
-     a cluster 11 row - and put back before the function returns. */
-  cfg.ON_DAY = '';
+     COMPARISON is switched off for the test copy - the column itself is still read, so the
+     {DATE} in HD_TEXT still shows - while the cluster filter stays on, meaning what he reads is
+     still a cluster 11 row. It is put back before the function returns, whatever happens inside. */
+  cfg.IGNORE_DAY = true;
   let r;
   try {
     r = sendReport_(true, cfg);
@@ -799,14 +820,14 @@ function testReport_(cfg) {
     cfg.STATUS = keepStatus;
     cfg.MAX_ROWS = keepMax;
     cfg.DRY_RUN = keepDry;
-    cfg.ON_DAY = keepDay;
+    cfg.IGNORE_DAY = keepDay;
   }
   Logger.log(cfg.NAME + ' test copy ' + (r.sent ? 'sent to ' + r.to.join(',') : 'NOT sent') +
     ' | rows matched: ' + r.items + ' | shown in the table: ' + r.shown +
     ' | subject: ' + (r.subject || '-') + ' | logo: ' + (r.logo || '-'));
   Logger.log('settings restored: ' + statusWords_(cfg) + ' / max ' + cfg.MAX_ROWS + ' / DRY_RUN ' + cfg.DRY_RUN +
     (cfg.DRY_RUN ? '' : ' (LIVE - goes to ' + cfg.TO.join(',') + ')') +
-    (keepDay ? ' / the ' + keepDay + ' must-be-today filter is back on' : '') +
+    (cfg.ON_DAY && !keepDay ? ' / the ' + cfg.ON_DAY + ' must-be-today filter is back on' : '') +
     ' - the test matched "' + cfg.TEST.STATUS + '" instead' + (r.skipped ? ' | ' + r.skipped : ''));
   return r;
 }
