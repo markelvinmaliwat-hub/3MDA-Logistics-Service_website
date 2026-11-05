@@ -777,10 +777,11 @@ function sendReport_(send, cfg, force) {
 }
 function runSfsNotices() { ensureReportTriggers_(); return sendReport_(true, SFS); }
 function runCvNotices() { ensureReportTriggers_(); return sendReport_(true, CV); }
-/* AFD deliberately does NOT self-heal and is not in ensureReportTriggers_: it is brand new and
-   still on DRY_RUN, so nothing about it goes on the schedule until he runs installAfdTrigger.
-   The daily SFS and CV runs are never disturbed by a rule he has not approved yet. This is the
-   scheduled handler, so it is the one that obeys AFD.SEND_FROM and waits for 10:30. */
+/* AFD deliberately does NOT self-heal and is not in ensureReportTriggers_: it is his newest rule
+   and he installed its 10AM + 11AM pair by hand on 2026-11-05, so if those two triggers are ever
+   deleted only installAfdTrigger() puts them back. The daily SFS and CV runs are never
+   disturbed by it. This is the scheduled handler, so it is the one that obeys AFD.SEND_FROM
+   and waits for 10:30. */
 function runAfdNotices() { return sendReport_(true, AFD); }
 /* Dropdown-runnable: sends today's report once, right now, honouring that report's DRY_RUN.
    This one ignores AFD.SEND_FROM - if he presses it, he means it, early or not. The scheduled
