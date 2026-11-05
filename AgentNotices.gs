@@ -256,9 +256,9 @@ const AFD = {
    cluster 11 mail and the other way round. Two separate mails on purpose: Sir Jack can see from
    the subject alone which cluster is being endorsed, and one cluster being late says nothing
    about the other.
-   DRY_RUN is TRUE: nothing reaches PLDT until he reads an afd12TestReport copy and flips it, the
-   same path cluster 11 took. AFD12 is not in ensureReportTriggers_ either, so it will not appear
-   on the schedule until he runs installAfd12Trigger(). */
+   DRY_RUN is FALSE since 2026-11-05: the owner read the afd12TestReport copy, checked the 2 rows
+   and the 4 PLDT addresses, and gave the go. It is still NOT in ensureReportTriggers_, so it will
+   not appear on the schedule until he runs installAfd12Trigger(). */
 const AFD12 = {
   NAME: 'AFD12',
   TO: ['lsabat@pldt.com.ph'],
@@ -289,7 +289,7 @@ const AFD12 = {
   SR_LINK: '',
   SEND_HOURS: [10, 11],
   SEND_FROM: '10:30',
-  DRY_RUN: true,                    // his go: read afd12TestReport, then set this to false and install the trigger
+  DRY_RUN: false,                   // LIVE since 2026-11-05 - the owner read the afd12TestReport copy and said "OO, GO AFD12 LIVE"
   MAX_ROWS: 300,
   TIMEZONE: '',
   SUBJECT: '3MDA_AFD12_RESCHEDULE_',

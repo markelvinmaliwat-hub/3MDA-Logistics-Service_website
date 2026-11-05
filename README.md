@@ -170,9 +170,9 @@ mail on the same engine: four conditions instead of one, and it sends **at or af
   'AFD12_SENT_'` — separate lists are the point, because a cluster 11 mail must not mark cluster 12
   rows as already reported, and the subject tells Sir Jack which cluster is being endorsed. The
   dropdown entries are `afd12Probe` / `afd12Preview` / `afd12TestReport` / `sendAfd12Report` /
-  `installAfd12Trigger`, and `runAfd12Notices` is its handler. **`DRY_RUN` is `true` and no trigger is
-  installed** — nothing reaches PLDT until he reads an `afd12TestReport` copy, and like `AFD` it is
-  not in `ensureReportTriggers_`, so it stays off the schedule until he runs `installAfd12Trigger()`.
+  `installAfd12Trigger`, and `runAfd12Notices` is its handler. **`DRY_RUN` is `false` since
+  2026-11-05** — he read the `afd12TestReport` copy and gave the go — and, like `AFD`, it is not in
+  `ensureReportTriggers_`, so it stays off the schedule until he runs `installAfd12Trigger()`.
   `afdProbe`'s rule-measuring half became `afdScout_(cfg)` so both clusters are measured by the same
   code: `afd12Probe()` logs `AFD12 tagged rows by CLUSTER: …` (the whole AFD queue in one line, so
   11 versus 12 versus a mis-keyed cluster is visible) and then the same count / other-days /
@@ -303,16 +303,17 @@ mail on the same engine: four conditions instead of one, and it sends **at or af
   of every mail until a day is written into their `HD RECOMMENDATION`, and each run names their SR
   numbers in the log (`?? PLDT | SR 2312403150 | HD RECOMMENDATION = "AFD - RESCHEDULE"`).
   The first mail this rule can produce is therefore **November 6**, one row.
-* **Cluster 12 is built and waiting on his go.** Nothing about it is live: `AFD12.DRY_RUN` is
-  `true`, no AFD12 trigger exists, and the 8AM SFS/CV runs and the 10:30 AFD run are untouched by
-  it. His path is the one he already walked for cluster 11 — `afd12Probe()` first, because from the
-  11:42 AM count there are **12 tagged rows that are not cluster 11** and no one has measured how
-  many of those are actually cluster 12 (the probe answers it in one line, `AFD12 tagged rows by
-  CLUSTER: …`, including rows whose cluster cell is blank or typed as text); then `afd12Preview()`
-  for the body, `afd12TestReport()` for a copy in his own inbox, `AFD12.DRY_RUN = false`, and
-  `installAfd12Trigger()` to put its own 10AM + 11AM pair on the schedule. Until he does that, the
-  cluster 12 rows are mailed by nobody, which is the safe state — not the cluster 11 mail
-  accidentally carrying them.
+* **Cluster 12 is live on the same rule (`AFD12.DRY_RUN = false`, 2026-11-05).** He read the
+  `afd12TestReport` copy and said *"OO, GO AFD12 LIVE"*, so the cluster 12 mail goes to the same four
+  PLDT addresses as cluster 11. Measured by `afd12Probe` on the live file at 1:16 PM that day: 1,689
+  rows read, **13** tagged `AFD` + `RESCHEDULE`, **1** excluded as RPR, **4** of them in cluster 12,
+  **2 due on the day it ran**, and 2 cluster-12 rows with no readable date (`HD RECOMMENDATION` just
+  repeats `AFD - RESCHEDULE`); every table column resolved, so `the mail would carry 2 row(s) today`.
+  Because the rule is due-today-only and the 10AM/11AM hours had already passed at 1:16 PM, those two
+  rows reach PLDT only through `sendAfd12Report()` (forced, ignores the gate) on the same day — after
+  that day they are gone from the rule. Two steps are still his to press in Apps Script after the
+  paste: `sendAfd12Report()` for today, and `installAfd12Trigger()` for the 10AM + 11AM pair that
+  makes every later day automatic. Until the second one runs, cluster 12 mails nobody on its own.
 
 ## Agent accounts and Forgot password
 
