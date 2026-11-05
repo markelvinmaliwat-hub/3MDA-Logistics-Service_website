@@ -153,10 +153,12 @@ mail on the same engine: four conditions instead of one, and it sends **at or af
   maps **every** column of the table to the header it found, or `MISSING`, and `afdPreview` names
   any column that came out empty in every row instead of letting an empty column reach PLDT.
   Recipients mirror SFS exactly because that is what he confirmed on 2026-11-05 — if the mail that
-  greets Sir Jack goes to a different address, only `AFD.TO` / `AFD.CC` change. `DRY_RUN` is on,
-  and `afdProbe` / `afdPreview` / `afdTestReport` / `installAfdTrigger` are the dropdown entries.
-  `AFD` is **not** in `ensureReportTriggers_`: unlike SFS and CV it will not appear on the schedule
-  until he installs it. `afdPreview` also runs `diagnoseReport_` when the table is empty, which
+  greets Sir Jack goes to a different address, only `AFD.TO` / `AFD.CC` change. **LIVE since
+  2026-11-05** (`AFD.DRY_RUN = false`, set by the owner after he read an `afdTestReport` copy), and
+  `afdProbe` / `afdPreview` / `afdTestReport` / `installAfdTrigger` are the dropdown entries.
+  `AFD` is **not** in `ensureReportTriggers_`: unlike SFS and CV its 10AM + 11AM pair is only what
+  `installAfdTrigger()` put there at 11:49 AM on 2026-11-05, so a deleted trigger is not repaired
+  automatically. `afdPreview` also runs `diagnoseReport_` when the table is empty, which
   counts how many rows each condition removed - tagged but excluded (RPR), tagged but wrong
   cluster, right cluster but another day, and the rows whose date cannot be read.
 * **AFD mails at 10:30 AM, not before, and an empty AFD day mails nothing.** His reason is the
@@ -207,20 +209,28 @@ mail on the same engine: four conditions instead of one, and it sends **at or af
   like his email.
 * **A day with no matching row sends nothing.**
 * **SFS is LIVE since 2026-11-04** — the owner approved it after reviewing a real copy, so
-  `SFS.DRY_RUN` is `false` and the report goes to `SFS.TO` + `SFS.CC`. **CV still has
-  `DRY_RUN = true`** — it goes live only after he reviews a `cvTestReport` copy. Set either
+  `SFS.DRY_RUN` is `false` and the report goes to `SFS.TO` + `SFS.CC`. **AFD is LIVE since
+  2026-11-05** (same approval path: he read an `afdTestReport` copy, then set `AFD.DRY_RUN = false`
+  and ran `installAfdTrigger`). **CV still has `DRY_RUN = true`** — it goes live only after he
+  reviews a `cvTestReport` copy. Set either
   back to `true` any time to stop PLDT receiving it: while it is true every copy goes to
   `NOTICE.ADMIN_EMAILS` only, the CC list is ignored, and the subject gains `[TEST] `.
   `sfsPreview` / `cvPreview` log the exact body without sending anything and without touching
   the dedupe list.
-* **`sfsTestReport` / `cvTestReport` produce a real copy on any day.** The live rules have
-  0 rows until a new encode is tagged, so there would be nothing to look at — each one
+* **`sfsTestReport` / `cvTestReport` / `afdTestReport` produce a real copy on any day.** The live
+  rules have 0 rows until a new encode is tagged, so there would be nothing to look at — each one
   temporarily matches its own `cfg.TEST.STATUS` (`SFS.TEST` borrows `REENCODED`, `CV.TEST`
-  borrows `ESCALATED`, at most `cfg.TEST.MAX_ROWS` = 12 rows in the table) and **forces that
+  borrows `ESCALATED`, `AFD.TEST` borrows the single word `AFD`, at most `cfg.TEST.MAX_ROWS` = 12
+  rows in the table) and **forces that
   report's `DRY_RUN` on for the duration**, so a test can never reach PLDT even while the
   daily report is live. `STATUS`, `MAX_ROWS` and `DRY_RUN` are restored before it returns and
-  the last log line prints what they went back to. Change `TEST` to try another status.
-  Measured on the live sheet: 89 rows carry `FINAL STATUS = REENCODED`.
+  `afdTestReport` also puts `AFD.IGNORE_DAY` back, so the must-be-today filter is only off while he
+  is looking at a copy — the cluster 11 filter and the RPR exclusion stay on, and the `{DATE}` in
+  HD REMARKS is still read from `HD RECOMMENDATION`. The last log line prints what the settings
+  went back to; change `TEST` to try another status.
+  Measured on the live sheet: 89 rows carry `FINAL STATUS = REENCODED`, and `afdTestReport` on
+  2026-11-05 matched **1** row — the one cluster 11 row that has a day written in
+  `HD RECOMMENDATION` (`AFD - NOV 6`).
 * Apps Script cannot schedule an exact minute — a day trigger fires somewhere inside
   each hour of `cfg.SEND_HOURS`, so this is "in the 8AM hour and in the 2PM hour", not
   8:00:00. Same limitation as the 8:00 AM agent notices. Where a report must not start before
@@ -264,17 +274,18 @@ mail on the same engine: four conditions instead of one, and it sends **at or af
   wording and row counts on the live file, `cvPreview()` for the body, and `cvTestReport()`
   for a real copy in his own inbox. `CV.DRY_RUN = false` — after he reads that copy — is the
   only line that makes PLDT receive it.
-* The AFD mail is deliberately left off the schedule until he puts it there: `afdProbe()` to
-  measure the cluster/date columns on the live file, `afdPreview()` for the body, `afdTestReport()`
-  for a copy in his own inbox, then `installAfdTrigger()` (the 10AM + 11AM pair, so the mail goes
-  out at or after 10:30 and never before) and
-  `AFD.DRY_RUN = false`. `runAfdNotices` is the handler, separate from `runSfsNotices` and
-  `runCvNotices`, and it does not call `ensureReportTriggers_`.
-  The probe has been run on the live file (2026-11-05): 1,684 rows read, **13** tagged
-  `AFD` + `RESCHEDULE`, **8** of them cluster 11, **0** due on the day it ran, 1 due `NOV 6`, and 7
-  cluster 11 rows with no readable date in `HD RECOMMENDATION` — 6 typed `AFD - RESCHEDULE` (no day)
-  and 1 `RPR - RESCHEDULE`, which is now excluded by `AFD.NOT`. Those six stay out of every mail
-  until a day is written into their `HD RECOMMENDATION`.
+* **AFD is live and on its own schedule.** The path the owner took on 2026-11-05: `afdProbe()` to
+  measure the columns on the live file, `afdTestReport()` for a copy in his own inbox, then
+  `AFD.DRY_RUN = false` in the editor and `installAfdTrigger()` (the 10AM + 11AM pair, so the mail
+  goes out at or after 10:30 and never before). `runAfdNotices` is the handler, separate from
+  `runSfsNotices` and `runCvNotices`, and it does not call `ensureReportTriggers_` — if those two
+  triggers are ever deleted, only `installAfdTrigger()` puts them back.
+  Measured by `afdProbe` on the live file at 11:42 AM that day: 1,685 rows read, **13** tagged
+  `AFD` + `RESCHEDULE`, **1** of them excluded as RPR, **7** left in cluster 11, **0** due on the
+  day it ran, 1 due `NOV 6`, and 6 with no readable date in `HD RECOMMENDATION`. Those six stay out
+  of every mail until a day is written into their `HD RECOMMENDATION`, and each run names their SR
+  numbers in the log (`?? PLDT | SR 2312403150 | HD RECOMMENDATION = "AFD - RESCHEDULE"`).
+  The first mail this rule can produce is therefore **November 6**, one row.
 
 ## Agent accounts and Forgot password
 

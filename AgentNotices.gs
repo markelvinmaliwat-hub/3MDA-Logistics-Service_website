@@ -189,7 +189,9 @@ const CV = {
    RESCHEDULE had "RPR - RESCHEDULE" written in HD RECOMMENDATION, and he said RPR is rescheduled
    another way, so it is not this mail's queue. The mail goes to the same
    four addresses as SFS and CV, and ON_DAY is the filter he chose: only rows whose revisit date
-   IS the day the report runs. DRY_RUN is true: he has not yet said the AFD mail is live.
+   IS the day the report runs. DRY_RUN is false: the owner read the afdTestReport copy on
+   2026-11-05 and ran installAfdTrigger at 11:49 AM, so the mail is LIVE to the four PLDT
+   addresses.
    GREET / INTRO / HD_TEXT / COLS follow his own AFD email, so the only thing the machine
    decides is WHICH rows go in - the words around them are his, put into formal English at his
    request because operations bosses receive it. INTRO carries {CLUSTER} (filled from the rows)
@@ -236,7 +238,7 @@ const AFD = {
   SR_LINK: '',
   SEND_HOURS: [10, 11],              // two chances in the morning; the first one that lands at or after SEND_FROM mails
   SEND_FROM: '10:30',               // never before this (HH:mm, sheet timezone) - the call-out is still going on
-  DRY_RUN: true,
+  DRY_RUN: false,                   // LIVE since 2026-11-05 - the owner read the afdTestReport copy and installed the trigger
   MAX_ROWS: 300,
   TIMEZONE: '',
   SUBJECT: '3MDA_AFD_RESCHEDULE_',
