@@ -308,8 +308,9 @@ const AFD12 = {
    RTS.ANY = true - one hit in FINAL STATUS is enough. (2) It goes to people outside the PLDT group, so
    the To/CC here are the three addresses he typed, and it runs ONCE a day at 11AM, not twice.
    Everything else is the shared engine: same file, same PLDT/RED tabs, same per-day SR dedupe, same
-   shape of email. DRY_RUN is true and no trigger is installed: he reads an rtsTestReport copy first,
-   then RTS.DRY_RUN = false and installRtsTrigger() are what make Sir Bernard receive it.
+   shape of email. He read the rtsTestReport copy and said "GO RTS LIVE" on 2026-11-05, so DRY_RUN is
+   false - the next run mails bernardsalioa@gmail.com for real - and installRtsTrigger() is what puts
+   the single 11AM run on the schedule.
    On 2026-11-05 he answered the three open wording questions by pasting his own template - the ten
    columns (DATE | SR Number | FINAL STATUS | CSP REMARKS | AGENT CODE | AGENT NAME | AGENCY NAME |
    CDME | SALES MANAGER | TEAM) and the greeting sentence, "@bernardsalioa@gmail.com" included, and
@@ -350,7 +351,7 @@ const RTS = {
   DATE_FORMAT: 'M/d/yyyy',
   SR_LINK: '',
   SEND_HOURS: [11],                // once a day, his "tuwing 11:00 AM lamang"
-  DRY_RUN: true,
+  DRY_RUN: false,                  // owner's "GO RTS LIVE", 2026-11-05 - PLDT-side address receives it
   MAX_ROWS: 300,
   TIMEZONE: '',
   SUBJECT: '3MDA_RTS_',

@@ -296,10 +296,10 @@ mail on the same engine: four conditions instead of one, and it sends **at or af
   `installCvTrigger()`, `installAfdTrigger()`, `installAfd12Trigger()` and `installRtsTrigger()` —
   each deletes every trigger of its own handler before creating its pair, so a short or duplicated
   pair is fixed by re-running it, never by hand. On 2026-11-05 the owner's Triggers page went from
-  **SFS 1 + CV 3** to exactly **2 + 2 + 2 + 2 + 1 agent notice = 9**; `installRtsTrigger()` is one
-  11AM trigger on top of those, and it does nothing until he presses it. The four PLDT reports are
-  past the `DRY_RUN` gate; RTS is not, so a paste is the only thing standing between a rule change
-  and PLDT receiving it.
+  **SFS 1 + CV 3** to exactly **2 + 2 + 2 + 2 + 1 agent notice = 9**; `installRtsTrigger()` adds one
+  11AM trigger on top of those, for **10**. All five reports — SFS, CV, AFD, AFD12 and RTS — are now
+  past the `DRY_RUN` gate, so a paste is the only thing standing between a rule change and its
+  recipients receiving it.
 * **AFD is live and on its own schedule.** The path the owner took on 2026-11-05: `afdProbe()` to
   measure the columns on the live file, `afdTestReport()` for a copy in his own inbox, then
   `AFD.DRY_RUN = false` in the editor and `installAfdTrigger()` (the 10AM + 11AM pair, so the mail
@@ -334,7 +334,8 @@ mail on the same engine: four conditions instead of one, and it sends **at or af
   reached` and a thrown `MailApp` error. It is guarded by `send`, so `afd12Preview` keeps its own
   `would go to:` lines and never claims to have sent anything, and a `DRY_RUN` copy says
   `DRY_RUN test copy, went to …` instead of naming PLDT.
-* **RTS is the fifth mail and it is NOT live (`RTS.DRY_RUN = true`, no trigger, 2026-11-05).** He
+* **RTS is the fifth mail and it is LIVE (`RTS.DRY_RUN = false` on the owner's "GO RTS LIVE",
+  2026-11-05; `installRtsTrigger()` is the one press that puts it on the clock).** He
   asked for it in one sentence: *"nais ko din sana magkaroon ng automated email patungkol sa
   RTS - CUSTOMER COMPLIANCE / RTS - UNCONTACTABLE na makikita sa final status at ito ay ipapadala sa
   email na ito - to bernardsalioa@gmail.com at naka cc sila jrsnavarro25@gmail.com
@@ -355,7 +356,11 @@ mail on the same engine: four conditions instead of one, and it sends **at or af
   `collectReport_` each gained them; `RTS.HD_TEXT` is `''` because his template has no HD REMARKS
   column. `rtsPreview` prints any column that comes out empty in every row instead of shipping
   blanks. Presses: `rtsProbe`, `rtsPreview`, `rtsTestReport`, `sendRtsReport`,
-  `installRtsTrigger`, handler `runRtsNotices`. It is not in `ensureReportTriggers_`.
+  `installRtsTrigger`, handler `runRtsNotices`. It is not in `ensureReportTriggers_`. The live flip
+  was his own word — *"GO RTS LIVE"* — so `runRtsNotices` now mails `bernardsalioa@gmail.com`
+  (Cc the two he named) on the first 11AM run after he pastes this file and installs the trigger;
+  a day with no RTS row mails nothing and logs `NOT SENT: 0 row(s) … already reported today`.
+  `rtsTestReport()` still forces its own copy to `DRY_RUN` and restores the live flag after.
 * **AFD29 (his "147 days due" mail) exists only as a scaffold plus a read-only scout.** He sent a
   screenshot of his own `3MDA_AFD29_NOV2026` and said *"maging AFD29 man o AFD12, ang gagamiten
   kasi ko na email na ayon sa date ng pag i-email ko - ito na lang 11/5/2026 - ganyan din dun sa
