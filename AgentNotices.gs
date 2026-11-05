@@ -186,14 +186,17 @@ const CV = {
    "AFD - NOV 5". STATUS is a list because of that dash - the row counts only when BOTH words are
    in the same cell, so it is caught whatever he types around them. The mail goes to the same
    four addresses as SFS and CV, and ON_DAY is the filter he chose: only rows whose revisit date
-   IS the day the report runs. DRY_RUN is true: he has no manual AFD email for me to copy, so
-   INTRO below is my wording and afdPreview shows him the shape before anything is live. */
+   IS the day the report runs. DRY_RUN is true: he has not yet said the AFD mail is live.
+   GREET / INTRO / HD_TEXT / COLS are copied from his own AFD email, so the only thing the
+   machine decides is WHICH rows go in - the words around them are his. INTRO carries
+   {CLUSTER}, which is filled from the rows, so changing WHERE alone moves the number in the
+   sentence. */
 const AFD = {
   NAME: 'AFD',
   TO: ['lsabat@pldt.com.ph'],
   CC: ['t-jesnavarro@supplier.pldt.com.ph', 't-jesnavarro@pldt365.onmicrosoft.com', 'abmadlangbayan0510@icloud.com'],
-  GREET: 'Hi Sir ABAT, Leonard S.,',
-  INTRO: 'For AFD reschedule revisit (cluster 11) on the scheduled date.',
+  GREET: 'Hi Sir Jack,',
+  INTRO: 'For endorsement to CLUSTER {CLUSTER} for revisit already done call out as per subs available po sila 10am to 11am today sana daw mabalikan sila.',
   THANKS: 'Thank you !',
   SIGN: ['Mark Maliwat', 'Sales Validator - MMMDA Logistics', 'Service Cavite Upland'],
   LOGO_URL: 'https://markelvinmaliwat-hub.github.io/3MDA-Logistics-Service_website/assets/mmmda-logo.jpg',
@@ -209,8 +212,8 @@ const AFD = {
   EXACT: false,
   WHERE: [{ COL: 'CLUSTER', IS: '11' }],  // extra equality filters, tolerant of 11 / '11' / '11.0' / 'CLUSTER 11'
   ON_DAY: 'HD RECOMMENDATION',            // the revisit day is read from this cell and must be today
-  HD_TEXT: '',                            // read the real HD RECOMMENDATION so the "AFD - NOV 5" line is in the table
-  COLS: ['DATE', 'SUBSCRIBER NAME', 'SR', 'FINAL STATUS', 'HD RECOMMENDATION'],
+  HD_TEXT: 'PART OF AFD - FOR REVISIT TOK TO SOR AVAILABLE PO SILA TODAY 10AM TO 11AM',
+  COLS: ['DATE', 'SUBSCRIBER NAME', 'SR', 'ACCT', 'PR', 'CSP STATUS', 'BRGY', 'CITY', 'CLUSTER', 'HD REMARKS'],
   DATE_FORMAT: 'M/d/yyyy',
   SR_LINK: '',
   SEND_HOURS: [8, 14],
@@ -255,12 +258,22 @@ const ALIAS_ = {
   SR: ['SR', 'SR NO', 'SR NO.', 'SR NUMBER', 'SERVICE REQUEST'],
   CSP: ['CSP STATUS', 'CSP'],
   CSPREM: ['CSP REMARKS', 'REMARKS'],
-  TL: ['TEAM LEADER', 'TL', 'TEAM LEAD']
+  TL: ['TEAM LEADER', 'TL', 'TEAM LEAD'],
+  /* the AFD mail carries the PLDT line identifiers and the address, none of which the
+     SFS/CV tables used - the names below are guesses until afdProbe prints the real headers */
+  ACCT: ['ACCT NO', 'ACCT NO.', 'ACCOUNT NO', 'ACCOUNT NO.', 'ACCOUNT NUMBER', 'ACCT', 'ACCOUNT'],
+  PR: ['PR NO', 'PR NO.', 'PR NUMBER', 'PR'],
+  BRGY: ['BRGY', 'BRGY.', 'BARANGAY'],
+  CITY: ['CITY', 'CITY / MUNICIPALITY', 'MUNICIPALITY'],
+  CLUSTER: ['CLUSTER'],
+  HD: ['HD REMARKS', 'HD RECOMMENDATION']
 };
 function pick_(r, key) {
   for (const n of ALIAS_[key] || []) { const v = r[n]; if (v !== undefined && v !== '' && v !== null) return v; }
   return '';
 }
+/* a filter column may be a real header (HD RECOMMENDATION) or one of the ALIAS_ keys above */
+const colOf_ = (r, col) => String((ALIAS_[col] ? pick_(r, col) : r[col]) == null ? '' : (ALIAS_[col] ? pick_(r, col) : r[col]));
 /* header row = first row (within the top 10) carrying both STATUS and AGENT */
 function tab_(ss, name, plain) {
   const sh = ss.getSheetByName(name);
@@ -355,7 +368,8 @@ const CELL_ = {
   'Date': 'date', 'DATE': 'date', 'Subscriber': 'sub', 'SUBSCRIBER NAME': 'sub', 'Plan': 'plan',
   'Status': 'status', 'FINAL STATUS': 'status', 'Remarks': 'remarks', 'SR No.': 'sr', 'SR': 'sr',
   'CSP REMARKS': 'cspRem', 'HD REMARKS': 'hd', 'HD RECOMMENDATION': 'hd',
-  'Agent': 'agent', 'Team Leader': 'tl', 'CSP STATUS': 'csp'
+  'Agent': 'agent', 'Team Leader': 'tl', 'CSP STATUS': 'csp',
+  'ACCT': 'acct', 'PR': 'pr', 'BRGY': 'brgy', 'CITY': 'city', 'CLUSTER': 'cluster'
 };
 const TH_ = 'style="background:#d9001b;color:#fff;text-align:left;padding:8px 10px;font-size:12px"';
 const TD_ = 'style="padding:7px 10px;border-bottom:1px solid #e3e8f0;font-size:13px;vertical-align:top"';
@@ -522,12 +536,12 @@ function collectReport_(ss, cfg, miss) {
   reportTabs_(cfg).forEach(name => tab_(ss, name).forEach(r => {
     const st = reportStatusOf_(r, cfg);
     if (!statusHit_(nk_(st), cfg)) return;
-    if (cfg.WHERE && !cfg.WHERE.every(w => cellEq_(r[w.COL], w.IS))) return;
+    if (cfg.WHERE && !cfg.WHERE.every(w => cellEq_(colOf_(r, w.COL), w.IS))) return;
     if (cfg.ON_DAY) {
-      const got = revisitDay_(r[cfg.ON_DAY], tz);
+      const got = revisitDay_(colOf_(r, cfg.ON_DAY), tz);
       if (!got) {
         if (miss) miss.push(name + ' | SR ' + String(pick_(r, 'SR')).replace(/\.0$/, '') + ' | ' +
-          cfg.ON_DAY + ' = "' + String(r[cfg.ON_DAY] == null ? '' : r[cfg.ON_DAY]).slice(0, 50) + '"');
+          cfg.ON_DAY + ' = "' + colOf_(r, cfg.ON_DAY).slice(0, 50) + '"');
         return;
       }
       if (got.md !== today) return;
@@ -538,7 +552,10 @@ function collectReport_(ss, cfg, miss) {
       status: st, remarks: String(pick_(r, 'PAYREM')).trim(),
       sr: String(pick_(r, 'SR')).replace(/\.0$/, '').trim(), agent: String(pick_(r, 'AGENT')).trim(),
       tl: String(pick_(r, 'TL')).trim(), csp: String(pick_(r, 'CSP')).trim(),
-      cspRem: String(pick_(r, 'CSPREM')).trim(), hd: hdOf_(r, cfg), _t: isNaN(raw) ? 0 : raw
+      cspRem: String(pick_(r, 'CSPREM')).trim(), hd: hdOf_(r, cfg),
+      acct: String(pick_(r, 'ACCT')).trim(), pr: String(pick_(r, 'PR')).trim(),
+      brgy: String(pick_(r, 'BRGY')).trim(), city: String(pick_(r, 'CITY')).trim(),
+      cluster: String(pick_(r, 'CLUSTER')).trim(), _t: isNaN(raw) ? 0 : raw
     };
     it.key = it.sr || (it.date + '|' + it.sub + '|' + it.plan);
     if (seen[it.key]) return;
@@ -552,12 +569,16 @@ function collectReport_(ss, cfg, miss) {
    endorses - so cfg.HD_TEXT repeats that line for every row. Set it to '' to read the real
    HD REMARKS / HD RECOMMENDATION cells instead. */
 function hdOf_(r, cfg) {
-  if (cfg.HD_TEXT) return String(cfg.HD_TEXT).trim();
-  for (const c of ['HD REMARKS', 'HD RECOMMENDATION']) {
-    if (r[c] !== undefined && r[c] !== null && String(r[c]).trim() !== '') return String(r[c]).trim();
-  }
-  return '';
+  return cfg.HD_TEXT ? String(cfg.HD_TEXT).trim() : String(pick_(r, 'HD')).trim();
 }
+/* Which ALIAS_ key each table column reads through - the diagnostics use it to say whether the
+   sheet actually has that header, before an empty column can ship to PLDT. */
+const COL_ALIAS_ = {
+  'DATE': 'DATE', 'SUBSCRIBER NAME': 'SUB', 'SR': 'SR', 'ACCT': 'ACCT', 'PR': 'PR',
+  'CSP STATUS': 'CSP', 'BRGY': 'BRGY', 'CITY': 'CITY', 'CLUSTER': 'CLUSTER',
+  'HD REMARKS': 'HD', 'HD RECOMMENDATION': 'HD', 'FINAL STATUS': 'STATUS', 'CSP REMARKS': 'CSPREM',
+  'PAYMENT REMARKS': 'PAYREM', 'AGENT': 'AGENT', 'TEAM LEADER': 'TL', 'AVAILED PLAN': 'PLAN'
+};
 /* The owner's own table style: thin black borders, centred bold caps headers, no banner. */
 function reportTable_(items, cfg) {
   const th = 'style="border:1px solid #4d4d4d;padding:8px 10px;font-size:12px;font-weight:700;text-align:center"';
@@ -595,17 +616,26 @@ function reportSig_(logo, cfg) {
   if (!img) return lines;
   return cfg.LOGO_ABOVE === false ? lines + `<p>${img}</p>` : `<p>${img}</p>` + lines;
 }
+/* His AFD sentence names the cluster, so {CLUSTER} is filled from the rows themselves - the
+   digits are taken from the first row, or from the WHERE filter when the day has no rows yet. */
+function introOf_(cfg, items) {
+  const s = String(cfg.INTRO || '');
+  if (s.indexOf('{CLUSTER}') < 0) return s;
+  const from = (items && items.length ? items[0].cluster : '') || (cfg.WHERE && cfg.WHERE.length ? cfg.WHERE[0].IS : '');
+  return s.split('{CLUSTER}').join(String(from).replace(/[^0-9]/g, ''));
+}
 function buildReportMail_(items, logo, cfg) {
   const max = cfg.MAX_ROWS || 300, shown = items.slice(0, max);
   const stamp = Utilities.formatDate(new Date(), cfg.TIMEZONE || NOTICE.TIMEZONE, 'MMMyyyy').toUpperCase();
   const subject = cfg.SUBJECT + stamp;
   const extra = items.length - shown.length;
+  const intro = introOf_(cfg, items);
   const h = `<div style="font-family:Calibri,Arial,sans-serif;font-size:14px;color:#000;max-width:900px">` +
-    `<p>${esc_(cfg.GREET)}</p><p>${esc_(cfg.INTRO)}</p>` + reportTable_(shown, cfg) +
+    `<p>${esc_(cfg.GREET)}</p><p>${esc_(intro)}</p>` + reportTable_(shown, cfg) +
     (extra > 0 ? `<p style="color:#667085;font-size:12px">&hellip;and ${extra} more not listed here.</p>` : '') +
     `<p style="margin-top:18px"><b>${esc_(cfg.THANKS)}</b></p>` + reportSig_(logo, cfg) +
     (cfg.FOOTER ? `<p style="color:#667085;font-size:12px">${esc_(cfg.FOOTER)}</p>` : '') + '</div>';
-  const t = `${cfg.GREET}\n\n${cfg.INTRO}\n\n${rowsText_(items, max, cfg.COLS)}` +
+  const t = `${cfg.GREET}\n\n${intro}\n\n${rowsText_(items, max, cfg.COLS)}` +
     (extra > 0 ? `\n...and ${extra} more.` : '') + `\n\n${cfg.THANKS}\n\n${cfg.SIGN.join('\n')}`;
   return { subject: subject, html: h, text: t };
 }
@@ -662,6 +692,8 @@ function sendReport_(send, cfg) {
   const m = buildReportMail_(fresh, logo, cfg);
   res.subject = m.subject; res.htmlChars = m.html.length;
   res.logo = logo.blob ? 'attached inline' : logo.src ? 'linked only' : 'none';
+  const tbl = fresh.slice(0, max);
+  res.blankCols = cfg.COLS.filter(c => tbl.every(x => cellOf_(x, c) === ''));
   if (!send) { res.text = m.text; return res; }
   if (MailApp.getRemainingDailyQuota() < 1) { res.skipped = 'daily Gmail quota reached'; return res; }
   const opt = {
@@ -702,6 +734,11 @@ function previewReport_(cfg) {
     return r;
   }
   Logger.log('subject: ' + r.subject + ' | html chars: ' + r.htmlChars);
+  /* A column whose real header differs from ALIAS_ renders as an empty cell in every row, which
+     would be silent unless measured - so the preview says which headers found nothing. */
+  if (r.blankCols && r.blankCols.length) Logger.log(cfg.NAME + ' ' + r.blankCols.join(', ') +
+    ' came out empty in all ' + r.shown + ' row(s) - those column names are not in the sheet, ' +
+    'run ' + cfg.NAME.toLowerCase() + 'Probe and read the header list');
   Logger.log(r.text);
   return r;
 }
@@ -993,16 +1030,16 @@ function afdProbe() {
       const st = reportStatusOf_(r, AFD);
       if (!statusHit_(nk_(st), AFD)) return;
       cnt.tagged++;
-      const cv = r[AFD.WHERE[0].COL];
+      const cv = colOf_(r, AFD.WHERE[0].COL);
       if (peek < 5) {
         peek++;
         Logger.log('  tagged [' + name + ']: FINAL STATUS="' + String(st).slice(0, 40) + '" | ' + AFD.WHERE[0].COL + '="' +
-          String(cv == null ? '' : cv) + '" | ' + AFD.ON_DAY + '="' + String(r[AFD.ON_DAY] == null ? '' : r[AFD.ON_DAY]).slice(0, 40) + '"');
+          cv + '" | ' + AFD.ON_DAY + '="' + colOf_(r, AFD.ON_DAY).slice(0, 40) + '"');
       }
-      if (!cellEq_(cv, AFD.WHERE[0].IS)) return;
+      if (!cellEq_(colOf_(r, AFD.WHERE[0].COL), AFD.WHERE[0].IS)) return;
       cnt.cluster++;
-      const got = revisitDay_(r[AFD.ON_DAY], AFD.TIMEZONE || NOTICE.TIMEZONE);
-      if (!got) { const k = name + ' "' + String(r[AFD.ON_DAY] == null ? '' : r[AFD.ON_DAY]).slice(0, 30) + '"'; unread[k] = (unread[k] || 0) + 1; return; }
+      const got = revisitDay_(colOf_(r, AFD.ON_DAY), AFD.TIMEZONE || NOTICE.TIMEZONE);
+      if (!got) { const k = name + ' "' + colOf_(r, AFD.ON_DAY).slice(0, 30) + '"'; unread[k] = (unread[k] || 0) + 1; return; }
       if (got.md !== today) { otherDay[got.text] = (otherDay[got.text] || 0) + 1; return; }
       cnt.due++;
     });
@@ -1016,6 +1053,17 @@ function afdProbe() {
     ur.slice(0, 10).map(k => k + ' x' + unread[k]).join(', ') + (ur.length > 10 ? ' ...(' + ur.length + ' kinds)' : ''));
   if (!cnt.tagged) Logger.log('AFD nothing in ' + AFD.FROM.join('/') + ' says AFD + RESCHEDULE in the tabs read (' + reportTabs_(AFD).join(',') + ') - mali ang column name o nasa ibang file ang data');
   else if (!cnt.cluster) Logger.log('AFD no cluster ' + AFD.WHERE[0].IS + ' row among them - check the ' + AFD.WHERE[0].COL + ' values logged above');
+  /* ACCT / PR / BRGY / CITY are columns this script never read before, so each header of his
+     table is matched against the real headers of the tabs AFD reads: anything MISSING would
+     arrive at PLDT as an empty column. */
+  const hdrs = {};
+  reportTabs_(AFD).forEach(n => tab_(ssA, n, true).forEach(r => Object.keys(r).forEach(h => { hdrs[h] = 1; })));
+  Logger.log('AFD table columns -> header found in the sheet: ' + AFD.COLS.map(c => {
+    const a = COL_ALIAS_[c];
+    if (c === 'HD REMARKS' && AFD.HD_TEXT) return c + '=written in the mail (HD_TEXT, not read from the sheet)';
+    const hit = (a ? ALIAS_[a] : [c]).filter(n => hdrs[n]);
+    return c + '=' + (hit.length ? hit.join(' / ') : 'MISSING');
+  }).join(' | '));
   Logger.log('the mail would carry ' + collectReport_(ssA, AFD).length + ' row(s) today');
   Logger.log('i-paste ang buong log na ito kapag tapos - kung 0 ang "tagged AFD + RESCHEDULE" o ang "CLUSTER 11", mali ang column name sa AFD.FROM / AFD.WHERE at dito mo makikita ang tunay na header; kung may "revisit today" naman, tama na ang rule at afdPreview na lang ang susunod.');
 }
