@@ -324,8 +324,8 @@ const RTS = {
      so the @ stays - it is his line, not a typo to clean up. */
   GREET: 'Hi @bernardsalioa@gmail.com,',
   INTRO: 'We would appreciate your assistance in checking our open RTS accounts, to confirm whether ' +
-    'each application has already been cancelled or is still to be complied with by the agent, so ' +
-    'that we may coordinate with the concerned team leaders on whether the sale remains recoverable.',
+    'each application has already been cancelled or is still pending compliance from the agent, so ' +
+    'that we may coordinate with the respective team leaders on whether the sale remains recoverable.',
   CLOSE: 'Should you have any concerns, please reply to this email so that we may follow up and ' +
     'determine the appropriate action on the remarks indicated.',
   THANKS: 'Thank you !',
