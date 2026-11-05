@@ -191,7 +191,13 @@ const CV = {
    decides is WHICH rows go in - the words around them are his, put into formal English at his
    request because operations bosses receive it. INTRO carries {CLUSTER} (filled from the rows)
    and HD_TEXT carries {DATE} (the revisit day read out of HD RECOMMENDATION, always written the
-   same way: 11/5/2026, whether he typed "AFD - NOV 5", "AFD - 11/5" or "AFD - NOVEMBER 5"). */
+   same way: 11/5/2026, whether he typed "AFD - NOV 5", "AFD - 11/5" or "AFD - NOVEMBER 5").
+   TIMING, also his: the mail goes out at 10:30 AM, after the call-out, and a day with no AFD
+   scheduled for that date produces no mail at all. Apps Script cannot pick a minute - a daily
+   trigger lands somewhere inside the hour it is given - so SEND_HOURS is [10, 11] and SEND_FROM
+   is '10:30': the 10 o'clock run sends nothing and logs if it wakes before half past, and the
+   11 o'clock run is the backstop. A "no rows today" run was always silent (sendReport_ returns
+   before building the mail), so an empty day never reaches PLDT. */
 const AFD = {
   NAME: 'AFD',
   TO: ['lsabat@pldt.com.ph'],
@@ -220,7 +226,8 @@ const AFD = {
   COLS: ['DATE', 'SUBSCRIBER NAME', 'SR', 'ACCT', 'PR', 'CSP STATUS', 'BRGY', 'CITY', 'CLUSTER', 'HD REMARKS'],
   DATE_FORMAT: 'M/d/yyyy',
   SR_LINK: '',
-  SEND_HOURS: [8, 14],
+  SEND_HOURS: [10, 11],              // two chances in the morning; the first one that lands at or after SEND_FROM mails
+  SEND_FROM: '10:30',               // never before this (HH:mm, sheet timezone) - the call-out is still going on
   DRY_RUN: true,
   MAX_ROWS: 300,
   TIMEZONE: '',
@@ -681,8 +688,25 @@ function markSent_(cfg, items) {
   Object.keys(p.getProperties()).forEach(k => { if (k.indexOf(cfg.SENT_PREFIX) === 0 && k !== key) p.deleteProperty(k); });
 }
 /** send=false -> preview only, nothing leaves the account. While cfg.DRY_RUN is true the
- *  report goes to ADMIN_EMAILS and the CC list is ignored, so a test can never reach PLDT. */
-function sendReport_(send, cfg) {
+ *  report goes to ADMIN_EMAILS and the CC list is ignored, so a test can never reach PLDT.
+ *  force=true bypasses cfg.SEND_FROM, for the click-it-now entries. */
+function sendReport_(send, cfg, force) {
+  /* Apps Script can only say "somewhere in the 10 o'clock hour", never "at 10:30", so a
+     scheduled AFD run can wake up at 10:05 while the call-out is still going on. Such a run
+     sends nothing and says so; the 11 o'clock hour is the second chance. The daily dedupe is
+     what makes this safe - whichever run gets there first mails the rows and the next one
+     reports "already reported today". */
+  if (send && !force && cfg.SEND_FROM) {
+    const tz = cfg.TIMEZONE || NOTICE.TIMEZONE;
+    const now = Utilities.formatDate(new Date(), tz, 'HH:mm');
+    if (now < cfg.SEND_FROM) {
+      const why = 'too early - ' + cfg.NAME + ' sends from ' + cfg.SEND_FROM + ' ' + tz +
+        ', this run started at ' + now + '. Nothing was sent; the next scheduled run will mail.';
+      Logger.log(cfg.NAME + ' | ' + why);
+      return { report: cfg.NAME, mode: cfg.DRY_RUN ? 'test' : 'live', date: fmtD_(new Date()),
+        dryRun: cfg.DRY_RUN, items: 0, fresh: 0, skipped: why };
+    }
+  }
   const ss = reportSs_(cfg);
   const miss = [];
   const items = collectReport_(ss, cfg, miss);
@@ -706,7 +730,12 @@ function sendReport_(send, cfg) {
     to: cfg.DRY_RUN ? [testTo] : cfg.TO, cc: cfg.DRY_RUN ? [] : cfg.CC
   };
   if (cfg.ON_DAY) res.unreadable = miss.length;
-  if (!items.length) { res.skipped = 'no rows tagged ' + statusWords_(cfg) + ' - nothing sent'; return res; }
+  if (!items.length) {
+    /* on an AFD day with rows tagged but none due today, "no rows tagged" alone would be the
+       wrong explanation, so the date condition is named too */
+    res.skipped = 'no rows tagged ' + statusWords_(cfg) + (cfg.ON_DAY ? ' whose ' + cfg.ON_DAY + ' is today' : '') + ' - nothing sent';
+    return res;
+  }
   if (!fresh.length) { res.skipped = items.length + ' row(s) already reported today - nothing new, nothing sent'; return res; }
   const logo = reportLogo_(cfg);
   const m = buildReportMail_(fresh, logo, cfg);
@@ -733,12 +762,15 @@ function runSfsNotices() { ensureReportTriggers_(); return sendReport_(true, SFS
 function runCvNotices() { ensureReportTriggers_(); return sendReport_(true, CV); }
 /* AFD deliberately does NOT self-heal and is not in ensureReportTriggers_: it is brand new and
    still on DRY_RUN, so nothing about it goes on the schedule until he runs installAfdTrigger.
-   The daily SFS and CV runs are never disturbed by a rule he has not approved yet. */
+   The daily SFS and CV runs are never disturbed by a rule he has not approved yet. This is the
+   scheduled handler, so it is the one that obeys AFD.SEND_FROM and waits for 10:30. */
 function runAfdNotices() { return sendReport_(true, AFD); }
-/* Dropdown-runnable: sends today's report once, right now, honouring that report's DRY_RUN. */
+/* Dropdown-runnable: sends today's report once, right now, honouring that report's DRY_RUN.
+   This one ignores AFD.SEND_FROM - if he presses it, he means it, early or not. The scheduled
+   handler runAfdNotices is the one that waits for 10:30. */
 function sendSfsReport() { return sendReport_(true, SFS); }
 function sendCvReport() { return sendReport_(true, CV); }
-function sendAfdReport() { return sendReport_(true, AFD); }
+function sendAfdReport() { return sendReport_(true, AFD, true); }
 /* Dropdown-runnable: logs exactly what PLDT would receive, without sending anything and
    without touching the dedupe list. */
 function previewReport_(cfg) {
@@ -815,7 +847,8 @@ function testReport_(cfg) {
   cfg.IGNORE_DAY = true;
   let r;
   try {
-    r = sendReport_(true, cfg);
+    r = sendReport_(true, cfg, true); /* forced past cfg.SEND_FROM - a test copy he asks for is
+                                         read for wording, not held until the afternoon */
   } finally {
     cfg.STATUS = keepStatus;
     cfg.MAX_ROWS = keepMax;
@@ -840,6 +873,7 @@ function reportStatus_(cfg, handler) {
     report: cfg.NAME,
     installed: ScriptApp.getProjectTriggers().some(t => t.getHandlerFunction() === handler),
     hours: cfg.SEND_HOURS, hour: cfg.SEND_HOURS[0], tz: cfg.TIMEZONE || NOTICE.TIMEZONE, dryRun: cfg.DRY_RUN,
+    from: cfg.SEND_FROM || '',
     to: cfg.TO, cc: cfg.CC, status: cfg.STATUS, quota: MailApp.getRemainingDailyQuota(),
     file: cfg.SHEET_ID || NOTICE.SHEET_ID, tabs: reportTabs_(cfg).join(','),
     rule: ruleText_(cfg),
@@ -854,7 +888,9 @@ function installReportTrigger_(cfg, handler) {
   cfg.SEND_HOURS.forEach(h => ScriptApp.newTrigger(handler).timeBased().everyDays(1).atHour(h).create());
   const st = reportStatus_(cfg, handler);
   Logger.log(cfg.NAME + ' trigger: ' + (st.installed ? 'installed' : 'NOT installed') +
-    ' | runs in the ' + hoursText_(cfg) + ' hour (' + st.tz + ') | rule: ' + st.rule +
+    ' | runs in the ' + hoursText_(cfg) + ' hour (' + st.tz + ')' +
+    (cfg.SEND_FROM ? ', mails at or after ' + cfg.SEND_FROM + ' - an earlier run waits and sends nothing' : '') +
+    ' | rule: ' + st.rule +
     ' | file: ' + st.file + ' | tabs: ' + st.tabs +
     ' | ' + (st.dryRun ? 'DRY_RUN is ON, copies go to ' + NOTICE.ADMIN_EMAILS.join(',') + ' only' : 'LIVE, goes to ' + st.to.join(',')) +
     ' | ' + st.dedupe + ' | ' + st.note);

@@ -33,7 +33,8 @@ In `AgentNotices.gs`: `DRY_RUN` (true = every notice goes to `ADMIN_EMAILS` labe
 and one config object per PLDT report (`SFS`, `CV`, `AFD`): `DRY_RUN`, `TO`, `CC`, `FROM`, `STATUS`
 (one phrase, or a list that must all be in the same cell), `EXACT`, `WHERE` (extra column = value
 filters), `ON_DAY` (the column whose date must be today), `GREET`, `INTRO` and `CLOSE` (may contain
-`{CLUSTER}`), `HD_TEXT` (may contain `{DATE}`), `COLS`, `SEND_HOURS`, `SHEET_ID`, `TABS`, `TEST`.
+`{CLUSTER}`), `HD_TEXT` (may contain `{DATE}`), `COLS`, `SEND_HOURS`, `SEND_FROM` (the earliest
+clock time a scheduled run may mail), `SHEET_ID`, `TABS`, `TEST`.
 
 In `index.html`: `WEB_APP_URL` (sales data only, via the `getAllData` JSONP call),
 `NOTICE_APP_URL` (notices **and** the shared log API), `LOG_URL` (defaults to
@@ -73,7 +74,9 @@ rule, recipients, schedule, test settings — is a config object (`SFS` and `CV`
 code. Both mail the owner's own shape: greeting, one-line intro, a black-bordered
 `DATE | SUBSCRIBER NAME | SR | CSP REMARKS | HD REMARKS` table, `Thank you !`, his three-line
 signature with the MMMDA logo inline. Both read the `PLDT` and `RED` tabs, never `VALIDATORS`,
-and both run **twice a day** (`SEND_HOURS = [8, 14]`).
+and both run **twice a day** (`SEND_HOURS = [8, 14]`). The third config, `AFD`, is a third
+mail on the same engine: three conditions instead of one, and it sends **at or after
+10:30 AM**, not at 8AM — both of those are explained in its own bullet below.
 
 * **SFS** (`runSfsNotices`): To `lsabat@pldt.com.ph`, CC the three addresses in `SFS.CC`,
   subject `3MDA_SFS_VALIDATION_` + `MMMYYYY`. **LIVE since 2026-11-04.**
@@ -144,6 +147,22 @@ and both run **twice a day** (`SEND_HOURS = [8, 14]`).
   until he installs it. `afdPreview` also runs `diagnoseReport_` when the table is empty, which
   counts how many rows each condition removed - tagged but wrong cluster, right cluster but another
   day, and the rows whose date cannot be read.
+* **AFD mails at 10:30 AM, not before, and an empty AFD day mails nothing.** His reason is the
+  call-out: the report is only true once the morning call-out is finished. Apps Script cannot be
+  given a minute — `atHour(10)` means "somewhere inside the 10 o'clock hour", which can be 10:02 —
+  so `AFD.SEND_HOURS = [10, 11]` and `AFD.SEND_FROM = '10:30'`. `sendReport_` compares the sheet's
+  own clock (`HH:mm` in `Asia/Manila`) with `SEND_FROM` before it reads anything: a run that wakes
+  early logs `too early - AFD sends from 10:30 Asia/Manila, this run started at 10:05` and returns
+  without a mail **and without touching the dedupe list**, so the 11 o'clock run mails the same rows
+  once. Whichever run gets there first is the one that sends; the daily dedupe makes the other one
+  say `already reported today`. `sendAfdReport` (the dropdown) passes `force` and ignores the gate,
+  because if he pressed it he means it; `afdPreview` and `afdTestReport` are never held by it either
+  — the gate holds mail, not reading. `SFS` and `CV` have no `SEND_FROM`, so their 8AM/2PM pair is
+  untouched.
+  The other half of the request is what `AFD.ON_DAY` already does: an `AFD - NOV 6` row is reported
+  on November 6 and on no other day, and on a day with nothing scheduled for it `collectReport_`
+  returns nothing, `sendReport_` returns `no rows tagged AFD + RESCHEDULE whose HD RECOMMENDATION is
+  today - nothing sent` and never builds an email — in `DRY_RUN` or live.
 * `sfsProbe` / `cvProbe` are how the rules were decided, and they are still the tool to run if
   the wording ever changes. They send and write nothing. Per tab they log the column names, the
   ten most common values of the five status and remarks columns, every value mentioning the
@@ -191,7 +210,9 @@ and both run **twice a day** (`SEND_HOURS = [8, 14]`).
   Measured on the live sheet: 89 rows carry `FINAL STATUS = REENCODED`.
 * Apps Script cannot schedule an exact minute — a day trigger fires somewhere inside
   each hour of `cfg.SEND_HOURS`, so this is "in the 8AM hour and in the 2PM hour", not
-  8:00:00. Same limitation as the 8:00 AM agent notices. `installSfsTrigger` and
+  8:00:00. Same limitation as the 8:00 AM agent notices. Where a report must not start before
+  a certain clock time (`AFD.SEND_FROM`, see above) the answer is two hours plus a gate, not a
+  finer trigger. `installSfsTrigger` and
   `installCvTrigger` create one trigger per hour for their own report (two each), delete any
   older trigger for the same handler first so running them twice never duplicates a mail, and
   print what they did — schedule, rule, file, tabs, and whether that report is live or still
@@ -232,7 +253,8 @@ and both run **twice a day** (`SEND_HOURS = [8, 14]`).
   only line that makes PLDT receive it.
 * The AFD mail is deliberately left off the schedule until he puts it there: `afdProbe()` to
   measure the cluster/date columns on the live file, `afdPreview()` for the body, `afdTestReport()`
-  for a copy in his own inbox, then `installAfdTrigger()` (two more day triggers) and
+  for a copy in his own inbox, then `installAfdTrigger()` (the 10AM + 11AM pair, so the mail goes
+  out at or after 10:30 and never before) and
   `AFD.DRY_RUN = false`. `runAfdNotices` is the handler, separate from `runSfsNotices` and
   `runCvNotices`, and it does not call `ensureReportTriggers_`.
 
