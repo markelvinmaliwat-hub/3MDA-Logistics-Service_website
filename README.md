@@ -30,8 +30,11 @@ Script and saved. Keep the two copies in step by pasting from this file.
 
 In `AgentNotices.gs`: `DRY_RUN` (true = every notice goes to `ADMIN_EMAILS` labelled
 `[TEST for <agent>]`), `SEND_HOUR`, `MAX_ROWS` per section, `SHEET_ID`, `ADMIN_EMAILS` —
-and one config object per PLDT report (`SFS`, `CV`, `AFD`, `AFD12`): `DRY_RUN`, `TO`, `CC`, `FROM`, `STATUS`
-(one phrase, or a list that must all be in the same cell), `EXACT`, `WHERE` (extra column = value
+and one config object per PLDT report (`SFS`, `CV`, `AFD`, `AFD12`, `RTS`, plus the scaffold
+`AFD29`): `DRY_RUN`, `TO`, `CC`, `FROM`, `STATUS`
+(one phrase, or a list that must all be in the same cell — or, with `ANY: true`, a list of
+**alternatives** where one hit is enough, which is how `RTS` reads its two taggings), `EXACT`,
+`WHERE` (extra column = value
 filters), `NOT` (column + wording that must be **absent**, e.g. the RPR rows in AFD), `ON_DAY` (the
 column whose date must be today), `GREET`, `INTRO` and `CLOSE` (may contain
 `{CLUSTER}`), `HD_TEXT` (may contain `{DATE}`), `COLS`, `SEND_HOURS`, `SEND_FROM` (the earliest
@@ -288,11 +291,13 @@ mail on the same engine: four conditions instead of one, and it sends **at or af
 * A new daily email needs no web-app redeploy — triggers run **Head**. Only a new `/exec`
   action would need Deploy > New version.
 * Putting this revision in is one paste and one `Ctrl+S`: then `installSfsTrigger()`,
-  `installCvTrigger()`, `installAfdTrigger()` and `installAfd12Trigger()` — each deletes every
-  trigger of its own handler before creating its pair, so a short or duplicated pair is fixed by
-  re-running it, never by hand. On 2026-11-05 the owner's Triggers page went from **SFS 1 + CV 3**
-  to exactly **2 + 2 + 2 + 2 + 1 = 9**. All four reports are past the `DRY_RUN` gate now, so a paste
-  is the only thing standing between a rule change and PLDT receiving it.
+  `installCvTrigger()`, `installAfdTrigger()`, `installAfd12Trigger()` and `installRtsTrigger()` —
+  each deletes every trigger of its own handler before creating its pair, so a short or duplicated
+  pair is fixed by re-running it, never by hand. On 2026-11-05 the owner's Triggers page went from
+  **SFS 1 + CV 3** to exactly **2 + 2 + 2 + 2 + 1 agent notice = 9**; `installRtsTrigger()` is one
+  11AM trigger on top of those, and it does nothing until he presses it. The four PLDT reports are
+  past the `DRY_RUN` gate; RTS is not, so a paste is the only thing standing between a rule change
+  and PLDT receiving it.
 * **AFD is live and on its own schedule.** The path the owner took on 2026-11-05: `afdProbe()` to
   measure the columns on the live file, `afdTestReport()` for a copy in his own inbox, then
   `AFD.DRY_RUN = false` in the editor and `installAfdTrigger()` (the 10AM + 11AM pair, so the mail
@@ -327,6 +332,39 @@ mail on the same engine: four conditions instead of one, and it sends **at or af
   reached` and a thrown `MailApp` error. It is guarded by `send`, so `afd12Preview` keeps its own
   `would go to:` lines and never claims to have sent anything, and a `DRY_RUN` copy says
   `DRY_RUN test copy, went to …` instead of naming PLDT.
+* **RTS is the fifth mail and it is NOT live (`RTS.DRY_RUN = true`, no trigger, 2026-11-05).** He
+  asked for it in one sentence: *"nais ko din sana magkaroon ng automated email patungkol sa
+  RTS - CUSTOMER COMPLIANCE / RTS - UNCONTACTABLE na makikita sa final status at ito ay ipapadala sa
+  email na ito - to bernardsalioa@gmail.com at naka cc sila jrsnavarro25@gmail.com
+  juliean.rjab@gmail.com at ito ay ipapadala sa email araw araw tuwing 11:00 AM lamang"*. Three
+  things make it different from the four PLDT queues: the To/CC are **those three addresses and
+  nobody else**, the two taggings are **alternatives** (`RTS.ANY = true`, so `statusHit_` uses
+  `some`, not `every` — a row carrying only one of the two wordings still belongs), and it runs in
+  **one** hour (`SEND_HOURS: [11]`) instead of a pair, because he said *11:00 AM lamang*. What is
+  shared: the file, the tabs, the black-bordered table, the per-day `RTS_SENT_yyyyMMdd` SR list,
+  the `[TEST]` copy path. The greeting `Hi Sir Bernard,`, the intro *"For endorsement to RTS for
+  proper validation and customer compliance."* and the `FOR RTS ACTION` line are my wording of his
+  intent — he has to confirm or replace them, the same way `AFD.INTRO` was rewritten from his
+  screenshot. Presses: `rtsProbe`, `rtsPreview`, `rtsTestReport`, `sendRtsReport`,
+  `installRtsTrigger`, handler `runRtsNotices`. It is not in `ensureReportTriggers_`.
+* **AFD29 (his "147 days due" mail) exists only as a scaffold plus a read-only scout.** He sent a
+  screenshot of his own `3MDA_AFD29_NOV2026` and said *"maging AFD29 man o AFD12, ang gagamiten
+  kasi ko na email na ayon sa date ng pag i-email ko - ito na lang 11/5/2026 - ganyan din dun sa
+  AFD"*. The picture settles the shape (mixed clusters 5/9/11 in one mail, `FINAL STATUS`
+  `AFD - RESCHEDULE`, `AFD SCHEDULED DATE` = 11/5/2026, an HD REMARKS line reading
+  `AFD 11/5/2026 - 147 DAYS DUE AND UP`) but not the rule: whether that wording lives in a column
+  the script can read, or whether the sheet has a numeric days-due column, or whether the line is
+  something he types at send time like the AFD/AFD12 `HD_TEXT`. So `AFD29` is a config object with
+  `DRY_RUN: true`, `WHERE: []` and provisional `ON_DAY: 'AFD SCHEDULED DATE'`, and **nothing reads
+  it** — there is no `sendAfd29Report`, no `afd29Preview`, no `installAfd29Trigger`, no handler.
+  `afd29Probe()` is the only AFD29 press: per report tab it logs the real headers, every column
+  whose values say `147` / `DAYS DUE` / `DUE AND UP` (exact wording + row count), every column whose
+  *name* looks like a days/due column with how many of its values are plain numbers ≥ 147, the
+  `AFD` + `RESCHEDULE` rows with their cluster spread, each candidate date column of those rows read
+  against today (`"11-5  <<< = TODAY" x3`), the provisional rule and how many rows it would report,
+  and finally which of its own table columns the sheet does not have or the mail cannot fill yet
+  (`CONTACT NUMBER=NOT WIRED YET …`, `CITY / BRGY=NOT WIRED YET and the sheet has no such header`)
+  instead of letting an empty column ship. That log is what turns it into a sixth queue.
 
 ## Agent accounts and Forgot password
 

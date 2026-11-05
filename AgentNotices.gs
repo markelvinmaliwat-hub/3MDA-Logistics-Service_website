@@ -299,6 +299,102 @@ const AFD12 = {
   TEST: { STATUS: 'AFD', MAX_ROWS: 12 }
 };
 
+/* The fifth queue, RTS, as the owner asked on 2026-11-05: "nais ko din sana magkaroon ng automated
+   email patungkol sa RTS - CUSTOMER COMPLIANCE RTS - UNCONTACTABLE na makikita sa final status at
+   ito ay ipapadala sa email na ito - to bernardsalioa@gmail.com at naka cc sila jrsnavarro25@gmail.com
+   juliean.rjab@gmail.com at ito ay ipapadala sa email araw araw tuwing 11:00 AM lamang".
+   Two things make it different from the other four, and both are his words, not a guess:
+   (1) the two taggings are ALTERNATIVES, not conditions on the same row, so RTS.STATUS is a list with
+   RTS.ANY = true - one hit in FINAL STATUS is enough. (2) It goes to people outside the PLDT group, so
+   the To/CC here are the three addresses he typed, and it runs ONCE a day at 11AM, not twice.
+   Everything else is the shared engine: same file, same PLDT/RED tabs, same per-day SR dedupe, same
+   shape of email. DRY_RUN is true and no trigger is installed: he reads an rtsTestReport copy first,
+   then RTS.DRY_RUN = false and installRtsTrigger() are what make Sir Bernard receive it. The greeting,
+   the intro sentence and the HD REMARKS line are still HIS to confirm - see RTS.GREET below. */
+const RTS = {
+  NAME: 'RTS',
+  TO: ['bernardsalioa@gmail.com'],
+  CC: ['jrsnavarro25@gmail.com', 'juliean.rjab@gmail.com'],
+  GREET: 'Hi Sir Bernard,',       // unconfirmed: he named the address, not how the mail should open
+  INTRO: 'For endorsement to RTS for proper validation and customer compliance.',
+  THANKS: 'Thank you !',
+  SIGN: ['Mark Maliwat', 'Sales Validator - MMMDA Logistics', 'Service Cavite Upland'],
+  LOGO_URL: 'https://markelvinmaliwat-hub.github.io/3MDA-Logistics-Service_website/assets/mmmda-logo.jpg',
+  LOGO_KEY: 'mmmda-logo',
+  LOGO_ALT: 'MMMDA Logistics Service',
+  LOGO_W: 150, LOGO_H: 147,
+  LOGO_ABOVE: true,
+  FOOTER: '',
+  STATUS: ['RTS - CUSTOMER COMPLIANCE', 'RTS - UNCONTACTABLE'],
+  ANY: true,                       // the two taggings are alternatives; AFD's list means AND
+  SHEET_ID: '',
+  TABS: [],
+  FROM: ['FINAL STATUS'],
+  EXACT: false,                    // also catches a longer wording typed into FINAL STATUS
+  HD_TEXT: 'FOR RTS ACTION',       // unconfirmed: SFS and CV both repeat a line he types by hand
+  COLS: ['DATE', 'SUBSCRIBER NAME', 'SR', 'CSP REMARKS', 'HD REMARKS'],
+  DATE_FORMAT: 'M/d/yyyy',
+  SR_LINK: '',
+  SEND_HOURS: [11],                // once a day, his "tuwing 11:00 AM lamang"
+  DRY_RUN: true,
+  MAX_ROWS: 300,
+  TIMEZONE: '',
+  SUBJECT: '3MDA_RTS_',
+  SENT_PREFIX: 'RTS_SENT_',
+  PROBE: ['RTS'],
+  TEST: { STATUS: 'RTS', MAX_ROWS: 12 }
+};
+
+/* The sixth queue the owner asked for on 2026-11-05: "ganyan din sana ng AFD 29 DAYS... maging
+   AFD29 man o AFD12, ang gagamiten kasi ko na email na ayon sa date ng pag i-email ko - ito na
+   lang 11/5/2026 - ganyan din dun sa AFD". His sample mail (3MDA_AFD29_NOV2026, sent 10:17 AM)
+   shows FINAL STATUS "AFD - RESCHEDULE", the date 11/5/2026 in a date column, HD REMARKS
+   "AFD 11/5/2026 - 147 DAYS DUE AND UP", the line "For endorsement to AFD, Please help validate
+   for the account that has 147 days and above DUE" - and clusters 5, 9 and 11 in the SAME mail,
+   so this one is NOT split by cluster the way AFD and AFD12 are.
+   THIS BLOCK IS PROVISIONAL and is not wired to anything: no send / preview / install function
+   reads it, DRY_RUN is on, and it has no trigger. What decides it is afd29Probe() - which column
+   really carries "147 DAYS DUE AND UP", which column really holds the 11/5/2026 he says the mail
+   is keyed on, and whether any row says it at all. Until that log comes back, ON_DAY and
+   COLS are the two headers visible in his screenshot, nothing more. */
+const AFD29 = {
+  NAME: 'AFD29',
+  TO: ['lsabat@pldt.com.ph'],
+  CC: ['t-jesnavarro@supplier.pldt.com.ph', 't-jesnavarro@pldt365.onmicrosoft.com', 'abmadlangbayan0510@icloud.com'],
+  GREET: 'Hi Sir Jack,',
+  INTRO: 'For endorsement to AFD. Please help validate the account(s) that have 147 days and above due.',
+  CLOSE: 'Should you have any concerns regarding the scheduled revisit, please kindly reply to this email so that we may address them immediately.',
+  THANKS: 'Thank you !',
+  SIGN: ['Mark Maliwat', 'Sales Validator - MMMDA Logistics', 'Service Cavite Upland'],
+  LOGO_URL: 'https://markelvinmaliwat-hub.github.io/3MDA-Logistics-Service_website/assets/mmmda-logo.jpg',
+  LOGO_KEY: 'mmmda-logo',
+  LOGO_ALT: 'MMMDA Logistics Service',
+  LOGO_W: 150, LOGO_H: 147,
+  LOGO_ABOVE: true,
+  FOOTER: '',
+  STATUS: ['AFD', 'RESCHEDULE'],
+  SHEET_ID: '',
+  TABS: [],
+  FROM: ['FINAL STATUS'],
+  EXACT: false,
+  WHERE: [],                      // no cluster filter: his own mail mixes clusters
+  NOT: [{ COL: 'HD RECOMMENDATION', HAS: 'RPR' }],
+  ON_DAY: 'AFD SCHEDULED DATE',   // provisional until afd29Probe says which column carries 11/5/2026
+  HD_TEXT: 'AFD {DATE} - 147 DAYS DUE AND UP',
+  COLS: ['DATE', 'SUBSCRIBER NAME', 'CONTACT NUMBER', 'SR', 'ACCT', 'PR', 'CLUSTER', 'CITY / BRGY', 'HD REMARKS'],
+  DATE_FORMAT: 'M/d/yyyy',
+  SR_LINK: '',
+  SEND_HOURS: [10, 11],
+  SEND_FROM: '10:30',
+  DRY_RUN: true,
+  MAX_ROWS: 300,
+  TIMEZONE: '',
+  SUBJECT: '3MDA_AFD29_',
+  SENT_PREFIX: 'AFD29_SENT_',
+  PROBE: ['147', 'DAYS DUE', 'DUE AND UP'],
+  TEST: { STATUS: 'AFD', MAX_ROWS: 12 }
+};
+
 const NT_ = {
   GREET: 'Dear',
   FP_INTRO: 'This is to formally inform you that the following sale(s) endorsed under your account are currently tagged as FOR PAYMENT. Kindly coordinate with the concerned subscriber(s) and ensure that the required payment is settled at the earliest possible time to avoid delays or cancellation of the application.',
@@ -551,12 +647,16 @@ function reportStatusOf_(r, cfg) {
 }
 /* cfg.STATUS is one phrase, or a list of phrases that must ALL be in the same cell. The AFD
    queue is written "AFD - RESCHEDULE", and nk_ turns the dash into a space, so two words in one
-   phrase would break on the spacing he happens to use - two words checked separately do not. */
+   phrase would break on the spacing he happens to use - two words checked separately do not.
+   cfg.ANY = true turns that around: the list becomes a set of ALTERNATIVES and one hit is enough,
+   which is what the RTS queue needs ("RTS - CUSTOMER COMPLIANCE" or "RTS - UNCONTACTABLE" are two
+   different endings for the same report, not two conditions on the same row). */
 function statusHit_(match, cfg) {
   const want = [].concat(cfg.STATUS).map(nk_);
-  return cfg.EXACT ? want.every(w => match === w) : want.every(w => match.indexOf(w) >= 0);
+  const has = cfg.EXACT ? (w) => match === w : (w) => match.indexOf(w) >= 0;
+  return cfg.ANY ? want.some(has) : want.every(has);
 }
-const statusWords_ = cfg => [].concat(cfg.STATUS).join(' + ');
+const statusWords_ = cfg => [].concat(cfg.STATUS).join(cfg.ANY ? ' or ' : ' + ');
 /* cfg.WHERE: the extra columns a row must also match, e.g. CLUSTER = 11. Apps Script hands back
    a number cell as 11 and a text cell as '11', '11.0' or 'CLUSTER 11', so when the two sides are
    not the same word the comparison falls back to the digits. A blank cell never matches. */
@@ -844,14 +944,15 @@ function sendReport_(send, cfg, force) {
 }
 function runSfsNotices() { ensureReportTriggers_(); return sendReport_(true, SFS); }
 function runCvNotices() { ensureReportTriggers_(); return sendReport_(true, CV); }
-/* AFD and AFD12 deliberately do NOT self-heal and are not in ensureReportTriggers_: AFD is his
+/* AFD, AFD12 and RTS deliberately do NOT self-heal and are not in ensureReportTriggers_: AFD is his
    newest rule and he installed its 10AM + 11AM pair by hand on 2026-11-05, so if those two
-   triggers are ever deleted only installAfdTrigger() puts them back, and AFD12 stays off the
-   schedule until he runs installAfd12Trigger(). The daily SFS and CV runs are never disturbed by
-   either. These are the scheduled handlers, so these are the ones that obey SEND_FROM and wait
-   for 10:30. */
+   triggers are ever deleted only installAfdTrigger() puts them back, AFD12 stays off the schedule
+   until he runs installAfd12Trigger(), and RTS stays off it until he runs installRtsTrigger().
+   The daily SFS and CV runs are never disturbed by either. These are the scheduled handlers, so
+   these are the ones that obey SEND_FROM and wait for 10:30. */
 function runAfdNotices() { return sendReport_(true, AFD); }
 function runAfd12Notices() { return sendReport_(true, AFD12); }
+function runRtsNotices() { return sendReport_(true, RTS); }
 /* Dropdown-runnable: sends today's report once, right now, honouring that report's DRY_RUN.
    These ignore SEND_FROM - if he presses it, he means it, early or not. The scheduled handlers
    runAfdNotices / runAfd12Notices are the ones that wait for 10:30. */
@@ -859,6 +960,7 @@ function sendSfsReport() { return sendReport_(true, SFS); }
 function sendCvReport() { return sendReport_(true, CV); }
 function sendAfdReport() { return sendReport_(true, AFD, true); }
 function sendAfd12Report() { return sendReport_(true, AFD12, true); }
+function sendRtsReport() { return sendReport_(true, RTS, true); }
 /* Dropdown-runnable: logs exactly what PLDT would receive, without sending anything and
    without touching the dedupe list. */
 function previewReport_(cfg) {
@@ -919,6 +1021,7 @@ function sfsPreview() { return previewReport_(SFS); }
 function cvPreview() { return previewReport_(CV); }
 function afdPreview() { return previewReport_(AFD); }
 function afd12Preview() { return previewReport_(AFD12); }
+function rtsPreview() { return previewReport_(RTS); }
 /* Dropdown-runnable TEST COPY, one per report. It forces that report's DRY_RUN on while it
    runs, so it can never reach PLDT even while the real report is live - without that, the
    borrowed rows below would go out as endorsements. On most days the live rule has 0 rows and
@@ -959,6 +1062,7 @@ function sfsTestReport() { return testReport_(SFS); }
 function cvTestReport() { return testReport_(CV); }
 function afdTestReport() { return testReport_(AFD); }
 function afd12TestReport() { return testReport_(AFD12); }
+function rtsTestReport() { return testReport_(RTS); }
 function hoursText_(cfg) { return cfg.SEND_HOURS.map(h => (h % 12 || 12) + (h < 12 ? 'AM' : 'PM')).join(' and '); }
 function reportStatus_(cfg, handler) {
   return {
@@ -992,6 +1096,7 @@ function installSfsTrigger() { return installReportTrigger_(SFS, 'runSfsNotices'
 function installCvTrigger() { return installReportTrigger_(CV, 'runCvNotices'); }
 function installAfdTrigger() { return installReportTrigger_(AFD, 'runAfdNotices'); }
 function installAfd12Trigger() { return installReportTrigger_(AFD12, 'runAfd12Notices'); }
+function installRtsTrigger() { return installReportTrigger_(RTS, 'runRtsNotices'); }
 /* Self-repairing schedule. The owner should not have to press Run for the plan to exist:
    every scheduled run (the agent notices and both reports) checks its own report triggers
    first and rebuilds only the ones whose count does not match cfg.SEND_HOURS. Apps Script
@@ -1082,6 +1187,7 @@ function probeReport_(cfg) {
 }
 function sfsProbe() { return probeReport_(SFS); }
 function cvProbe() { return probeReport_(CV); }
+function rtsProbe() { return probeReport_(RTS); }
 /* ------------------------------------------------------- AFD RESCHEDULE scout (read-only)
    The owner asked for a daily mail of the AFD RESCHEDULE rows of CLUSTER 11 only, keyed on the
    AFD scheduled date. Neither AFD nor CLUSTER is a column this script has ever read, so nothing
@@ -1245,6 +1351,100 @@ function afd12Probe() {
   Logger.log('AFD12 tagged rows by ' + AFD12.WHERE[0].COL + ': ' +
     Object.keys(tally).sort((a, b) => tally[b] - tally[a]).map(k => k + '=' + tally[k]).join(', '));
   afdScout_(AFD12);
+}
+
+/* ---------------------------------------------------- AFD29 / 147 DAYS DUE scout (read-only)
+   The owner's sixth ask (2026-11-05): "ganyan din sana ng AFD 29 DAYS... ang gagamiten kasi ko na
+   email na ayon sa date ng pag i-email ko - ito na lang 11/5/2026 - ganyan din dun sa AFD", with his
+   own 3MDA_AFD29_NOV2026 mail as the picture. Two things in that picture cannot be copied into a rule
+   without measuring first: (a) which column actually says "147 DAYS DUE AND UP" - his AFD and AFD12
+   mails WRITE that line themselves (HD_TEXT) because the sheet has no HD REMARKS column, so the
+   wording may live in a column we have never read, or in a numeric "days due" column, or nowhere;
+   (b) which column carries the 11/5/2026 he keys the mail on - AFD SCHEDULED DATE is the visible
+   candidate but HD RECOMMENDATION is what AFD/AFD12 use.
+   afd29Probe() answers both with counts and never sends or writes anything: per report tab it lists
+   the real headers, every column whose VALUES carry the 147 wording (with the exact wording and the
+   row count), every column whose NAME looks like a days/due column (with how many of its values are
+   plain numbers and how many are 147 or more), the tagged AFD + RESCHEDULE rows with their clusters,
+   and how those rows' candidate date columns read against today. It closes by naming every column of
+   the planned table that the sheet does not have, with the real headers that look closest to it, so
+   one paste settles the rule instead of four guesses. */
+const AFD29_WORDS_ = '147|DAYS DUE|DUE AND UP';
+const tallyText_ = (o, n) => Object.keys(o).sort((a, b) => o[b] - o[a]).slice(0, n || 8)
+  .map(k => '"' + k.slice(0, 55) + '" x' + o[k]).join(', ');
+function afd29Probe() {
+  const ss = reportSs_(AFD29), re = new RegExp(AFD29_WORDS_, 'i'), tz = NOTICE.TIMEZONE;
+  const today = Utilities.formatDate(new Date(), tz, 'M-d');
+  Logger.log('AFD29 scout | file: ' + ss.getName() + ' | tabs: ' + reportTabs_(AFD29).join(',') +
+    ' | today is ' + Utilities.formatDate(new Date(), tz, 'yyyy-MM-dd') + ' (' + tz + ') | this run emails nothing and writes nothing');
+  let wordHits = 0;
+  const hdrs = {};
+  reportTabs_(AFD29).forEach(name => {
+    const rows = tab_(ss, name);
+    if (!rows.length) { Logger.log(name + ': no readable rows'); return; }
+    const cols = Object.keys(rows[0]);
+    cols.forEach(c => { hdrs[c] = 1; });
+    Logger.log('--- ' + name + ' (' + rows.length + ' rows) columns: ' + cols.join(' | '));
+    /* (a) which column says the 147 wording */
+    cols.forEach(c => {
+      const vals = {};
+      let n = 0;
+      rows.forEach(r => { const v = nk_(r[c]); if (!re.test(v)) return; n++; vals[v] = (vals[v] || 0) + 1; });
+      if (!n) return;
+      wordHits += n;
+      Logger.log('  >> ' + name + ' ' + c + ': ' + n + ' row(s) say ' + AFD29_WORDS_ + ' -> ' + tallyText_(vals, 6));
+    });
+    if (!wordHits) Logger.log('  (nothing in ' + name + ' says 147 / DAYS DUE / DUE AND UP in any column)');
+    /* (a2) or it is a number, not a wording */
+    cols.filter(c => /\b(DUE|DAYS|DAY)\b|ARREAR|OUTSTAND/i.test(c)).forEach(c => {
+      const vals = {};
+      let nums = 0, over = 0, max = null;
+      rows.forEach(r => {
+        const v = String(r[c] == null ? '' : r[c]).trim();
+        if (!v) return;
+        vals[v] = (vals[v] || 0) + 1;
+        if (!/^-?\d+(\.0+)?$/.test(v)) return;
+        nums++;
+        const x = Number(v);
+        if (x >= 147) over++;
+        max = max === null ? x : Math.max(max, x);
+      });
+      Logger.log('  ## ' + name + ' column NAMED ' + c + ': ' + Object.keys(vals).length + ' distinct values, plain numbers ' +
+        nums + ', 147 and above ' + over + (max === null ? '' : ', biggest ' + max) + ' -> ' + tallyText_(vals, 6));
+    });
+    /* (b) the rows the mail would be built from, and the day each one carries */
+    const tagged = rows.filter(r => statusHit_(nk_(reportStatusOf_(r, AFD29)), AFD29));
+    const cl = {};
+    tagged.forEach(r => { const k = nk_(colOf_(r, 'CLUSTER')) || '(blank)'; cl[k] = (cl[k] || 0) + 1; });
+    Logger.log(name + ' rows tagged ' + statusWords_(AFD29) + ' in ' + AFD29.FROM.join('/') + ': ' + tagged.length +
+      (tagged.length ? ' | their CLUSTER values: ' + Object.keys(cl).sort((a, b) => cl[b] - cl[a]).map(k => k + '=' + cl[k]).join(', ') : ''));
+    cols.filter(c => /DATE|SCHEDULE|AFD|RECOMMEND/i.test(c)).forEach(c => {
+      const days = {};
+      let blank = 0;
+      tagged.forEach(r => {
+        const v = r[c];
+        if (v == null || String(v).trim() === '') { blank++; return; }
+        const got = revisitDay_(v, tz);
+        if (!got) { const k = 'cannot read "' + nk_(v).slice(0, 28) + '"'; days[k] = (days[k] || 0) + 1; return; }
+        const k = got.md + (got.md === today ? '  <<< = TODAY' : '');
+        days[k] = (days[k] || 0) + 1;
+      });
+      Logger.log('  ' + name + ' tagged rows by ' + c + ': blank ' + blank + ' | ' + (Object.keys(days).length ? tallyText_(days, 10) : 'nothing to read'));
+    });
+  });
+  Logger.log('AFD29 rule as it is configured NOW (provisional): ' + ruleText_(AFD29) + ' | that would report ' +
+    collectReport_(ss, AFD29).length + ' row(s) today');
+  Logger.log('AFD29 table columns -> real header in this file: ' + AFD29.COLS.map(c => {
+    if (c === 'HD REMARKS' && AFD29.HD_TEXT) return c + '=written in the mail (HD_TEXT), not read from the sheet';
+    const a = COL_ALIAS_[c], via = a ? ALIAS_[a] : null;
+    const hit = (via || [c]).filter(n => hdrs[n]);
+    if (!CELL_[c]) return c + '=NOT WIRED YET' + (hit.length ? ' (the sheet has ' + hit.join(' / ') + ', but this mail cannot read that column until it is added to CELL_)' : ' and the sheet has no such header');
+    if (hit.length) return c + '=' + hit.join(' / ');
+    const near = Object.keys(hdrs).filter(n => new RegExp(c.split(/[^A-Z0-9]+/i).filter(Boolean).join('|'), 'i').test(n));
+    return c + '=MISSING' + (near.length ? ' (closest headers: ' + near.slice(0, 4).join(', ') + ')' : '');
+  }).join(' | '));
+  Logger.log(wordHits ? 'the ' + AFD29_WORDS_ + ' wording was found in ' + wordHits + ' cell(s) above - i-paste ang log, doon natin ipupwesto ang AFD29.FROM / ON_DAY at gagawa ako ng send / preview / trigger kapag napagkasunduan na.'
+    : 'WALANG column sa ' + reportTabs_(AFD29).join('/') + ' na may nakasulat na 147 DAYS DUE AND UP - ang nasa email niyang HD REMARKS na yun ay hindi galing sa sheet na to, o kailangan ng ibang file (AFD29.SHEET_ID). I-paste lang ang buong log.');
 }
 
 /* --------------------------------------------------------------------- log API
