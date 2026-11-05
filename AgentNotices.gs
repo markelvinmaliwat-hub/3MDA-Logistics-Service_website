@@ -309,14 +309,25 @@ const AFD12 = {
    the To/CC here are the three addresses he typed, and it runs ONCE a day at 11AM, not twice.
    Everything else is the shared engine: same file, same PLDT/RED tabs, same per-day SR dedupe, same
    shape of email. DRY_RUN is true and no trigger is installed: he reads an rtsTestReport copy first,
-   then RTS.DRY_RUN = false and installRtsTrigger() are what make Sir Bernard receive it. The greeting,
-   the intro sentence and the HD REMARKS line are still HIS to confirm - see RTS.GREET below. */
+   then RTS.DRY_RUN = false and installRtsTrigger() are what make Sir Bernard receive it.
+   On 2026-11-05 he answered the three open wording questions by pasting his own template - the ten
+   columns (DATE | SR Number | FINAL STATUS | CSP REMARKS | AGENT CODE | AGENT NAME | AGENCY NAME |
+   CDME | SALES MANAGER | TEAM) and the greeting sentence, "@bernardsalioa@gmail.com" included, and
+   said "ngunit gawin mo ito na english para sa formality". So GREET / INTRO / CLOSE below are his
+   two sentences put into formal English, nothing invented; the earlier guesses (Hi Sir Bernard, the
+   FOR RTS ACTION line, the five SFS columns) are gone. */
 const RTS = {
   NAME: 'RTS',
   TO: ['bernardsalioa@gmail.com'],
   CC: ['jrsnavarro25@gmail.com', 'juliean.rjab@gmail.com'],
-  GREET: 'Hi Sir Bernard,',       // unconfirmed: he named the address, not how the mail should open
-  INTRO: 'For endorsement to RTS for proper validation and customer compliance.',
+  /* He tags the man by his address the way people do in chat, and asked for exactly this greeting,
+     so the @ stays - it is his line, not a typo to clean up. */
+  GREET: 'Hi @bernardsalioa@gmail.com,',
+  INTRO: 'We would appreciate your assistance in checking our open RTS accounts, to confirm whether ' +
+    'each application has already been cancelled or is still to be complied with by the agent, so ' +
+    'that we may coordinate with the concerned team leaders on whether the sale remains recoverable.',
+  CLOSE: 'Should you have any concerns, please reply to this email so that we may follow up and ' +
+    'determine the appropriate action on the remarks indicated.',
   THANKS: 'Thank you !',
   SIGN: ['Mark Maliwat', 'Sales Validator - MMMDA Logistics', 'Service Cavite Upland'],
   LOGO_URL: 'https://markelvinmaliwat-hub.github.io/3MDA-Logistics-Service_website/assets/mmmda-logo.jpg',
@@ -331,8 +342,11 @@ const RTS = {
   TABS: [],
   FROM: ['FINAL STATUS'],
   EXACT: false,                    // also catches a longer wording typed into FINAL STATUS
-  HD_TEXT: 'FOR RTS ACTION',       // unconfirmed: SFS and CV both repeat a line he types by hand
-  COLS: ['DATE', 'SUBSCRIBER NAME', 'SR', 'CSP REMARKS', 'HD REMARKS'],
+  HD_TEXT: '',                     // his template has no HD REMARKS column, so nothing is written here
+  /* His template, in his order. Four of these (AGENCY NAME, CDME, SALES MANAGER, TEAM) are columns
+     no report has ever read, so rtsPreview names any that come out empty on the live file instead of
+     letting a blank column reach him. */
+  COLS: ['DATE', 'SR Number', 'FINAL STATUS', 'CSP REMARKS', 'AGENT CODE', 'AGENT NAME', 'AGENCY NAME', 'CDME', 'SALES MANAGER', 'TEAM'],
   DATE_FORMAT: 'M/d/yyyy',
   SR_LINK: '',
   SEND_HOURS: [11],                // once a day, his "tuwing 11:00 AM lamang"
@@ -435,7 +449,13 @@ const ALIAS_ = {
   BRGY: ['BRGY', 'BRGY.', 'BARANGAY'],
   CITY: ['CITY', 'CITY / MUNICIPALITY', 'MUNICIPALITY'],
   CLUSTER: ['CLUSTER'],
-  HD: ['HD REMARKS', 'HD RECOMMENDATION']
+  HD: ['HD REMARKS', 'HD RECOMMENDATION'],
+  /* the four columns his RTS template shows and no report has ever read - the names are exactly
+     what he pasted, and rtsPreview is what proves whether the live file really has them */
+  AGENCY: ['AGENCY NAME', 'AGENCY'],
+  CDME: ['CDME'],
+  SMANAGER: ['SALES MANAGER'],
+  TEAM: ['TEAM', 'TEAM NAME']
 };
 function pick_(r, key) {
   for (const n of ALIAS_[key] || []) { const v = r[n]; if (v !== undefined && v !== '' && v !== null) return v; }
@@ -543,7 +563,10 @@ const CELL_ = {
   'Status': 'status', 'FINAL STATUS': 'status', 'Remarks': 'remarks', 'SR No.': 'sr', 'SR': 'sr',
   'CSP REMARKS': 'cspRem', 'HD REMARKS': 'hd', 'HD RECOMMENDATION': 'hd',
   'Agent': 'agent', 'Team Leader': 'tl', 'CSP STATUS': 'csp',
-  'ACCT': 'acct', 'PR': 'pr', 'BRGY': 'brgy', 'CITY': 'city', 'CLUSTER': 'cluster'
+  'ACCT': 'acct', 'PR': 'pr', 'BRGY': 'brgy', 'CITY': 'city', 'CLUSTER': 'cluster',
+  /* his RTS template's own headers, so the mail can print them the way he types them */
+  'SR Number': 'sr', 'AGENT CODE': 'code', 'AGENT NAME': 'agent', 'AGENCY NAME': 'agency',
+  'CDME': 'cdme', 'SALES MANAGER': 'smanager', 'TEAM': 'team'
 };
 const TH_ = 'style="background:#d9001b;color:#fff;text-align:left;padding:8px 10px;font-size:12px"';
 const TD_ = 'style="padding:7px 10px;border-bottom:1px solid #e3e8f0;font-size:13px;vertical-align:top"';
@@ -737,6 +760,9 @@ function collectReport_(ss, cfg, miss) {
       revisit: revisitDate_(got, tz),
       acct: String(pick_(r, 'ACCT')).trim(), pr: String(pick_(r, 'PR')).trim(),
       brgy: String(pick_(r, 'BRGY')).trim(), city: String(pick_(r, 'CITY')).trim(),
+      agency: String(pick_(r, 'AGENCY')).trim(), cdme: String(pick_(r, 'CDME')).trim(),
+      smanager: String(pick_(r, 'SMANAGER')).trim(), team: String(pick_(r, 'TEAM')).trim(),
+      code: String(pick_(r, 'CODE')).trim(),
       cluster: String(pick_(r, 'CLUSTER')).trim(), _t: isNaN(raw) ? 0 : raw
     };
     it.key = it.sr || (it.date + '|' + it.sub + '|' + it.plan);
@@ -770,7 +796,9 @@ const COL_ALIAS_ = {
   'DATE': 'DATE', 'SUBSCRIBER NAME': 'SUB', 'SR': 'SR', 'ACCT': 'ACCT', 'PR': 'PR',
   'CSP STATUS': 'CSP', 'BRGY': 'BRGY', 'CITY': 'CITY', 'CLUSTER': 'CLUSTER',
   'HD REMARKS': 'HD', 'HD RECOMMENDATION': 'HD', 'FINAL STATUS': 'STATUS', 'CSP REMARKS': 'CSPREM',
-  'PAYMENT REMARKS': 'PAYREM', 'AGENT': 'AGENT', 'TEAM LEADER': 'TL', 'AVAILED PLAN': 'PLAN'
+  'PAYMENT REMARKS': 'PAYREM', 'AGENT': 'AGENT', 'TEAM LEADER': 'TL', 'AVAILED PLAN': 'PLAN',
+  'SR Number': 'SR', 'AGENT CODE': 'CODE', 'AGENT NAME': 'AGENT', 'AGENCY NAME': 'AGENCY',
+  'CDME': 'CDME', 'SALES MANAGER': 'SMANAGER', 'TEAM': 'TEAM'
 };
 /* The owner's own table style: thin black borders, centred bold caps headers, no banner. */
 function reportTable_(items, cfg) {

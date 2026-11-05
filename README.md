@@ -282,12 +282,14 @@ mail on the same engine: four conditions instead of one, and it sends **at or af
   the picture linked by URL instead, and `sfsPreview` / `cvPreview` log which of the two
   happened (`attached inline` / `linked only`). Set `cfg.LOGO_URL` to `''` for no picture at
   all, `cfg.LOGO_ABOVE = false` to put it under the three lines, `cfg.LOGO_W` / `LOGO_H` for
-  size. The logo is only in the two PLDT reports — the agent notices are unchanged.
+  size. The logo is only in the five endorsement reports — the agent notices are unchanged.
   Replace the picture by overwriting `assets/mmmda-logo.jpg` and pushing.
-* To change the columns, edit `cfg.COLS` (both reports ship
-  `['DATE', 'SUBSCRIBER NAME', 'SR', 'CSP REMARKS', 'HD REMARKS']` like his own mail); the
-  header name is mapped to the row field in `CELL_` (`Date, Subscriber, SR No., Plan, Status,
-  Remarks, Agent, Team Leader, CSP Status`).
+* To change the columns, edit that report's `cfg.COLS`: SFS and CV ship
+  `['DATE', 'SUBSCRIBER NAME', 'SR', 'CSP REMARKS', 'HD REMARKS']` like his own mail, AFD/AFD12 ship
+  his ACCT / PR / BRGY / CITY table, and RTS ships his ten template columns. The header name is
+  mapped to the row field in `CELL_` (`Date, Subscriber, SR No., Plan, Status, Remarks, Agent, Team
+  Leader, CSP Status, Agent Code, Agency Name, CDME, Sales Manager, Team`), and a header that no
+  `CELL_` entry covers is what `rtsPreview` would call an empty column.
 * A new daily email needs no web-app redeploy — triggers run **Head**. Only a new `/exec`
   action would need Deploy > New version.
 * Putting this revision in is one paste and one `Ctrl+S`: then `installSfsTrigger()`,
@@ -342,10 +344,17 @@ mail on the same engine: four conditions instead of one, and it sends **at or af
   `some`, not `every` — a row carrying only one of the two wordings still belongs), and it runs in
   **one** hour (`SEND_HOURS: [11]`) instead of a pair, because he said *11:00 AM lamang*. What is
   shared: the file, the tabs, the black-bordered table, the per-day `RTS_SENT_yyyyMMdd` SR list,
-  the `[TEST]` copy path. The greeting `Hi Sir Bernard,`, the intro *"For endorsement to RTS for
-  proper validation and customer compliance."* and the `FOR RTS ACTION` line are my wording of his
-  intent — he has to confirm or replace them, the same way `AFD.INTRO` was rewritten from his
-  screenshot. Presses: `rtsProbe`, `rtsPreview`, `rtsTestReport`, `sendRtsReport`,
+  the `[TEST]` copy path. The **words and columns are his own** (2026-11-05): he pasted the
+  greeting (*"Hi @bernardsalioa@gmail.com for checking ng ating mga open RTS kung ito ba ay cancelled
+  na o macocomply pa ng agent…"*) and a screenshot of the table, then asked for it in English —
+  *"ngunit gawin mo ito na english para sa formality"* — so `RTS.INTRO` / `RTS.CLOSE` are that
+  sentence translated, the `@` in the greeting stays because it is how he tags a person, and `COLS`
+  is his ten-column order (`DATE | SR Number | FINAL STATUS | CSP REMARKS | AGENT CODE | AGENT NAME
+  | AGENCY NAME | CDME | SALES MANAGER | TEAM`). Four of those headers (`AGENCY NAME`, `CDME`,
+  `SALES MANAGER`, `TEAM`) had never been read by any report, so `ALIAS_`, `CELL_`, `COL_ALIAS_` and
+  `collectReport_` each gained them; `RTS.HD_TEXT` is `''` because his template has no HD REMARKS
+  column. `rtsPreview` prints any column that comes out empty in every row instead of shipping
+  blanks. Presses: `rtsProbe`, `rtsPreview`, `rtsTestReport`, `sendRtsReport`,
   `installRtsTrigger`, handler `runRtsNotices`. It is not in `ensureReportTriggers_`.
 * **AFD29 (his "147 days due" mail) exists only as a scaffold plus a read-only scout.** He sent a
   screenshot of his own `3MDA_AFD29_NOV2026` and said *"maging AFD29 man o AFD12, ang gagamiten
