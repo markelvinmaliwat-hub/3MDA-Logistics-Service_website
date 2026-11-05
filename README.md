@@ -109,6 +109,14 @@ and both run **twice a day** (`SEND_HOURS = [8, 14]`).
   words with its exact wording (`##`)**, the full contents of the sample rows, and how many rows
   the current rule would report. As measured on 2026-11-04 the live Aug-Oct sheet had **0** rows
   tagged `SFS VALIDATION`, so an automated run that day correctly sends nothing.
+* `afdProbe` is the scout for the requested **AFD RESCHEDULE / cluster 11** mail. Nothing is
+  decided yet because no AFD or CLUSTER column has ever been read from this file, so this
+  function only looks: it lists every tab that mentions `AFD` / `RESCHEDULE` / `CLUSTER`, the
+  columns named for them, the exact wording with row counts, how many rows each cluster value
+  has, whether the AFD date is stored as a real date or as text (the same day arrives in the
+  sheet both ways), and up to five whole sample rows. It emails nothing, writes nothing and
+  changes no setting. The rule for the third report — which column, which cluster value, which
+  date — is cut from its log, not guessed.
 * **Which spreadsheet is read is per report.** `cfg.SHEET_ID` (`''` = the same file the
   agent notices use, `DATABASE AUG TO OCT`) and `cfg.TABS` (`[]` = `NOTICE.SALES_TABS`) let a
   report follow the owner's *current* file once Aug–Oct is closed, without touching the notices.

@@ -739,6 +739,89 @@ function probeReport_(cfg) {
 }
 function sfsProbe() { return probeReport_(SFS); }
 function cvProbe() { return probeReport_(CV); }
+/* ------------------------------------------------------- AFD RESCHEDULE scout (read-only)
+   The owner asked for a daily mail of the AFD RESCHEDULE rows of CLUSTER 11 only, keyed on the
+   AFD scheduled date. Neither AFD nor CLUSTER is a column this script has ever read, so nothing
+   gets built on a guess. afdProbe() walks EVERY tab of the file the notices read and logs, for
+   the tabs that mention AFD / RESCHEDULE / CLUSTER: the whole header, every column whose NAME or
+   any of whose VALUES mentions those words (with the exact wording and how many rows carry it),
+   every distinct value of a cluster column, how the date columns are actually stored (real date
+   or text, and which dates exist), and up to five complete rows so the wording is visible. It
+   emails nothing and writes nothing. If it finds nothing at all, the cluster data is in a
+   different spreadsheet - point AFD.SHEET_ID at it and run this again. */
+const AFD_WORDS_ = ['AFD', 'RESCHEDULE', 'CLUSTER'];
+function afdProbe() {
+  const ss = reportSs_(SFS), re = new RegExp(AFD_WORDS_.join('|'), 'i');
+  Logger.log('AFD scout | file: ' + ss.getName() + ' | this run emails nothing and writes nothing');
+  const tabs = ss.getSheets();
+  Logger.log('tabs: ' + tabs.map(s => s.getName() + '=' + Math.max(0, s.getLastRow() - 1)).join(', '));
+  let anyHit = false;
+  tabs.forEach(sh => {
+    const name = sh.getName(), rows = tab_(ss, name, true);
+    if (!rows.length) return;
+    const cols = Object.keys(rows[0]);
+    const named = cols.filter(c => re.test(c));
+    const valueHits = {};
+    cols.forEach(c => {
+      const vals = {};
+      let n = 0;
+      rows.forEach(r => {
+        const v = nk_(r[c]);
+        if (!re.test(v)) return;
+        n++;
+        vals[v] = (vals[v] || 0) + 1;
+      });
+      if (n) valueHits[c] = { n: n, vals: vals };
+    });
+    const vc = Object.keys(valueHits);
+    if (!named.length && !vc.length) return;
+    anyHit = true;
+    Logger.log('--- ' + name + ' (' + rows.length + ' rows) talks about AFD/RESCHEDULE/CLUSTER');
+    Logger.log(name + ' columns: ' + cols.join(' | '));
+    if (named.length) Logger.log(name + ' columns NAMED for it: ' + named.join(', '));
+    vc.forEach(c => Logger.log('  ## ' + name + ' ' + c + ': ' + valueHits[c].n + ' row(s) -> ' +
+      Object.keys(valueHits[c].vals).sort((a, b) => valueHits[c].vals[b] - valueHits[c].vals[a]).slice(0, 8)
+        .map(v => '"' + v.slice(0, 60) + '" x' + valueHits[c].vals[v]).join(', ')));
+    cols.filter(c => /CLUSTER/i.test(c)).forEach(c => {
+      const tally = {};
+      rows.forEach(r => { const k = String(r[c] == null ? '' : r[c]).trim() || '(blank)'; tally[k] = (tally[k] || 0) + 1; });
+      Logger.log('  ' + name + ' ' + c + ' values: ' + Object.keys(tally).sort((a, b) => tally[b] - tally[a]).slice(0, 20)
+        .map(k => k + '=' + tally[k]).join(', '));
+    });
+    cols.filter(c => /AFD|SCHEDULE|DATE/i.test(c)).forEach(c => {
+      const kinds = {}, byDay = {};
+      rows.forEach(r => {
+        const v = r[c];
+        if (v == null || String(v).trim() === '') return;
+        const text = String(v).trim();
+        const kind = v instanceof Date ? 'real date' : /^\d{1,2}[\/-]\d{1,2}[\/-]\d{2,4}$/.test(text) ? 'text mm/dd/yyyy' : 'text other';
+        kinds[kind] = (kinds[kind] || 0) + 1;
+        const d = v instanceof Date ? v : new Date(text);
+        if (isNaN(d.getTime())) return;
+        const day = Utilities.formatDate(d, NOTICE.TIMEZONE, 'yyyy-MM-dd');
+        byDay[day] = (byDay[day] || 0) + 1;
+      });
+      const days = Object.keys(byDay).sort();
+      Logger.log('  ' + name + ' ' + c + ' stored as: ' + (Object.keys(kinds).map(k => k + '=' + kinds[k]).join(', ') || 'nothing readable') +
+        (days.length ? ' | dates ' + days[0] + ' to ' + days[days.length - 1] + ' | ' +
+          days.slice(0, 6).map(d => d + '=' + byDay[d]).join(', ') + (days.length > 6 ? ' ...(' + days.length + ' distinct days)' : '') : ''));
+    });
+  });
+  if (!anyHit) Logger.log('NOTHING in this file mentions AFD, RESCHEDULE or CLUSTER - ang cluster/AFD data ay nasa ibang spreadsheet. Kopyahin mo lang ang link ng sheet na may cluster column at ilalagay ko sa AFD.SHEET_ID, tapos i-run ulit ito.');
+  let shown = 0;
+  for (let i = 0; i < tabs.length && shown < 5; i++) {
+    const name = tabs[i].getName(), rows = tab_(ss, name, true);
+    for (let j = 0; j < rows.length && shown < 5; j++) {
+      const r = rows[j];
+      if (!Object.keys(r).some(k => re.test(nk_(r[k])))) continue;
+      Logger.log('SAMPLE [' + name + ']: ' + Object.keys(r).filter(k => String(r[k] == null ? '' : r[k]).trim())
+        .map(k => k + '=' + String(r[k] instanceof Date ? Utilities.formatDate(r[k], NOTICE.TIMEZONE, 'yyyy-MM-dd') : r[k]).slice(0, 60)).join(' ; '));
+      shown++;
+    }
+  }
+  Logger.log('rows that mention AFD shown: ' + shown + (shown >= 5 ? ' (capped at 5)' : '') +
+    ' - i-paste ang buong log na ito kapag tapos, doon puputol ang rule: aling column, anong exact wording ng AFD RESCHEDULE, anong value ng cluster 11, at anong date.');
+}
 
 /* --------------------------------------------------------------------- log API
    The dashboard reads and writes its shared activity + payment log through this
