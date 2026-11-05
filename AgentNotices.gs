@@ -247,6 +247,57 @@ const AFD = {
   TEST: { STATUS: 'AFD', MAX_ROWS: 12 }
 };
 
+/* The same AFD RESCHEDULE rule for CLUSTER 12, as the owner asked on 2026-11-05: "same rules
+   lang, gagawan lang din ng pang sariling email para sa cluster 12". So every condition is
+   copied from AFD - the AFD + RESCHEDULE tag, the RPR exclusion, the hand-written revisit day in
+   HD RECOMMENDATION that must be the day the report runs, the four PLDT addresses, the 10:30 AM
+   gate - and the only thing that differs is WHICH cluster's rows go in, plus its own subject,
+   its own dedupe list and its own pair of triggers, so a cluster 12 day never disturbs the live
+   cluster 11 mail and the other way round. Two separate mails on purpose: Sir Jack can see from
+   the subject alone which cluster is being endorsed, and one cluster being late says nothing
+   about the other.
+   DRY_RUN is TRUE: nothing reaches PLDT until he reads an afd12TestReport copy and flips it, the
+   same path cluster 11 took. AFD12 is not in ensureReportTriggers_ either, so it will not appear
+   on the schedule until he runs installAfd12Trigger(). */
+const AFD12 = {
+  NAME: 'AFD12',
+  TO: ['lsabat@pldt.com.ph'],
+  CC: ['t-jesnavarro@supplier.pldt.com.ph', 't-jesnavarro@pldt365.onmicrosoft.com', 'abmadlangbayan0510@icloud.com'],
+  GREET: 'Hi Sir Jack,',
+  /* {CLUSTER} is filled from the rows, so this sentence reads "CLUSTER 12" on its own. */
+  INTRO: 'For endorsement to CLUSTER {CLUSTER} for revisit. The call-out has already been completed and the subscribers are available today; we would appreciate your assistance in having them revisited.',
+  CLOSE: 'Should you have any concerns regarding the scheduled revisit, please kindly reply to this email so that we may address them immediately.',
+  THANKS: 'Thank you !',
+  SIGN: ['Mark Maliwat', 'Sales Validator - MMMDA Logistics', 'Service Cavite Upland'],
+  LOGO_URL: 'https://markelvinmaliwat-hub.github.io/3MDA-Logistics-Service_website/assets/mmmda-logo.jpg',
+  LOGO_KEY: 'mmmda-logo',
+  LOGO_ALT: 'MMMDA Logistics Service',
+  LOGO_W: 150, LOGO_H: 147,
+  LOGO_ABOVE: true,
+  FOOTER: '',
+  STATUS: ['AFD', 'RESCHEDULE'],
+  SHEET_ID: '',
+  TABS: [],
+  FROM: ['FINAL STATUS'],
+  EXACT: false,
+  WHERE: [{ COL: 'CLUSTER', IS: '12' }],   // the one line that separates this mail from AFD
+  NOT: [{ COL: 'HD RECOMMENDATION', HAS: 'RPR' }],
+  ON_DAY: 'HD RECOMMENDATION',
+  HD_TEXT: 'PART OF AFD {DATE} - SUBS WANT TO REQUEST FOR REVISIT',
+  COLS: ['DATE', 'SUBSCRIBER NAME', 'SR', 'ACCT', 'PR', 'CSP STATUS', 'BRGY', 'CITY', 'CLUSTER', 'HD REMARKS'],
+  DATE_FORMAT: 'M/d/yyyy',
+  SR_LINK: '',
+  SEND_HOURS: [10, 11],
+  SEND_FROM: '10:30',
+  DRY_RUN: true,                    // his go: read afd12TestReport, then set this to false and install the trigger
+  MAX_ROWS: 300,
+  TIMEZONE: '',
+  SUBJECT: '3MDA_AFD12_RESCHEDULE_',
+  SENT_PREFIX: 'AFD12_SENT_',
+  PROBE: ['AFD', 'RESCHEDULE', 'CLUSTER'],
+  TEST: { STATUS: 'AFD', MAX_ROWS: 12 }
+};
+
 const NT_ = {
   GREET: 'Dear',
   FP_INTRO: 'This is to formally inform you that the following sale(s) endorsed under your account are currently tagged as FOR PAYMENT. Kindly coordinate with the concerned subscriber(s) and ensure that the required payment is settled at the earliest possible time to avoid delays or cancellation of the application.',
@@ -731,7 +782,7 @@ function sendReport_(send, cfg, force) {
      otherwise vanish with no trace, so it is named in the log instead. */
   if (miss.length) {
     Logger.log(cfg.NAME + ' | ' + miss.length + ' row(s) match the wording but have no readable date in ' +
-      cfg.ON_DAY + ', so they are NOT in the mail - fix the cell or widen AFD.ON_DAY:');
+      cfg.ON_DAY + ', so they are NOT in the mail - fix the cell or widen ' + cfg.NAME + '.ON_DAY:');
     miss.slice(0, 10).forEach(m => Logger.log('  ?? ' + m));
     if (miss.length > 10) Logger.log('  ?? ...and ' + (miss.length - 10) + ' more');
   }
@@ -777,18 +828,21 @@ function sendReport_(send, cfg, force) {
 }
 function runSfsNotices() { ensureReportTriggers_(); return sendReport_(true, SFS); }
 function runCvNotices() { ensureReportTriggers_(); return sendReport_(true, CV); }
-/* AFD deliberately does NOT self-heal and is not in ensureReportTriggers_: it is his newest rule
-   and he installed its 10AM + 11AM pair by hand on 2026-11-05, so if those two triggers are ever
-   deleted only installAfdTrigger() puts them back. The daily SFS and CV runs are never
-   disturbed by it. This is the scheduled handler, so it is the one that obeys AFD.SEND_FROM
-   and waits for 10:30. */
+/* AFD and AFD12 deliberately do NOT self-heal and are not in ensureReportTriggers_: AFD is his
+   newest rule and he installed its 10AM + 11AM pair by hand on 2026-11-05, so if those two
+   triggers are ever deleted only installAfdTrigger() puts them back, and AFD12 stays off the
+   schedule until he runs installAfd12Trigger(). The daily SFS and CV runs are never disturbed by
+   either. These are the scheduled handlers, so these are the ones that obey SEND_FROM and wait
+   for 10:30. */
 function runAfdNotices() { return sendReport_(true, AFD); }
+function runAfd12Notices() { return sendReport_(true, AFD12); }
 /* Dropdown-runnable: sends today's report once, right now, honouring that report's DRY_RUN.
-   This one ignores AFD.SEND_FROM - if he presses it, he means it, early or not. The scheduled
-   handler runAfdNotices is the one that waits for 10:30. */
+   These ignore SEND_FROM - if he presses it, he means it, early or not. The scheduled handlers
+   runAfdNotices / runAfd12Notices are the ones that wait for 10:30. */
 function sendSfsReport() { return sendReport_(true, SFS); }
 function sendCvReport() { return sendReport_(true, CV); }
 function sendAfdReport() { return sendReport_(true, AFD, true); }
+function sendAfd12Report() { return sendReport_(true, AFD12, true); }
 /* Dropdown-runnable: logs exactly what PLDT would receive, without sending anything and
    without touching the dedupe list. */
 function previewReport_(cfg) {
@@ -848,6 +902,7 @@ function diagnoseReport_(cfg) {
 function sfsPreview() { return previewReport_(SFS); }
 function cvPreview() { return previewReport_(CV); }
 function afdPreview() { return previewReport_(AFD); }
+function afd12Preview() { return previewReport_(AFD12); }
 /* Dropdown-runnable TEST COPY, one per report. It forces that report's DRY_RUN on while it
    runs, so it can never reach PLDT even while the real report is live - without that, the
    borrowed rows below would go out as endorsements. On most days the live rule has 0 rows and
@@ -887,6 +942,7 @@ function testReport_(cfg) {
 function sfsTestReport() { return testReport_(SFS); }
 function cvTestReport() { return testReport_(CV); }
 function afdTestReport() { return testReport_(AFD); }
+function afd12TestReport() { return testReport_(AFD12); }
 function hoursText_(cfg) { return cfg.SEND_HOURS.map(h => (h % 12 || 12) + (h < 12 ? 'AM' : 'PM')).join(' and '); }
 function reportStatus_(cfg, handler) {
   return {
@@ -919,6 +975,7 @@ function installReportTrigger_(cfg, handler) {
 function installSfsTrigger() { return installReportTrigger_(SFS, 'runSfsNotices'); }
 function installCvTrigger() { return installReportTrigger_(CV, 'runCvNotices'); }
 function installAfdTrigger() { return installReportTrigger_(AFD, 'runAfdNotices'); }
+function installAfd12Trigger() { return installReportTrigger_(AFD12, 'runAfd12Notices'); }
 /* Self-repairing schedule. The owner should not have to press Run for the plan to exist:
    every scheduled run (the agent notices and both reports) checks its own report triggers
    first and rebuilds only the ones whose count does not match cfg.SEND_HOURS. Apps Script
@@ -1090,65 +1147,88 @@ function afdProbe() {
     }
   }
   Logger.log('rows that mention AFD shown: ' + shown + (shown >= 5 ? ' (capped at 5)' : ''));
-  /* The rule is written now (FINAL STATUS has AFD + RESCHEDULE, CLUSTER = 11, the revisit day
-     read from HD RECOMMENDATION), so this measures it against the same file instead of only
-     describing it: how many rows each condition removes, which other days are in the sheet, and
-     what the mail would carry today. Still nothing sent and nothing written. */
+  afdScout_(AFD);
+}
+/* The rule-measuring half of the scout, separate so afd12Probe() can measure the cluster 12 copy
+   of the same rule without walking every tab of the file again. It counts how many rows each
+   condition removes, names the other days in the sheet and the rows whose date cannot be read,
+   and says what the mail would carry today. Nothing sent, nothing written. */
+function afdScout_(cfg) {
+  const N = cfg.NAME, tz = cfg.TIMEZONE || NOTICE.TIMEZONE;
   Logger.log('--- the rule as the owner described it, measured on this file (nothing sent):');
-  Logger.log('AFD rule: ' + ruleText_(AFD) + ' | today is ' +
-    Utilities.formatDate(new Date(), AFD.TIMEZONE || NOTICE.TIMEZONE, 'yyyy-MM-dd') + ' in ' + (AFD.TIMEZONE || NOTICE.TIMEZONE));
-  const ssA = reportSs_(AFD), today = Utilities.formatDate(new Date(), AFD.TIMEZONE || NOTICE.TIMEZONE, 'M-d');
+  Logger.log(N + ' rule: ' + ruleText_(cfg) + ' | today is ' +
+    Utilities.formatDate(new Date(), tz, 'yyyy-MM-dd') + ' in ' + tz);
+  const ssA = reportSs_(cfg), today = Utilities.formatDate(new Date(), tz, 'M-d');
   const cnt = { rows: 0, tagged: 0, excluded: 0, cluster: 0, due: 0 }, otherDay = {}, unread = {};
   let peek = 0;
-  reportTabs_(AFD).forEach(name => {
+  reportTabs_(cfg).forEach(name => {
     const rows = tab_(ssA, name);
     cnt.rows += rows.length;
     rows.forEach(r => {
-      const st = reportStatusOf_(r, AFD);
-      if (!statusHit_(nk_(st), AFD)) return;
+      const st = reportStatusOf_(r, cfg);
+      if (!statusHit_(nk_(st), cfg)) return;
       cnt.tagged++;
-      const cv = colOf_(r, AFD.WHERE[0].COL);
+      const cv = colOf_(r, cfg.WHERE[0].COL);
       if (peek < 5) {
         peek++;
-        Logger.log('  tagged [' + name + ']: FINAL STATUS="' + String(st).slice(0, 40) + '" | ' + AFD.WHERE[0].COL + '="' +
-          cv + '" | ' + AFD.ON_DAY + '="' + colOf_(r, AFD.ON_DAY).slice(0, 40) + '"' +
-          (notOut_(r, AFD) ? ' | EXCLUDED (' + AFD.NOT.map(n => n.HAS).join('+') + ')' : ''));
+        Logger.log('  tagged [' + name + ']: FINAL STATUS="' + String(st).slice(0, 40) + '" | ' + cfg.WHERE[0].COL + '="' +
+          cv + '" | ' + cfg.ON_DAY + '="' + colOf_(r, cfg.ON_DAY).slice(0, 40) + '"' +
+          (notOut_(r, cfg) ? ' | EXCLUDED (' + cfg.NOT.map(n => n.HAS).join('+') + ')' : ''));
       }
-      if (notOut_(r, AFD)) { cnt.excluded++; return; }
-      if (!cellEq_(colOf_(r, AFD.WHERE[0].COL), AFD.WHERE[0].IS)) return;
+      if (notOut_(r, cfg)) { cnt.excluded++; return; }
+      if (!cellEq_(colOf_(r, cfg.WHERE[0].COL), cfg.WHERE[0].IS)) return;
       cnt.cluster++;
-      const got = revisitDay_(colOf_(r, AFD.ON_DAY), AFD.TIMEZONE || NOTICE.TIMEZONE);
-      if (!got) { const k = name + ' "' + colOf_(r, AFD.ON_DAY).slice(0, 30) + '"'; unread[k] = (unread[k] || 0) + 1; return; }
+      const got = revisitDay_(colOf_(r, cfg.ON_DAY), tz);
+      if (!got) { const k = name + ' "' + colOf_(r, cfg.ON_DAY).slice(0, 30) + '"'; unread[k] = (unread[k] || 0) + 1; return; }
       if (got.md !== today) { otherDay[got.text] = (otherDay[got.text] || 0) + 1; return; }
       cnt.due++;
     });
   });
-  const notWords_ = cfg => (cfg.NOT || []).map(n => n.HAS).join('+');
-  Logger.log('AFD count | rows read: ' + cnt.rows + ' | FINAL STATUS tagged AFD + RESCHEDULE: ' + cnt.tagged +
-    ' | ' + notWords_(AFD) + ' excluded: ' + cnt.excluded +
-    ' | ' + AFD.WHERE[0].COL + ' ' + AFD.WHERE[0].IS + ': ' + cnt.cluster + ' | revisit today: ' + cnt.due);
-  if (cnt.excluded) Logger.log('AFD ' + cnt.excluded + ' tagged row(s) left out because ' + AFD.NOT[0].COL +
-    ' says ' + AFD.NOT[0].HAS + ' - may ibang paraan ng reschedule, hindi AFD queue');
+  const notWords_ = c => (c.NOT || []).map(n => n.HAS).join('+');
+  Logger.log(N + ' count | rows read: ' + cnt.rows + ' | FINAL STATUS tagged ' + statusWords_(cfg) + ': ' + cnt.tagged +
+    ' | ' + notWords_(cfg) + ' excluded: ' + cnt.excluded +
+    ' | ' + cfg.WHERE[0].COL + ' ' + cfg.WHERE[0].IS + ': ' + cnt.cluster + ' | revisit today: ' + cnt.due);
+  if (cnt.excluded) Logger.log(N + ' ' + cnt.excluded + ' tagged row(s) left out because ' + cfg.NOT[0].COL +
+    ' says ' + cfg.NOT[0].HAS + ' - may ibang paraan ng reschedule, hindi AFD queue');
   const od = Object.keys(otherDay).sort();
-  if (od.length) Logger.log('AFD right cluster but NOT due today: ' + od.map(d => d + '=' + otherDay[d]).join(', '));
+  if (od.length) Logger.log(N + ' right cluster but NOT due today: ' + od.map(d => d + '=' + otherDay[d]).join(', '));
   const ur = Object.keys(unread);
-  if (ur.length) Logger.log('AFD no readable date in ' + AFD.ON_DAY + ', so those rows are left out until the cell can be read: ' +
+  if (ur.length) Logger.log(N + ' no readable date in ' + cfg.ON_DAY + ', so those rows are left out until the cell can be read: ' +
     ur.slice(0, 10).map(k => k + ' x' + unread[k]).join(', ') + (ur.length > 10 ? ' ...(' + ur.length + ' kinds)' : ''));
-  if (!cnt.tagged) Logger.log('AFD nothing in ' + AFD.FROM.join('/') + ' says AFD + RESCHEDULE in the tabs read (' + reportTabs_(AFD).join(',') + ') - mali ang column name o nasa ibang file ang data');
-  else if (!cnt.cluster) Logger.log('AFD no cluster ' + AFD.WHERE[0].IS + ' row among them - check the ' + AFD.WHERE[0].COL + ' values logged above');
+  if (!cnt.tagged) Logger.log(N + ' nothing in ' + cfg.FROM.join('/') + ' says ' + statusWords_(cfg) + ' in the tabs read (' + reportTabs_(cfg).join(',') + ') - mali ang column name o nasa ibang file ang data');
+  else if (!cnt.cluster) Logger.log(N + ' no ' + cfg.WHERE[0].COL + ' = ' + cfg.WHERE[0].IS + ' row among them - check the ' + cfg.WHERE[0].COL + ' values logged above');
   /* ACCT / PR / BRGY / CITY are columns this script never read before, so each header of his
-     table is matched against the real headers of the tabs AFD reads: anything MISSING would
-     arrive at PLDT as an empty column. */
+     table is matched against the real headers of the tabs the report reads: anything MISSING
+     would arrive at PLDT as an empty column. */
   const hdrs = {};
-  reportTabs_(AFD).forEach(n => tab_(ssA, n, true).forEach(r => Object.keys(r).forEach(h => { hdrs[h] = 1; })));
-  Logger.log('AFD table columns -> header found in the sheet: ' + AFD.COLS.map(c => {
+  reportTabs_(cfg).forEach(n => tab_(ssA, n, true).forEach(r => Object.keys(r).forEach(h => { hdrs[h] = 1; })));
+  Logger.log(N + ' table columns -> header found in the sheet: ' + cfg.COLS.map(c => {
     const a = COL_ALIAS_[c];
-    if (c === 'HD REMARKS' && AFD.HD_TEXT) return c + '=written in the mail (HD_TEXT, not read from the sheet)';
+    if (c === 'HD REMARKS' && cfg.HD_TEXT) return c + '=written in the mail (HD_TEXT, not read from the sheet)';
     const hit = (a ? ALIAS_[a] : [c]).filter(n => hdrs[n]);
     return c + '=' + (hit.length ? hit.join(' / ') : 'MISSING');
   }).join(' | '));
-  Logger.log('the mail would carry ' + collectReport_(ssA, AFD).length + ' row(s) today');
-  Logger.log('i-paste ang buong log na ito kapag tapos - kung 0 ang "tagged AFD + RESCHEDULE" o ang "CLUSTER 11", mali ang column name sa AFD.FROM / AFD.WHERE at dito mo makikita ang tunay na header; kung may "revisit today" naman, tama na ang rule at afdPreview na lang ang susunod.');
+  Logger.log('the mail would carry ' + collectReport_(ssA, cfg).length + ' row(s) today');
+  Logger.log('i-paste ang buong log na ito kapag tapos - kung 0 ang "tagged" o ang "' + cfg.WHERE[0].COL + ' ' + cfg.WHERE[0].IS +
+    '", mali ang column name sa ' + N + '.FROM / ' + N + '.WHERE at dito mo makikita ang tunay na header; kung may "revisit today" naman, tama na ang rule at ' +
+    N.toLowerCase() + 'Preview na lang ang susunod.');
+  return cnt;
+}
+/* Dropdown-runnable, read-only: the cluster 12 copy of the same rule measured on the same file.
+   Runs in seconds because it skips the tab walk afdProbe already did and counts only the rule. */
+function afd12Probe() {
+  const ss = reportSs_(AFD12);
+  Logger.log('AFD12 scout | file: ' + ss.getName() + ' | tabs: ' + reportTabs_(AFD12).join(',') +
+    ' | this run emails nothing and writes nothing');
+  const tally = {};
+  reportTabs_(AFD12).forEach(n => tab_(ss, n).forEach(r => {
+    if (!statusHit_(nk_(reportStatusOf_(r, AFD12)), AFD12)) return;
+    const k = nk_(colOf_(r, AFD12.WHERE[0].COL)) || '(blank)';
+    tally[k] = (tally[k] || 0) + 1;
+  }));
+  Logger.log('AFD12 tagged rows by ' + AFD12.WHERE[0].COL + ': ' +
+    Object.keys(tally).sort((a, b) => tally[b] - tally[a]).map(k => k + '=' + tally[k]).join(', '));
+  afdScout_(AFD12);
 }
 
 /* --------------------------------------------------------------------- log API
