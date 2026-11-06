@@ -142,12 +142,19 @@ const SFS = {
   TEST: { STATUS: 'REENCODED', MAX_ROWS: 12 }   // what sfsTestReport borrows so there is a sample to look at
 };
 
-/* The CREDIT VALIDATION report - same shape, same recipients, different queue. The owner's
-   manual mail reads "For credit validation and approval." over rows whose CSP REMARKS says
-   ESCALATED TO CVAA. He confirmed on 2026-11-04 that BOTH daily reports go to Leonard alone on
-   the To line with the same three CCs, so CV.TO / CV.CC mirror SFS exactly. DRY_RUN is false since
-   2026-11-05: he read the cvTestReport copy and gave the go, so CV now endorses to PLDT on the same
-   8AM + 2PM schedule as SFS. */
+/* The CREDIT VALIDATION report - same shape, same recipients, different queue. He confirmed on
+   2026-11-04 that BOTH daily reports go to Leonard alone on the To line with the same three CCs, so
+   CV.TO / CV.CC mirror SFS exactly. DRY_RUN is false since 2026-11-05: he read the cvTestReport copy
+   and gave the go, so CV now endorses to PLDT on the same 8AM + 2PM schedule as SFS.
+   THE RULE HE CORRECTED ON 2026-11-06, twice, in his own words: "SA CV ANG DAPAT NA BASEHAN NA
+   PAG SEND NG EMAIL AY ANG HD RECOMMENDATION AT FINAL STATUS BASTA NAKA UNDER CREDIT VALIDATION
+   DAPAT ITONG MASEND SA EMAIL NG CV". So the two columns he named are the whole rule and the one
+   wording he named is the whole match. The first version read CSP REMARKS for "ESCALATED TO CVAA"
+   and reported 0 rows on his live file all day - that is how he knew it was the wrong column, and
+   that wording is now deliberately NOT a reason to mail anything. The two columns are read as
+   ALTERNATIVES (FROM_ANY): a row qualifies when EITHER one says it, even if the other cell holds
+   an unrelated note. cvProbe() counts per column so he can see which one his team actually types
+   in and tell me to drop the other. */
 const CV = {
   NAME: 'CV',
   TO: ['lsabat@pldt.com.ph'],
@@ -162,10 +169,11 @@ const CV = {
   LOGO_W: 150, LOGO_H: 147,
   LOGO_ABOVE: true,
   FOOTER: '',
-  STATUS: 'ESCALATED TO CVAA',
+  STATUS: 'UNDER CREDIT VALIDATION',   // the one wording he named
   SHEET_ID: '',
   TABS: [],
-  FROM: ['CSP REMARKS'],             // the owner's rule: the row is a credit-validation item once CSP REMARKS says so
+  FROM: ['HD RECOMMENDATION', 'FINAL STATUS'],
+  FROM_ANY: true,                    // either of the two columns he named qualifies the row on its own
   EXACT: false,
   HD_TEXT: 'FOR CREDIT VALIDATION AND APPROVAL',
   COLS: ['DATE', 'SUBSCRIBER NAME', 'SR', 'CSP REMARKS', 'HD REMARKS'],
@@ -178,7 +186,7 @@ const CV = {
   SUBJECT: '3MDA_CREDIT_VALIDATION_',
   SENT_PREFIX: 'CV_SENT_',
   PROBE: ['CVAA', 'CREDIT', 'COMPLIANCE'],
-  TEST: { STATUS: 'ESCALATED', MAX_ROWS: 12 }
+  TEST: { STATUS: 'CREDIT VALIDATION', MAX_ROWS: 2 }
 };
 
 /* The AFD RESCHEDULE report - the third queue, and the only one with four conditions instead
@@ -680,6 +688,19 @@ function statusHit_(match, cfg) {
   const has = cfg.EXACT ? (w) => match === w : (w) => match.indexOf(w) >= 0;
   return cfg.ANY ? want.some(has) : want.every(has);
 }
+/* cfg.FROM_ANY = true: every column in cfg.FROM is tested on its own and a hit in ANY one of them
+   qualifies the row. Without it the first non-empty column wins, which is what SFS and AFD want (one
+   deciding column, others only as fallback) but not what the CV queue wants: the owner's rule is
+   "HD RECOMMENDATION at FINAL STATUS, basta naka UNDER CREDIT VALIDATION", and a row can carry an
+   unrelated note in one of those two cells while the wording sits in the other. The value shown in
+   the mail stays reportStatusOf_ (first non-empty), so only the membership test changes. */
+function statusRowHit_(r, cfg) {
+  if (!cfg.FROM_ANY) return statusHit_(nk_(reportStatusOf_(r, cfg)), cfg);
+  return cfg.FROM.some(c => {
+    const v = colOf_(r, c);
+    return v !== '' && statusHit_(nk_(v), cfg);
+  });
+}
 const statusWords_ = cfg => [].concat(cfg.STATUS).join(cfg.ANY ? ' or ' : ' + ');
 /* cfg.WHERE: the extra columns a row must also match, e.g. CLUSTER = 11. Apps Script hands back
    a number cell as 11 and a text cell as '11', '11.0' or 'CLUSTER 11', so when the two sides are
@@ -739,7 +760,7 @@ function collectReport_(ss, cfg, miss) {
   reportTabs_(cfg).forEach(name => tab_(ss, name).forEach(r => {
     const st = reportStatusOf_(r, cfg);
     let got = null;
-    if (!statusHit_(nk_(st), cfg)) return;
+    if (!statusRowHit_(r, cfg)) return;
     if (notOut_(r, cfg)) return;
     if (cfg.WHERE && !cfg.WHERE.every(w => cellEq_(colOf_(r, w.COL), w.IS))) return;
     if (cfg.ON_DAY) {
@@ -943,8 +964,11 @@ function sendReport_(send, cfg, force) {
   if (cfg.ON_DAY) res.unreadable = miss.length;
   if (!items.length) {
     /* on an AFD day with rows tagged but none due today, "no rows tagged" alone would be the
-       wrong explanation, so the date condition is named too */
-    res.skipped = 'no rows tagged ' + statusWords_(cfg) + (cfg.ON_DAY ? ' whose ' + cfg.ON_DAY + ' is today' : '') + ' - nothing sent';
+       wrong explanation, so the date condition is named too. A zero count is also how the owner
+       found the CV rule reading the wrong column on 2026-11-06, so the columns are named here as
+       well - the log then says for itself WHERE it looked. */
+    res.skipped = 'no rows tagged ' + statusWords_(cfg) + ' in ' + cfg.FROM.join(' or ') +
+      (cfg.ON_DAY ? ' whose ' + cfg.ON_DAY + ' is today' : '') + ' - nothing sent';
     if (send) logSendOutcome_(cfg, res);
     return res;
   }
@@ -1023,7 +1047,7 @@ function diagnoseReport_(cfg) {
   reportTabs_(cfg).forEach(name => tab_(ss, name).forEach(r => {
     c.rows++;
     const st = reportStatusOf_(r, cfg);
-    if (!statusHit_(nk_(st), cfg)) return;
+    if (!statusRowHit_(r, cfg)) return;
     c.tagged++;
     if (notOut_(r, cfg)) { c.excluded++; return; }
     if (cfg.WHERE && !cfg.WHERE.every(w => cellEq_(colOf_(r, w.COL), w.IS))) return;
@@ -1212,6 +1236,31 @@ function probeReport_(cfg) {
     }));
     Logger.log('rows matched for ' + needle + ': ' + found);
   });
+  /* A FROM_ANY rule reads several columns, so "N row(s)" alone would not tell him WHERE the
+     wording is. This breaks the same count down per column and per wording - a row that hits two
+     columns is counted in both, because the point is which column he has to keep typing in. */
+  if (cfg.FROM_ANY) {
+    const byCol = {}, byWord = {};
+    let n = 0;
+    reportTabs_(cfg).forEach(name => tab_(ss, name).forEach(r => {
+      if (!statusRowHit_(r, cfg)) return;
+      n++;
+      cfg.FROM.forEach(c => {
+        const v = nk_(colOf_(r, c));
+        if (!v) return;
+        [].concat(cfg.STATUS).map(nk_).forEach(w => {
+          if (cfg.EXACT ? v === w : v.indexOf(w) >= 0) {
+            byCol[c] = (byCol[c] || 0) + 1;
+            byWord[w] = (byWord[w] || 0) + 1;
+          }
+        });
+      });
+    }));
+    const t = o => Object.keys(o).sort((a, b) => o[b] - o[a]).map(k => k + '=' + o[k]).join(', ') || 'none';
+    Logger.log(cfg.NAME + ' ' + n + ' row(s) qualify | by column: ' + t(byCol) + ' | by wording: ' + t(byWord));
+    Logger.log('kung 0 ang isang column, hindi doon siya binabasa ng rule - pero kasama pa rin siya sa ' +
+      cfg.FROM.join(', ') + ' habang FROM_ANY is on');
+  }
   Logger.log('current rule would report ' + collectReport_(ss, cfg).length + ' row(s): ' + ruleText_(cfg));
 }
 function sfsProbe() { return probeReport_(SFS); }
@@ -1317,7 +1366,7 @@ function afdScout_(cfg) {
     cnt.rows += rows.length;
     rows.forEach(r => {
       const st = reportStatusOf_(r, cfg);
-      if (!statusHit_(nk_(st), cfg)) return;
+      if (!statusRowHit_(r, cfg)) return;
       cnt.tagged++;
       const cv = colOf_(r, cfg.WHERE[0].COL);
       if (peek < 5) {

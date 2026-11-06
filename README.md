@@ -31,7 +31,10 @@ Script and saved. Keep the two copies in step by pasting from this file.
 In `AgentNotices.gs`: `DRY_RUN` (true = every notice goes to `ADMIN_EMAILS` labelled
 `[TEST for <agent>]`), `SEND_HOUR`, `MAX_ROWS` per section, `SHEET_ID`, `ADMIN_EMAILS` —
 and one config object per PLDT report (`SFS`, `CV`, `AFD`, `AFD12`, `RTS`, plus the scaffold
-`AFD29`): `DRY_RUN`, `TO`, `CC`, `FROM`, `STATUS`
+`AFD29`): `DRY_RUN`, `TO`, `CC`, `FROM`, `FROM_ANY` (true = the columns in `FROM` are
+**alternatives** and a hit in any one of them qualifies the row; without it the first non-empty
+column wins and the rest are only fallbacks — that is how CV reads his two columns, see below),
+`STATUS`
 (one phrase, or a list that must all be in the same cell — or, with `ANY: true`, a list of
 **alternatives** where one hit is enough, which is how `RTS` reads its two taggings), `EXACT`,
 `WHERE` (extra column = value
@@ -89,10 +92,16 @@ mail on the same engine: four conditions instead of one, and it sends **at or af
   with the same three CCs. Intro `For credit validation and approval.`, HD REMARKS line
   `FOR CREDIT VALIDATION AND APPROVAL`, subject `3MDA_CREDIT_VALIDATION_` + `MMMYYYY`.
   **`DRY_RUN = false` since 2026-11-05** — he read a `cvTestReport` copy and said *"OO, GO CV LIVE"*.
-* **Its rule is the owner's own words too: `CSP REMARKS` contains `ESCALATED TO CVAA`.** Note
-  what that excludes: the `FOR COMPLIANCE VERIFICATION RCM` row visible in his screenshot is
-  *not* reported by this rule. If he wants it, `CV.STATUS` becomes that wording (or `CV.FROM`
-  gains a second column) — the point is that the rule is his, not a guess.
+* **Its rule is his correction, in his own words (2026-11-06, said twice): `HD RECOMMENDATION` or
+  `FINAL STATUS` contains `UNDER CREDIT VALIDATION`.** The first version read `CSP REMARKS` for
+  `ESCALATED TO CVAA` and reported **0 rows all day** on the live file — that is how he knew the
+  column was wrong, and `ESCALATED TO CVAA` is deliberately no longer a reason to mail anything.
+  The two columns are alternatives (`CV.FROM_ANY = true`): a row qualifies when **either** one
+  carries the wording, even when the other cell holds an unrelated note. Without that, the shared
+  "first non-empty column wins" reading — which is right for SFS and AFD — would let a note in
+  `HD RECOMMENDATION` hide the tag in `FINAL STATUS`. `cvProbe` now prints the count per column
+  (`CV 4 row(s) qualify | by column: FINAL STATUS=3, HD RECOMMENDATION=1 | …`) so he can see which
+  one his team actually types in, and a zero-row run says which columns it looked in.
 * **SFS rule: the row belongs in the report once `FINAL STATUS` carries the SFS tag.**
   `SFS.FROM = ['FINAL STATUS']` and `SFS.EXACT = false`, so `SFS VALIDATION` matches whatever
   the spacing or case, and it also catches a longer wording typed straight into `FINAL STATUS`.
@@ -195,15 +204,17 @@ mail on the same engine: four conditions instead of one, and it sends **at or af
   untouched.
   The other half of the request is what `AFD.ON_DAY` already does: an `AFD - NOV 6` row is reported
   on November 6 and on no other day, and on a day with nothing scheduled for it `collectReport_`
-  returns nothing, `sendReport_` returns `no rows tagged AFD + RESCHEDULE whose HD RECOMMENDATION is
-  today - nothing sent` and never builds an email — in `DRY_RUN` or live.
+  returns nothing, `sendReport_` returns `no rows tagged AFD + RESCHEDULE in FINAL STATUS whose
+  HD RECOMMENDATION is today - nothing sent` and never builds an email — in `DRY_RUN` or live.
 * `sfsProbe` / `cvProbe` are how the rules were decided, and they are still the tool to run if
   the wording ever changes. They send and write nothing. Per tab they log the column names, the
   ten most common values of the five status and remarks columns, every value mentioning the
   report's words (`>>` — `SFS.PROBE` / `CV.PROBE`), **every column that ever contains those
   words with its exact wording (`##`)**, the full contents of the sample rows, and how many rows
-  the current rule would report. As measured on 2026-11-04 the live Aug-Oct sheet had **0** rows
-  tagged `SFS VALIDATION`, so an automated run that day correctly sends nothing.
+  the current rule would report. A `FROM_ANY` rule (CV) also logs its qualifying rows **split per
+  column and per wording**, so a column that contributes nothing is visible as one number. As
+  measured on 2026-11-04 the live Aug-Oct sheet had **0** rows tagged `SFS VALIDATION`, so an
+  automated run that day correctly sends nothing.
 * `afdProbe` is the read-only scout behind that rule. It lists every tab that mentions
   `AFD` / `RESCHEDULE` / `CLUSTER`, the columns named for them, the exact wording with row counts,
   how many rows each cluster value has, whether a date column holds real dates or text (the same
@@ -232,7 +243,8 @@ mail on the same engine: four conditions instead of one, and it sends **at or af
   `SFS.DRY_RUN` is `false` and the report goes to `SFS.TO` + `SFS.CC`. **AFD is LIVE since
   2026-11-05** (same approval path: he read an `afdTestReport` copy, then set `AFD.DRY_RUN = false`
   and ran `installAfdTrigger`). **CV is LIVE since 2026-11-05** (`CV.DRY_RUN = false`, on the same
-  approval path). **All four reports now mail PLDT on their own.** Set any of them
+  approval path). **All five reports — SFS, CV, AFD, AFD12 and RTS — now mail on their own.**
+  Set any of them
   back to `true` any time to stop PLDT receiving it: while it is true every copy goes to
   `NOTICE.ADMIN_EMAILS` only, the CC list is ignored, and the subject gains `[TEST] `.
   `sfsPreview` / `cvPreview` log the exact body without sending anything and without touching
@@ -240,8 +252,9 @@ mail on the same engine: four conditions instead of one, and it sends **at or af
 * **`sfsTestReport` / `cvTestReport` / `afdTestReport` produce a real copy on any day.** The live
   rules have 0 rows until a new encode is tagged, so there would be nothing to look at — each one
   temporarily matches its own `cfg.TEST.STATUS` (`SFS.TEST` borrows `REENCODED`, `CV.TEST`
-  borrows `ESCALATED`, `AFD.TEST` borrows the single word `AFD`, at most `cfg.TEST.MAX_ROWS` = 12
-  rows in the table) and **forces that
+  borrows `CREDIT VALIDATION` — a substring of the live wording, so the copy is built from rows the
+  corrected rule really finds — `AFD.TEST` borrows the single word `AFD`; `cfg.TEST.MAX_ROWS` caps
+  the table at 12 rows, or 2 for CV so his inbox stays short) and **forces that
   report's `DRY_RUN` on for the duration**, so a test can never reach PLDT even while the
   daily report is live. `STATUS`, `MAX_ROWS` and `DRY_RUN` are restored before it returns and
   `afdTestReport` also puts `AFD.IGNORE_DAY` back, so the must-be-today filter is only off while he
