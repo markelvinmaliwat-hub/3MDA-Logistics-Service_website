@@ -159,25 +159,35 @@ and that is the point.
   *"paki correct ng grammar"*, and on the same day pasted **PLDT's own welcome SMS** as the style to
   follow — *"ganito ang sample na message na ilagay, wag nalang lagyan ng amount pero indicate padin
   na please pay the initial fee"*. So `REMTXT` renders:
-  `Good day. This is Arnel from PLDT Home 3MDA Cavite. Your approved account 0408222877 has an unpaid
-  initial fee. Please pay it through Maya or Bayad Center to secure your service. Thank you.`
+  `Hi Arnel, this is Kenneth from PLDT Home 3MDA Cavite. Your approved account 0408222877 has an
+  unpaid initial fee. Please pay it through Maya or Bayad Center to secure your service. Thank you.`
   Three things are load-bearing and came from his own sentence, not from me: **Cavite** is in the
   identity line, the account is called **approved**, and only the **first name** is used — `remFirst`
   takes the first word of `SUBSCRIBER NAME`, or the word after the comma when a cell is stored
   `SURNAME, FIRST`, and Title-Cases it because the sheet is ALL CAPS. `po` is gone with the
   translation; if he wants it back, that is a one-word edit.
+* **The agent signs it, not the owner.** On 2026-11-06 he settled the last open question about this
+  feature with five words — *"ang agent mismo ang mag tetext"* — so the `This is …` name is **the
+  person holding the phone**, never Mark's: `remFirst` reads the signed-in agent (`ME.name`, which is
+  the `AGENT NAME` looked up from their own agent code at login) and falls back to the row's
+  `AGENT NAME` when nobody is signed in. If both are blank the line degrades to `this is your agent
+  from PLDT Home 3MDA Cavite` rather than shipping `this is  from`. The subscriber moves from the
+  identity slot to the greeting, which is where a first name belongs when someone else is speaking.
+  Measured on the 40 FOR PAYMENT rows: **all 40 have an `AGENT NAME`**, 18 distinct agents across
+  them, so the fallback path is insurance and not today's behaviour.
 * **No amount, and no due date either — the second one is not a choice.** He removed the `Php 999.00`
   himself. PLDT's sample also carries `on or before 10/27/2025`, but measured across the 40 FOR
   PAYMENT rows there is **no due-date column to read**: `POSTED DATE` is empty on **40 of 40** and
   the only filled date is `DATE`, the day of the sale, which would tell a client to pay by the wrong
   day. So the sentence says *to secure your service* and stops there. If he ever adds a due-date
   column, that is the place to put it back.
-* **This wording costs two segments, and that is the trade he accepted.** 187–197 characters across
-  all 40 rows, so every message is a concatenated pair on his unlimited load. The earlier one-segment
-  version (147–157) gave up the fee, the channels and the PLDT closing; measured before shipping, so
-  the number is not a guess. The sheet stores the account without the leading zero and the client
-  reads it with one on the bill, so `remAcct` prefixes `0` **only when it is missing** (never doubles;
-  an empty cell still renders `-`).
+* **This wording costs two segments, and that is the trade he accepted.** 187–201 characters across
+  all 40 rows (**40 of 40** in a concatenated pair; signed in as one agent the spread is 189–199, so
+  the sender's name moves the length but never the segment count) on his unlimited load. The earlier
+  one-segment version (147–157) gave up the fee, the channels and the PLDT closing; measured before
+  shipping, so the number is not a guess. The sheet stores the account without the leading zero and
+  the client reads it with one on the bill, so `remAcct` prefixes `0` **only when it is missing**
+  (never doubles; an empty cell still renders `-`).
 * **A tap does not send, it hands over.** On a touch device (`pointer: coarse`) the button navigates
   `sms:09346368975?body=…` and the phone's own Messages app opens with everything filled in; the
   human presses Send, so the carrier sees a person messaging a person and the unlimited-text load is
