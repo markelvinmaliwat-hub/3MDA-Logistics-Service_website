@@ -153,15 +153,17 @@ and that is the point.
   as `0934 636 8975` by `remFmt`). It returns `''` when the value is an account number, a landline
   or a status like `NOT WIRED YET`; a row with no number shows *no number*, not a dead button.
 * **The wording is the owner's, in Taglish** — including his 2026-11-06 corrections *"gawin na galing
-  PLDT Home 3MDA"* and *"lagyan din ng account number upang alam ano ang babayadan"*: `Hi po, si
-  ARNEL AMANTE VILLENA po galing PLDT Home 3MDA. May pending payment pa po sa account 408222877
-  ninyo. Makakapag-settle na ba po? Salamat po.` It is named `REMTXT` and takes the row, so the
-  subscriber name and `ACCOUNT PID` come from the same record the button belongs to (all 40 FOR
-  PAYMENT rows carry a 9-digit account, so no message ever reads `account -`). Length is **145–163
-  characters** across those 40 rows: 38 stay inside one 160-character segment and the two with the
-  longest names run into a second, which costs nothing on an unlimited load but is worth knowing
-  before it becomes a daily habit. No amount and no due date appears, because the sheet does not
-  reliably carry either for a FOR PAYMENT row.
+  PLDT Home 3MDA"*, *"lagyan din ng account number upang alam ano ang babayadan"* and *"lagyan ng 0
+  sa umpisa ang account number"*: `Hi po, si ARNEL AMANTE VILLENA po galing PLDT Home 3MDA. May
+  pending payment pa po sa account 0408222877 ninyo. Makakapag-settle na ba po? Salamat po.` The
+  sheet stores the account **without** the leading zero, so `remAcct` adds it and never doubles one
+  (`0408222877` stays as-is, an empty cell still renders `-`, never `0`). Named `REMTXT`, it takes
+  the row, so the subscriber name and `ACCOUNT PID` come from the same record the button belongs to
+  (all 40 FOR PAYMENT rows carry a 9-digit account). Length is **146–164 characters** across those
+  40 rows: 38 stay inside one 160-character segment and the two with the longest names run into a
+  second, which costs nothing on an unlimited load but is worth knowing before it becomes a daily
+  habit. No amount and no due date appears, because the sheet does not reliably carry either for a
+  FOR PAYMENT row.
 * **A tap does not send, it hands over.** On a touch device (`pointer: coarse`) the button navigates
   `sms:09346368975?body=…` and the phone's own Messages app opens with everything filled in; the
   human presses Send, so the carrier sees a person messaging a person and the unlimited-text load is
