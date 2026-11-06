@@ -154,7 +154,14 @@ const SFS = {
    that wording is now deliberately NOT a reason to mail anything. The two columns are read as
    ALTERNATIVES (FROM_ANY): a row qualifies when EITHER one says it, even if the other cell holds
    an unrelated note. cvProbe() counts per column so he can see which one his team actually types
-   in and tell me to drop the other. */
+   in and tell me to drop the other.
+   THE WORDING, SETTLED BY HIS OWN CELLS ON 2026-11-06: the rule shipped as UNDER CREDIT VALIDATION
+   and his live cvProbe answered 0 row(s) qualify. He then screenshotted four real rows (JOHNNY
+   DULIN 2313565019, ROWENA ORTE 2313567355, ROBERTO MAR 2313569202, GLORIA PEREZ 2313581337) -
+   "ITO ANG MGA NASA DATABASE KO NA UNDER CREADIT VALIDATION" - and both cells read just CREDIT
+   VALIDATION, no UNDER. So STATUS is the shorter phrase and EXACT stays false: matching is
+   "contains", so this catches CREDIT VALIDATION alone, UNDER CREDIT VALIDATION, PENDING CREDIT
+   VALIDATION - every ordering of the same queue - and it is what makes his four rows mail. */
 const CV = {
   NAME: 'CV',
   TO: ['lsabat@pldt.com.ph'],
@@ -169,7 +176,7 @@ const CV = {
   LOGO_W: 150, LOGO_H: 147,
   LOGO_ABOVE: true,
   FOOTER: '',
-  STATUS: 'UNDER CREDIT VALIDATION',   // the one wording he named
+  STATUS: 'CREDIT VALIDATION',       // what his cells actually say - see the comment above
   SHEET_ID: '',
   TABS: [],
   FROM: ['HD RECOMMENDATION', 'FINAL STATUS'],
@@ -691,7 +698,7 @@ function statusHit_(match, cfg) {
 /* cfg.FROM_ANY = true: every column in cfg.FROM is tested on its own and a hit in ANY one of them
    qualifies the row. Without it the first non-empty column wins, which is what SFS and AFD want (one
    deciding column, others only as fallback) but not what the CV queue wants: the owner's rule is
-   "HD RECOMMENDATION at FINAL STATUS, basta naka UNDER CREDIT VALIDATION", and a row can carry an
+   "HD RECOMMENDATION at FINAL STATUS, basta naka CREDIT VALIDATION", and a row can carry an
    unrelated note in one of those two cells while the wording sits in the other. The value shown in
    the mail stays reportStatusOf_ (first non-empty), so only the membership test changes. */
 function statusRowHit_(r, cfg) {

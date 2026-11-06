@@ -93,9 +93,16 @@ mail on the same engine: four conditions instead of one, and it sends **at or af
   `FOR CREDIT VALIDATION AND APPROVAL`, subject `3MDA_CREDIT_VALIDATION_` + `MMMYYYY`.
   **`DRY_RUN = false` since 2026-11-05** — he read a `cvTestReport` copy and said *"OO, GO CV LIVE"*.
 * **Its rule is his correction, in his own words (2026-11-06, said twice): `HD RECOMMENDATION` or
-  `FINAL STATUS` contains `UNDER CREDIT VALIDATION`.** The first version read `CSP REMARKS` for
+  `FINAL STATUS` contains `CREDIT VALIDATION`.** The first version read `CSP REMARKS` for
   `ESCALATED TO CVAA` and reported **0 rows all day** on the live file — that is how he knew the
   column was wrong, and `ESCALATED TO CVAA` is deliberately no longer a reason to mail anything.
+  The wording then had to be fixed a second time the same day: it shipped as
+  `UNDER CREDIT VALIDATION`, his `cvProbe` still answered `0 row(s) qualify`, and the four rows he
+  screenshotted (`JOHNNY DULIN 2313565019`, `ROWENA ORTE 2313567355`, `ROBERTO MAR 2313569202`,
+  `GLORIA PEREZ 2313581337`) both read **`CREDIT VALIDATION`** with no `UNDER`. Because matching is
+  `contains` (`EXACT = false`), the shorter phrase is strictly broader — it still catches
+  `UNDER CREDIT VALIDATION`, `PENDING CREDIT VALIDATION`, lower case and extra spaces — so nothing
+  he was already mailing is lost, and his four rows finally are.
   The two columns are alternatives (`CV.FROM_ANY = true`): a row qualifies when **either** one
   carries the wording, even when the other cell holds an unrelated note. Without that, the shared
   "first non-empty column wins" reading — which is right for SFS and AFD — would let a note in
