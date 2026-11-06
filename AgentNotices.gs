@@ -425,6 +425,47 @@ const AFD29 = {
   TEST: { STATUS: 'AFD', MAX_ROWS: 12 }
 };
 
+/* --------------------------------------------------------------------- remark alert
+   The owner asked for this on 2026-11-06: "kada may mag lalagay ng remarks sa [the FOR PAYMENT
+   modal] ay ipadala ito sa email ng mga nakakasakot ng trabaho na iyon para aware sila na may
+   binigay na remarks ang ahente" - and he named the recipients himself, admins only, NOT the
+   agents: To ilanoandong@gmail.com, CC juliean.rjab@gmail.com + markelvinmaliwat@gmail.com.
+   This is not a scheduled report. It fires from logWrite_ the moment a dashboard save lands in
+   the Payment_Updates tab, so it has to survive three things the reports never face:
+   (1) most saves carry no remark at all - choosing an action alone must not mail anyone;
+   (2) the modal saves automatically, so one person typing a remark and fixing the date writes
+   several rows in a few seconds - GAP_MIN and the signature check collapse that into one alert;
+   (3) it runs inside the browser's save request, so any mail error is caught and logged and the
+   row is still reported as saved. DRY_RUN is ON: copies go to NOTICE.ADMIN_EMAILS with [TEST]
+   in the subject until the owner reads one and says go. */
+const REMARK = {
+  NAME: 'REMARK',
+  TO: ['ilanoandong@gmail.com'],
+  CC: ['juliean.rjab@gmail.com', 'markelvinmaliwat@gmail.com'],
+  GREET: 'Good day,',
+  INTRO: 'A remark was recorded on the dashboard for the sale below. Kindly take note of it and ' +
+    'coordinate with the agent concerned.',
+  CLOSE: 'Should you have any concerns, please reply to this email so that we may follow up with ' +
+    'the agent accordingly.',
+  THANKS: 'Thank you !',
+  SIGN: ['Mark Maliwat', 'Sales Validator - MMMDA Logistics', 'Service Cavite Upland'],
+  /* No logo on purpose: reportLogo_ spends a UrlFetchApp call, and this runs inside the save the
+     agent is waiting on. The signature stays plain text. */
+  LOGO_URL: '',
+  LOGO_KEY: 'mmmda-logo',
+  LOGO_ALT: 'MMMDA Logistics Service',
+  LOGO_W: 150, LOGO_H: 147,
+  LOGO_ABOVE: true,
+  FOOTER: '',
+  COLS: ['SUBSCRIBER NAME', 'ACCOUNT', 'AGENT', 'ACTION', 'DATE OF PAYMENT', 'REMARKS', 'RECORDED BY', 'RECORDED AT'],
+  DRY_RUN: true,                   // owner has not said go yet - every copy is a [TEST] to ADMIN_EMAILS
+  GAP_MIN: 15,                     // one alert per sale per 15 minutes, however many times the row is saved
+  MAX_PER_DAY: 40,                 // the consumer send quota is shared with the 8AM notices and the reports
+  TIMEZONE: '',
+  SUBJECT: '3MDA_REMARK_ADDED - ', // + subscriber name + (account), so the list is triageable unread
+  SENT_PREFIX: 'REMARK_ALERT_'
+};
+
 const NT_ = {
   GREET: 'Dear',
   FP_INTRO: 'This is to formally inform you that the following sale(s) endorsed under your account are currently tagged as FOR PAYMENT. Kindly coordinate with the concerned subscriber(s) and ensure that the required payment is settled at the earliest possible time to avoid delays or cancellation of the application.',
@@ -582,7 +623,10 @@ const CELL_ = {
   'ACCT': 'acct', 'PR': 'pr', 'BRGY': 'brgy', 'CITY': 'city', 'CLUSTER': 'cluster',
   /* his RTS template's own headers, so the mail can print them the way he types them */
   'SR Number': 'sr', 'AGENT CODE': 'code', 'AGENT NAME': 'agent', 'AGENCY NAME': 'agency',
-  'CDME': 'cdme', 'SALES MANAGER': 'smanager', 'TEAM': 'team'
+  'CDME': 'cdme', 'SALES MANAGER': 'smanager', 'TEAM': 'team',
+  /* the remark alert's columns - these come from the Payment_Updates row, not from the database */
+  'ACCOUNT': 'account', 'ACTION': 'action', 'DATE OF PAYMENT': 'paydate', 'REMARKS': 'remarks',
+  'RECORDED BY': 'byName', 'RECORDED AT': 'savedAt', 'AGENT': 'agent'
 };
 const TH_ = 'style="background:#d9001b;color:#fff;text-align:left;padding:8px 10px;font-size:12px"';
 const TD_ = 'style="padding:7px 10px;border-bottom:1px solid #e3e8f0;font-size:13px;vertical-align:top"';
@@ -1597,7 +1641,194 @@ function logWrite_(p) {
   try { lock.waitLock(10000); locked = true; } catch (e) { /* an occasional lost race only costs one row */ }
   try { t.sh.getRange(last + 1, 1, 1, head.length).setValues([row]); }
   finally { if (locked) { try { lock.releaseLock(); } catch (e) {} } }
+  /* The remark alert hangs off the save, never the other way round. The row is already written
+     at this point, so a quota error, a bad address or a broken property is logged and the
+     dashboard is still told its save succeeded. */
+  if (t.pay) {
+    try {
+      remarkAlert_({ at: time, key: row[1], name: row[2], account: row[3], agent: row[4],
+        action: row[5], label: row[6], date: row[7], remarks: row[8], by: row[9], code: row[10], byName: row[11] });
+    } catch (e) { Logger.log('REMARK | the save succeeded, the alert did not: ' + e); }
+  }
   return { success: true, row: last + 1, time: time };
+}
+/* --------------------------------------------------------------- the alert itself
+   Everything below runs inside that save request, so it is short and it never throws upward. */
+const remarkDayKey_ = () => REMARK.SENT_PREFIX + 'DAY_' +
+  Utilities.formatDate(new Date(), REMARK.TIMEZONE || NOTICE.TIMEZONE, 'yyyyMMdd');
+const remarkKey_ = r => String(r.key || '').trim() || (nk_(r.name) + '|' + String(r.account || '').trim());
+/* The state that decides "have I already told them about THIS version of this sale". An agent who
+   picks an action, types a remark, then fixes a typo writes three rows in ten seconds; only the
+   first may mail. The signature is action + payment date + remarks, so a genuinely new remark on
+   the same sale does alert again. */
+const remarkSig_ = r => [nk_(r.action), nk_(r.date), nk_(r.remarks)].join('|');
+function remarkRecent_() {
+  const p = PropertiesService.getScriptProperties();
+  let o = {};
+  try { o = JSON.parse(String(p.getProperty(REMARK.SENT_PREFIX + 'LAST') || '{}')) || {}; } catch (e) { o = {}; }
+  const cut = Date.now() - 3 * 864e5;
+  Object.keys(o).forEach(k => { if (!o[k] || Number(o[k].t) < cut) delete o[k]; });
+  return { p: p, o: o };
+}
+const manila_ = ms => Utilities.formatDate(new Date(Number(ms)), NOTICE.TIMEZONE, 'yyyy-MM-dd HH:mm:ss');
+/* Pure - it reads the state, it never writes it, so remarkProbe() can ask the same question
+   about 200 saved rows without sending or remembering anything. */
+function remarkReason_(row, recent) {
+  const remarks = String(row.remarks || '').trim();
+  if (!remarks) return { mail: false, why: 'the save carried no remarks - choosing an action alone is not an alert' };
+  const key = remarkKey_(row), last = recent.o[key], sig = remarkSig_(row), now = Date.now();
+  if (last && last.s === sig) return { mail: false, why: 'identical to the alert already sent at ' + manila_(last.t) };
+  if (last && now - Number(last.t) < REMARK.GAP_MIN * 60000) {
+    return { mail: false, why: 'only ' + Math.round((now - Number(last.t)) / 1000) +
+      ' second(s) since the alert sent at ' + manila_(last.t) + ', the gap is ' + REMARK.GAP_MIN + ' minute(s)' };
+  }
+  const used = Number(recent.p.getProperty(remarkDayKey_()) || 0);
+  if (used >= REMARK.MAX_PER_DAY) return { mail: false, why: used + ' alert(s) already went out today, the cap is ' + REMARK.MAX_PER_DAY };
+  const left = MailApp.getRemainingDailyQuota();
+  if (left <= 5) return { mail: false, why: 'the Gmail send quota is down to ' + left + ' - the 8AM notices and the PLDT reports come first' };
+  return { mail: true, key: key, sig: sig, used: used };
+}
+function remarkItem_(row) {
+  return {
+    sub: String(row.name || ''), account: String(row.account || ''), agent: String(row.agent || ''),
+    action: String(row.label || row.action || ''), paydate: String(row.date || ''),
+    remarks: String(row.remarks || ''), savedAt: String(row.at || ''),
+    byName: [String(row.byName || ''), row.by ? '(' + row.by + ')' : '', row.code ? '(' + row.code + ')' : '']
+      .filter(Boolean).join(' ')
+  };
+}
+function remarkMail_(row) {
+  const i = remarkItem_(row);
+  const subject = REMARK.SUBJECT + i.sub + (i.account ? ' (' + i.account + ')' : '');
+  const text = [REMARK.GREET, REMARK.INTRO,
+    REMARK.COLS.map(c => c + ': ' + cellOf_(i, c)).join('\n'),
+    REMARK.CLOSE, REMARK.THANKS, REMARK.SIGN.join('\n')].join('\n\n');
+  const html = `<div style="font-family:Calibri,Arial,sans-serif;font-size:14px;color:#000;max-width:900px">` +
+    `<p>${esc_(REMARK.GREET)}</p><p>${esc_(REMARK.INTRO)}</p>` + reportTable_([i], REMARK) +
+    `<p style="margin-top:18px">${esc_(REMARK.CLOSE)}</p>` +
+    `<p style="margin-top:18px"><b>${esc_(REMARK.THANKS)}</b></p>` + reportSig_({ src: '', blob: null }, REMARK) +
+    (REMARK.FOOTER ? `<p style="color:#667085;font-size:12px">${esc_(REMARK.FOOTER)}</p>` : '') + '</div>';
+  return { item: i, subject: subject, html: html, text: text };
+}
+/* send=false logs the exact body and mails nothing. mark=false keeps a preview or a test copy
+   from swallowing the real alert later - only a send that actually went out is remembered. */
+function remarkSend_(row, send, mark) {
+  const m = remarkMail_(row);
+  const admins = NOTICE.ADMIN_EMAILS.map(x => String(x).trim().toLowerCase()).filter(Boolean);
+  const testTo = admins[0] || Session.getEffectiveUser().getEmail();
+  const res = {
+    mode: send ? (REMARK.DRY_RUN ? 'test' : 'live') : 'preview', dryRun: REMARK.DRY_RUN,
+    subject: (REMARK.DRY_RUN && send ? '[TEST] ' : '') + m.subject,
+    to: (send && !REMARK.DRY_RUN) ? REMARK.TO : [testTo],
+    cc: (send && !REMARK.DRY_RUN) ? REMARK.CC : [], item: m.item,
+    quota: MailApp.getRemainingDailyQuota()
+  };
+  if (!send) { res.text = m.text; res.html = m.html; return res; }
+  const opt = { to: res.to.join(','), name: NOTICE.SENDER_NAME, subject: res.subject, body: m.text, htmlBody: m.html };
+  if (res.cc.length) opt.cc = res.cc.join(',');
+  MailApp.sendEmail(opt);
+  res.sent = true;
+  if (mark) remarkMark_(row, remarkRecent_());
+  Logger.log('REMARK | ' + (REMARK.DRY_RUN ? 'TEST copy' : 'SENT') + ': ' + m.item.sub + ' (' + m.item.account + ')' +
+    (m.item.action ? ' | ' + m.item.action : '') + (m.item.paydate ? ' pay on ' + m.item.paydate : '') +
+    ' | remarks "' + m.item.remarks.slice(0, 70) + '" | by ' + (m.item.byName || '-') +
+    ' | went to ' + res.to.join(',') + (res.cc.length ? ' | cc ' + res.cc.join(',') : ' | no cc') +
+    ' | quota left ' + res.quota);
+  return res;
+}
+function remarkMark_(row, recent) {
+  const key = remarkKey_(row);
+  recent.o[key] = { s: remarkSig_(row), t: Date.now(), d: REMARK.DRY_RUN ? 1 : 0 };
+  const all = Object.keys(recent.o);
+  if (all.length > 400) {
+    all.sort((a, b) => Number(recent.o[a].t) - Number(recent.o[b].t))
+      .slice(0, all.length - 400).forEach(k => delete recent.o[k]);
+  }
+  recent.p.setProperty(REMARK.SENT_PREFIX + 'LAST', JSON.stringify(recent.o));
+  const dayKey = remarkDayKey_();
+  recent.p.setProperty(dayKey, String(Number(recent.p.getProperty(dayKey) || 0) + 1));
+  Object.keys(recent.p.getProperties()).forEach(k => {
+    if (k.indexOf(REMARK.SENT_PREFIX + 'DAY_') === 0 && k !== dayKey) recent.p.deleteProperty(k);
+  });
+}
+/* The entry point logWrite_ calls. It says out loud why it stayed quiet, because the silence is
+   the thing he will ask about first. */
+function remarkAlert_(row) {
+  const recent = remarkRecent_();
+  const why = remarkReason_(row, recent);
+  if (!why.mail) {
+    Logger.log('REMARK | no alert - ' + why.why + ' | ' + String(row.name || '') + ' (' + String(row.account || '') + ')');
+    return why;
+  }
+  return remarkSend_(row, true, true);
+}
+/* Newest saved row that actually carries a remark - what preview and the test copy show. */
+function remarkLatest_() {
+  const rows = logRead_({ kind: 'pay', limit: 500 });
+  for (let i = rows.length - 1; i >= 0; i--) if (String(rows[i].remarks || '').trim()) return rows[i];
+  return null;
+}
+function remarkPreview() {
+  const r = remarkLatest_();
+  if (!r) { Logger.log('REMARK | nothing to preview - the Payment_Updates tab has no saved row with remarks yet'); return null; }
+  const res = remarkSend_(r, false, false);
+  Logger.log('REMARK preview | subject ' + res.subject + ' | would go to ' + REMARK.TO.join(',') +
+    ' | cc ' + (REMARK.CC.join(',') || 'none') + ' | DRY_RUN ' + REMARK.DRY_RUN +
+    (REMARK.DRY_RUN ? ' (so the real send would go to ' + NOTICE.ADMIN_EMAILS.join(',') + ' only, labelled [TEST])' : ''));
+  Logger.log(res.text);
+  return res;
+}
+/* A real copy in his inbox, whatever the live flag says: DRY_RUN is forced on for the run and
+   put back before it returns, so this can never reach ilanoandong@gmail.com by accident. */
+function remarkTestReport() {
+  const r = remarkLatest_();
+  if (!r) { Logger.log('REMARK | no remark row to test with - save one in the dashboard FOR PAYMENT modal first'); return null; }
+  const keep = REMARK.DRY_RUN;
+  REMARK.DRY_RUN = true;
+  let res;
+  try { res = remarkSend_(r, true, false); }
+  finally { REMARK.DRY_RUN = keep; }
+  Logger.log('REMARK | settings restored: DRY_RUN ' + keep +
+    (keep ? ' (test mode, copies go to ' + NOTICE.ADMIN_EMAILS.join(',') + ' only)'
+      : ' (LIVE - a saved remark now mails ' + REMARK.TO.join(',') + ' cc ' + REMARK.CC.join(',') + ')') +
+    ' | the test copy was NOT remembered, so the next real save still alerts');
+  return res;
+}
+/* Read-only census of the tab the dashboard writes, plus what the rule would have done with each
+   row. It sends nothing and writes nothing. */
+function remarkProbe() {
+  const rows = logRead_({ kind: 'pay', limit: 500 });
+  const recent = remarkRecent_();
+  const withRem = rows.filter(r => String(r.remarks || '').trim());
+  const tally = {};
+  let would = 0;
+  withRem.forEach(r => {
+    const w = remarkReason_(r, recent);
+    if (w.mail) would++;
+    else { const k = w.why.replace(/[-0-9]+ /, 'N ').slice(0, 60); tally[k] = (tally[k] || 0) + 1; }
+  });
+  Logger.log('REMARK | file ' + logSs_().getName() + ' | tab ' + LOG.PAY_TAB + ' | rows=' + rows.length +
+    ' | with remarks=' + withRem.length + ' | a fresh save now would alert on ' + would + ' of them');
+  Logger.log('REMARK | recipients: to ' + REMARK.TO.join(', ') + ' | cc ' + (REMARK.CC.join(', ') || 'none') +
+    ' | DRY_RUN ' + REMARK.DRY_RUN + (REMARK.DRY_RUN ? ' - so today every copy goes to ' + NOTICE.ADMIN_EMAILS.join(', ') + ' only' : '') +
+    ' | gap ' + REMARK.GAP_MIN + ' min | cap ' + REMARK.MAX_PER_DAY + '/day | quota left ' + MailApp.getRemainingDailyQuota());
+  Object.keys(tally).sort((a, b) => tally[b] - tally[a]).forEach(k => Logger.log('  quiet because: ' + k + ' x' + tally[k]));
+  Logger.log('the last ' + Math.min(10, withRem.length) + ' saved remark(s), newest first:');
+  withRem.slice(-10).reverse().forEach(r => Logger.log('  ' + r.at + ' | ' + r.name + ' | ' + r.account + ' | ' +
+    (r.label || r.action || '-') + ' | pay ' + (r.date || '-') + ' | "' + String(r.remarks).slice(0, 60) +
+    '" | by ' + (r.byName || '-') + ' (' + (r.by || 'no email') + ')' + ' | agent ' + (r.agent || '-')));
+  Logger.log('kung walang remark pa ang nasa tab, normal iyan - nag-iipon lang sila kapag may gumamit ng modal.');
+  return { rows: rows.length, withRemarks: withRem.length, wouldAlert: would };
+}
+/* The throttle state lives in Script Properties. Run this once after flipping REMARK.DRY_RUN to
+   false, and any time he wants to re-test the same sale: it deletes the memory, nothing else. */
+function clearRemarkAlerts() {
+  const p = PropertiesService.getScriptProperties();
+  const gone = Object.keys(p.getProperties()).filter(k => k.indexOf(REMARK.SENT_PREFIX) === 0);
+  gone.forEach(k => p.deleteProperty(k));
+  Logger.log('REMARK | cleared ' + gone.length + ' alert state key(s): ' + (gone.join(', ') || 'there was nothing to clear') +
+    ' - the next saved remark alerts even on a sale that already alerted today');
+  return gone;
 }
 function logStatus_() {
   const a = Math.max(0, logTab_({ kind: 'activity' }).sh.getLastRow() - 1);

@@ -74,6 +74,41 @@ Before this existed, `LOG_URL` pointed at the sales web app, which answered ever
 request with the entire 13 MB database and no `success` field. Nothing was ever written,
 so the header could only ever show `Online · 1`.
 
+## Remark alert — an email the moment a remark is saved
+
+Requested by the owner on 2026-11-06: *"kada may mag lalagay ng remarks sa [the FOR PAYMENT
+modal] ay ipadala ito sa email ng mga nakakasakot ng trabaho na iyon para aware sila na may
+binigay na remarks ang ahente"*. He named the recipients himself — **admins only, never the
+agents**: To `ilanoandong@gmail.com`, CC `juliean.rjab@gmail.com` + `markelvinmaliwat@gmail.com`.
+
+It is not a report and it has **no trigger and no schedule**. `logWrite_` calls `remarkAlert_`
+right after it appends a row to `Payment_Updates`, so the mail is a side effect of the save the
+dashboard already makes. `REMARK.DRY_RUN` is **`true` as shipped**: every copy is a `[TEST]` to
+`NOTICE.ADMIN_EMAILS` until he reads one and says go.
+
+* **A save with no remark mails nobody.** Choosing an action alone is not news.
+* **The same sale does not mail twice.** The modal saves automatically, so one person picking an
+  action, typing a remark and fixing a typo writes several rows in seconds. The alert remembers
+  the `action + date + remarks` signature of what it last mailed per sale in Script Properties
+  (`REMARK_ALERT_LAST`, pruned after 3 days, capped at 400 sales) and stays quiet on an
+  identical re-save. A genuinely different remark is still held for `REMARK.GAP_MIN` = 15
+  minutes, then it mails.
+* **`REMARK.MAX_PER_DAY` = 40** and it refuses to send when the Gmail daily quota is under 5 —
+  the 8AM agent notices and the PLDT reports outrank it.
+* **A mail error never breaks the save.** The row is already written when the alert runs, so the
+  dashboard is still told `success: true`; the failure is only a `REMARK | the save succeeded,
+  the alert did not: …` line in the Execution log. A failed alert is *not* remembered, so the
+  next save on that sale tries again.
+* **No logo.** `reportLogo_` costs a `UrlFetchApp` call, and this runs inside the request the
+  agent is waiting on.
+* Dropdown entries: `remarkProbe()` (read-only census of `Payment_Updates` — how many rows carry
+  remarks, how many a fresh save would alert on, and each reason for staying quiet),
+  `remarkPreview()` (logs the exact body, sends nothing, writes nothing), `remarkTestReport()`
+  (a real `[TEST]` copy in his inbox; it forces `DRY_RUN` on for the run, restores it, and does
+  **not** write the throttle state), and `clearRemarkAlerts()` (deletes only the
+  `REMARK_ALERT_*` keys — run it once after flipping `DRY_RUN` to `false`, because the state
+  built while testing would otherwise swallow the first live alert).
+
 ## Endorsement reports to PLDT — SFS VALIDATION, CREDIT VALIDATION and AFD RESCHEDULE
 
 Two reports leave this script on their own schedule, and everything about each one — wording,
