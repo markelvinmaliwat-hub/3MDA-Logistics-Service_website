@@ -163,8 +163,9 @@ and that is the point.
   unpaid initial fee. Please pay it through Maya or Bayad Center to secure your service. Thank you.`
   Three things are load-bearing and came from his own sentence, not from me: **Cavite** is in the
   identity line, the account is called **approved**, and only the **first name** is used — `remFirst`
-  takes the first word of `SUBSCRIBER NAME`, or the word after the comma when a cell is stored
-  `SURNAME, FIRST`, and Title-Cases it because the sheet is ALL CAPS. `po` is gone with the
+  takes the first word of `SUBSCRIBER NAME`, or everything after the comma when a cell is stored
+  `SURNAME, FIRST`, and Title-Cases every word of it because the sheet is ALL CAPS (`X, LOVELY JOICE`
+  reads *Lovely Joice*, not *Lovely joice*). `po` is gone with the
   translation; if he wants it back, that is a one-word edit.
 * **The agent signs it, not the owner.** On 2026-11-06 he settled the last open question about this
   feature with five words — *"ang agent mismo ang mag tetext"* — so the `This is …` name is **the

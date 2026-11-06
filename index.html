@@ -235,7 +235,7 @@ const PAYOPT=[['','Select action'],['cancel','For cancellation'],['nwtp','Not wi
 const upRem=r=>{const x=payRec()[PK(r)];if(!x||(!x.o&&!x.m))return '';const lab=(PAYOPT.find(z=>z[0]===x.o)||['',''])[1];return `<div style="grid-column:1/-1"><label>UPDATED REMARKS</label><b class="upr">${esc([lab,x.d?'pay on '+x.d:'',x.m].filter(Boolean).join(' \u00b7 '))}</b><div class="sub">${esc([x.bn,x.code?'('+x.code+')':'',x.by].filter(Boolean).join(' '))}${x.at?' \u00b7 '+esc(x.at):''}</div></div>`};
 const NOCONTACT=/ringing|unattended|busy|no answer|not reachable|cannot be reached|out of coverage/i;
 const solicited=(r,REC)=>{if(REC[PK(r)])return true;const t=String(r['PAYMENT REMARKS']||'').trim();return !!t&&!NOCONTACT.test(t)};
-const remFirst=v=>{const s=String(v==null?'':v).trim().replace(/\s+/g,' ');if(!s)return '';const f=(s.includes(',')?s.split(',').pop().trim():s.split(' ')[0]);return f?(f.charAt(0).toUpperCase()+f.slice(1).toLowerCase()):''};
+const remFirst=v=>{const s=String(v==null?'':v).trim().replace(/\s+/g,' ');if(!s)return '';const f=(s.includes(',')?s.split(',').pop().trim():s.split(' ')[0]);return f.split(' ').map(w=>w?w.charAt(0).toUpperCase()+w.slice(1).toLowerCase():w).filter(Boolean).join(' ')};
 const remAcct=v=>{const a=String(v==null?'':v).trim();return a?(/^0/.test(a)?a:'0'+a):'-'};
 const REMTXT=r=>{const c=remFirst(dv(r,'SUBSCRIBER NAME')),a=remFirst((ME&&ME.name)||'')||remFirst(dv(r,'AGENT NAME'));
  return `${c?`Hi ${c},`:'Good day,'} this is ${a||'your agent'} from PLDT Home 3MDA Cavite. Your approved account ${remAcct(dv(r,'ACCOUNT PID'))} has an unpaid initial fee. Please pay it through Maya or Bayad Center to secure your service. Thank you.`};
