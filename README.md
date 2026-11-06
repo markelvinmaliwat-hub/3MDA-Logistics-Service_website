@@ -358,7 +358,8 @@ mail on the same engine: four conditions instead of one, and it sends **at or af
   each deletes every trigger of its own handler before creating its pair, so a short or duplicated
   pair is fixed by re-running it, never by hand. On 2026-11-05 the owner's Triggers page went from
   **SFS 1 + CV 3** to exactly **2 + 2 + 2 + 2 + 1 agent notice = 9**; `installRtsTrigger()` adds one
-  11AM trigger on top of those, for **10**. All five reports — SFS, CV, AFD, AFD12 and RTS — are now
+  11AM trigger on top of those, for **10** — since 2026-11-06 that tenth trigger fires in the 9AM
+  hour instead, and re-running `installRtsTrigger()` is what moves an existing one. All five reports — SFS, CV, AFD, AFD12 and RTS — are now
   past the `DRY_RUN` gate, so a paste is the only thing standing between a rule change and its
   recipients receiving it.
 * **AFD is live and on its own schedule.** The path the owner took on 2026-11-05: `afdProbe()` to
@@ -401,10 +402,15 @@ mail on the same engine: four conditions instead of one, and it sends **at or af
   RTS - CUSTOMER COMPLIANCE / RTS - UNCONTACTABLE na makikita sa final status at ito ay ipapadala sa
   email na ito - to bernardsalioa@gmail.com at naka cc sila jrsnavarro25@gmail.com
   juliean.rjab@gmail.com at ito ay ipapadala sa email araw araw tuwing 11:00 AM lamang"*. Three
-  things make it different from the four PLDT queues: the To/CC are **those three addresses and
-  nobody else**, the two taggings are **alternatives** (`RTS.ANY = true`, so `statusHit_` uses
-  `some`, not `every` — a row carrying only one of the two wordings still belongs), and it runs in
-  **one** hour (`SEND_HOURS: [11]`) instead of a pair, because he said *11:00 AM lamang*. What is
+  things make it different from the four PLDT queues: the To/CC are **only the addresses he names**
+  (since 2026-11-06 that includes **himself** — he asked *"paki CC din ako dito"* after a send that
+  had already gone out looked to him like a run that never happened), the two taggings are
+  **alternatives** (`RTS.ANY = true`, so `statusHit_` uses `some`, not `every` — a row carrying only
+  one of the two wordings still belongs), and it runs in **one** hour instead of a pair. That hour
+  was 11 AM, and on 2026-11-06 he moved it: `SEND_HOURS: [9]` with `SEND_MINUTE: 0`, the first config
+  to name a minute — `installReportTrigger_` chains `.atMinute()` only when `SEND_MINUTE` is a
+  number, so SFS, CV, AFD and AFD12 keep plain hour triggers. Apps Script still gives no exact
+  minute; `atHour(9).atMinute(0)` lands near the top of the hour with a few minutes of slack. What is
   shared: the file, the tabs, the black-bordered table, the per-day `RTS_SENT_yyyyMMdd` SR list,
   the `[TEST]` copy path. The **words and columns are his own** (2026-11-05): he pasted the
   greeting (*"Hi @bernardsalioa@gmail.com for checking ng ating mga open RTS kung ito ba ay cancelled
@@ -419,7 +425,8 @@ mail on the same engine: four conditions instead of one, and it sends **at or af
   blanks. Presses: `rtsProbe`, `rtsPreview`, `rtsTestReport`, `sendRtsReport`,
   `installRtsTrigger`, handler `runRtsNotices`. It is not in `ensureReportTriggers_`. The live flip
   was his own word — *"GO RTS LIVE"* — so `runRtsNotices` now mails `bernardsalioa@gmail.com`
-  (Cc the two he named) on the first 11AM run after he pastes this file and installs the trigger;
+  (Cc the three he named, himself included) on the first 9AM run after he pastes this file and
+  installs the trigger;
   a day with no RTS row mails nothing and logs `NOT SENT: 0 row(s) … already reported today`.
   `rtsTestReport()` still forces its own copy to `DRY_RUN` and restores the live flag after.
 * **AFD29 (his "147 days due" mail) exists only as a scaffold plus a read-only scout.** He sent a

@@ -335,7 +335,9 @@ const AFD12 = {
 const RTS = {
   NAME: 'RTS',
   TO: ['bernardsalioa@gmail.com'],
-  CC: ['jrsnavarro25@gmail.com', 'juliean.rjab@gmail.com'],
+  /* He added himself on 2026-11-06 - until then he was not a recipient of this report, which is
+     why a send that had already gone out looked to him like a run that never happened. */
+  CC: ['jrsnavarro25@gmail.com', 'juliean.rjab@gmail.com', 'markelvinmaliwat@gmail.com'],
   /* He tags the man by his address the way people do in chat, and asked for exactly this greeting,
      so the @ stays - it is his line, not a typo to clean up. */
   GREET: 'Hi @bernardsalioa@gmail.com,',
@@ -365,7 +367,8 @@ const RTS = {
   COLS: ['DATE', 'SR Number', 'FINAL STATUS', 'CSP REMARKS', 'AGENT CODE', 'AGENT NAME', 'AGENCY NAME', 'CDME', 'SALES MANAGER', 'TEAM'],
   DATE_FORMAT: 'M/d/yyyy',
   SR_LINK: '',
-  SEND_HOURS: [11],                // once a day, his "tuwing 11:00 AM lamang"
+  SEND_HOURS: [9],                 // his "gawing 9:00 AM" on 2026-11-06 - it was 11 AM since he set it up
+  SEND_MINUTE: 0,                  // anchor it to the top of the hour; Apps Script still adds a few minutes of slack
   DRY_RUN: false,                  // owner's "GO RTS LIVE", 2026-11-05 - PLDT-side address receives it
   MAX_ROWS: 300,
   TIMEZONE: '',
@@ -1180,6 +1183,7 @@ function reportStatus_(cfg, handler) {
     report: cfg.NAME,
     installed: ScriptApp.getProjectTriggers().some(t => t.getHandlerFunction() === handler),
     hours: cfg.SEND_HOURS, hour: cfg.SEND_HOURS[0], tz: cfg.TIMEZONE || NOTICE.TIMEZONE, dryRun: cfg.DRY_RUN,
+    minute: typeof cfg.SEND_MINUTE === 'number' ? cfg.SEND_MINUTE : null,
     from: cfg.SEND_FROM || '',
     to: cfg.TO, cc: cfg.CC, status: cfg.STATUS, quota: MailApp.getRemainingDailyQuota(),
     file: cfg.SHEET_ID || NOTICE.SHEET_ID, tabs: reportTabs_(cfg).join(','),
@@ -1192,14 +1196,23 @@ function reportStatus_(cfg, handler) {
    pointing at this handler is deleted first, so running this twice is safe. */
 function installReportTrigger_(cfg, handler) {
   ScriptApp.getProjectTriggers().filter(t => t.getHandlerFunction() === handler).forEach(t => ScriptApp.deleteTrigger(t));
-  cfg.SEND_HOURS.forEach(h => ScriptApp.newTrigger(handler).timeBased().everyDays(1).atHour(h).create());
+  cfg.SEND_HOURS.forEach(h => {
+    const day = ScriptApp.newTrigger(handler).timeBased().everyDays(1).atHour(h);
+    /* Apps Script never fires on the exact minute - it fires somewhere in that hour, and Google
+       adds a few minutes of slack on top. Naming the minute still moves the run as close to the
+       top of the hour as this platform allows, which is the honest version of "9:00 sharp". */
+    if (typeof cfg.SEND_MINUTE === 'number') day.atMinute(cfg.SEND_MINUTE).create();
+    else day.create();
+  });
   const st = reportStatus_(cfg, handler);
   Logger.log(cfg.NAME + ' trigger: ' + (st.installed ? 'installed' : 'NOT installed') +
-    ' | runs in the ' + hoursText_(cfg) + ' hour (' + st.tz + ')' +
+    ' | runs in the ' + hoursText_(cfg) + ' hour' + (typeof cfg.SEND_MINUTE === 'number' ? ' at minute ' + cfg.SEND_MINUTE : '') +
+    ' (' + st.tz + ')' +
     (cfg.SEND_FROM ? ', mails at or after ' + cfg.SEND_FROM + ' - an earlier run waits and sends nothing' : '') +
     ' | rule: ' + st.rule +
     ' | file: ' + st.file + ' | tabs: ' + st.tabs +
-    ' | ' + (st.dryRun ? 'DRY_RUN is ON, copies go to ' + NOTICE.ADMIN_EMAILS.join(',') + ' only' : 'LIVE, goes to ' + st.to.join(',')) +
+    ' | ' + (st.dryRun ? 'DRY_RUN is ON, copies go to ' + NOTICE.ADMIN_EMAILS.join(',') + ' only'
+      : 'LIVE, goes to ' + st.to.join(',') + (st.cc.length ? ' | cc ' + st.cc.join(',') : ' | no cc')) +
     ' | ' + st.dedupe + ' | ' + st.note);
   return st;
 }
