@@ -117,22 +117,28 @@ testing cannot swallow the first live alert.
 
 ## Sales start month — `FROM`
 
-The owner's rule, 2026-11-06: *"mag umpisa ng benta simula november, wag na isama ang ibang months
-na lumipas"*. It lives in one constant at the top of the data layer (`const FROM='2026-11'`) and is
-applied inside `prep()`, so it is already in force before any view, KPI, ranking, month dropdown or
-the FOR PAYMENT queue reads the rows — there is no second place to remember.
+**Currently OFF (`const FROM=''`) — the dashboard counts the whole database.** The owner turned it on
+and then reversed it on 2026-11-06, in that order: first *"mag umpisa ng benta simula november, wag na
+isama ang ibang months na lumipas"*, later the same day, after seeing the board drop to 66 rows,
+*"mali ang pagkaka intindi mo ibalik mo sa dating data ang dashboard buong database padin"*. The
+mechanism stays in the file because it is one constant; only the value changed.
+
+It lives at the top of the data layer and is applied inside `prep()`, so it is already in force before
+any view, KPI, ranking, month dropdown or the FOR PAYMENT queue reads the rows — there is no second
+place to remember, and nothing about the five PLDT reports depends on it.
 
 * **The VALIDATORS tab is deliberately not filtered.** His sentence was about *benta*; the validator
   list is a different ranking and zeroing it would be collateral damage.
 * **Rows with no parseable DATE are kept** (`!r._m ||`), because an undated row is not a *past* month
   and silently dropping it would lose a sale rather than an old one.
-* **If a tab has nothing at or after `FROM`, the tab is shown whole.** Measured on the current
-  database: it spans `2026-07 (20) · 2026-08 (517) · 2026-09 (495) · 2026-10 (599)` and **has no
-  November rows at all**, so a hard cutoff would render the board — and the Remind button he asked
-  for in the same message — completely empty. Instead the header says *"FROM Nov 2026: wala pang
-  benta noong Nobyembre, kasama pa ang 1,631 lumang row till then"* and the rule engages by itself
-  the moment the first November row is synced (a `2026-10` + three `2026-11` + one `2026-07` mix
-  leaves 2 rows shown, 2 dropped). Setting `FROM=''` counts every month again.
+* **If a tab has nothing at or after `FROM`, the tab is shown whole** and the header says so. That
+  fallback is what kept the board readable for the half-day the rule existed with no November rows in
+  the file: measured 3:52 PM the same day, `PLDT` had **66 rows dated 2026-11** (1,351 older) and
+  `RED` had **none of 303**, so `FROM='2026-11'` would have shown 66 rows on one tab and the whole RED
+  tab anyway — which is exactly the confusing half-filtered board he sent back.
+* **`FROM='2026-11'` is the value that counts November forward again** — set it and every earlier
+  month leaves the views. Mixing `2026-10` + three `2026-11` + one `2026-07` leaves 2 rows shown, 2
+  dropped; that is the tested behaviour, not a guess.
 
 ## Client reminder — one tap, sent from the phone holding it
 

@@ -144,7 +144,7 @@ const mkey=d=>d instanceof Date?`${d.getFullYear()}-${String(d.getMonth()+1).pad
 const mlabel=k=>{const[y,m]=k.split('-');return MN[m-1]+' '+y};
 const esc=s=>String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
 function find(h,res){for(const r of res){const k=h.find(x=>r.test(x));if(k)return k}return null}
-const FROM='2026-11';/* BENTA starts here (owner, 2026-11-06): sales rows from an earlier month are no longer counted anywhere on the board. Set '' to count every month again. The VALIDATORS tab is not filtered. */
+const FROM='';/* BENTA start month, EMPTY = count the whole database (owner's call, 2026-11-06: "ibalik mo sa dating data ang dashboard buong database padin"). Put '2026-11' here to count only that month and later; rows from an earlier month then disappear from every view, and a tab with no such row falls back to showing all of it. The VALIDATORS tab is never filtered. */
 function prep(name,rows){const h=rows.length?Object.keys(rows[0]):[];
  const c={date:find(h,[/date/i]),name:find(h,[/subscriber/i,/customer/i,/^name/i]),status:find(h,[/final.*status/i,/status/i]),
  pay:find(h,[/payment status/i,/pay/i]),agent:find(h,[/agent.?name/i,/^agent\s*$/i,/agent/i]),tl:find(h,[/team.?lead/i,/^tl$/i]),csp:find(h,[/csp status/i,/csp/i])};
