@@ -115,6 +115,25 @@ testing cannot swallow the first live alert.
   `REMARK_ALERT_*` keys — run it once after flipping `DRY_RUN` to `false`, because the state
   built while testing would otherwise swallow the first live alert).
 
+## Sales start month — `FROM`
+
+The owner's rule, 2026-11-06: *"mag umpisa ng benta simula november, wag na isama ang ibang months
+na lumipas"*. It lives in one constant at the top of the data layer (`const FROM='2026-11'`) and is
+applied inside `prep()`, so it is already in force before any view, KPI, ranking, month dropdown or
+the FOR PAYMENT queue reads the rows — there is no second place to remember.
+
+* **The VALIDATORS tab is deliberately not filtered.** His sentence was about *benta*; the validator
+  list is a different ranking and zeroing it would be collateral damage.
+* **Rows with no parseable DATE are kept** (`!r._m ||`), because an undated row is not a *past* month
+  and silently dropping it would lose a sale rather than an old one.
+* **If a tab has nothing at or after `FROM`, the tab is shown whole.** Measured on the current
+  database: it spans `2026-07 (20) · 2026-08 (517) · 2026-09 (495) · 2026-10 (599)` and **has no
+  November rows at all**, so a hard cutoff would render the board — and the Remind button he asked
+  for in the same message — completely empty. Instead the header says *"FROM Nov 2026: wala pang
+  benta noong Nobyembre, kasama pa ang 1,631 lumang row till then"* and the rule engages by itself
+  the moment the first November row is synced (a `2026-10` + three `2026-11` + one `2026-07` mix
+  leaves 2 rows shown, 2 dropped). Setting `FROM=''` counts every month again.
+
 ## Client reminder — one tap, sent from the phone holding it
 
 Requested 2026-11-06 after the four queues went live: the *customers* owed a nudge, not only the
@@ -128,20 +147,27 @@ and that is the point.
   2026-11-06: *"oo, i-CBR 1 ang client number"*. Measured on the synced snapshot: **40 FOR PAYMENT
   rows, all 40 carrying a usable `CBR 1`, 39 distinct numbers, 0 in the RED tab**. `CONTACT NUMBER`
   is a header the SFS report still expects but the sales file does not have.
-* **`REMNUM` accepts what the sheet actually contains** — `639346368975`, `0924…`, `924…`,
-  `+63 924 402 7011`, and the `639244027011.0` a numeric cell can stringify to — and returns a
-  `63`-prefixed digit string, or `''` when the value is an account number, a landline or a status
-  like `NOT WIRED YET`. A row with no number shows *no number*, not a dead button.
-* **The wording is the owner's, in Taglish, one segment**: `Hi po, si <SUBSCRIBER NAME> po galing
-  PLDT Home / RED Fiber. May pending payment pa po sa line ninyo. Makakapag-settle na ba po?
-  Salamat po.` — 139 to 157 characters across all 40 rows, so every message stays inside a single
-  160-character segment. Nothing about the amount or the due date appears, because the sheet does not
+* **`REMNUM` accepts what the sheet actually contains** — `639346368975`, `0934…`, `934…`,
+  `+63 934 636 8975`, `0063…` and the `639244027011.0` a numeric cell can stringify to — and returns
+  the number in the form the owner asked for: **local, `0`-prefixed, no `63`** (`09346368975`, shown
+  as `0934 636 8975` by `remFmt`). It returns `''` when the value is an account number, a landline
+  or a status like `NOT WIRED YET`; a row with no number shows *no number*, not a dead button.
+* **The wording is the owner's, in Taglish** — including his 2026-11-06 corrections *"gawin na galing
+  PLDT Home 3MDA"* and *"lagyan din ng account number upang alam ano ang babayadan"*: `Hi po, si
+  ARNEL AMANTE VILLENA po galing PLDT Home 3MDA. May pending payment pa po sa account 408222877
+  ninyo. Makakapag-settle na ba po? Salamat po.` It is named `REMTXT` and takes the row, so the
+  subscriber name and `ACCOUNT PID` come from the same record the button belongs to (all 40 FOR
+  PAYMENT rows carry a 9-digit account, so no message ever reads `account -`). Length is **145–163
+  characters** across those 40 rows: 38 stay inside one 160-character segment and the two with the
+  longest names run into a second, which costs nothing on an unlimited load but is worth knowing
+  before it becomes a daily habit. No amount and no due date appears, because the sheet does not
   reliably carry either for a FOR PAYMENT row.
 * **A tap does not send, it hands over.** On a touch device (`pointer: coarse`) the button navigates
-  `sms:63…?body=…` and the phone's own Messages app opens with everything filled in; the human presses
-  Send, so the carrier sees a person messaging a person and the unlimited-text load is what pays.
-  On a laptop the same tap copies `639346368975 — <message>` to the clipboard (`execCommand` fallback
-  when the Clipboard API is blocked).
+  `sms:09346368975?body=…` and the phone's own Messages app opens with everything filled in; the
+  human presses Send, so the carrier sees a person messaging a person and the unlimited-text load is
+  what pays. On a laptop the same tap copies `0934 636 8975 — <message>` to the clipboard
+  (`execCommand` fallback when the Clipboard API is blocked). The Remind cell also prints the number
+  under the button, in the same `0934 636 8975` shape, so he can see which `CBR` he is about to text.
 * **`mm_rem` in localStorage** records every reminder (key, time, agent email, client, number, and
   whether the SMS app opened or the copy was blocked), the button becomes **Remind again** and the row
   shows *Reminded 11/06 09:41* — so nobody gets chased twice on the same phone. `logEv('CLIENT
