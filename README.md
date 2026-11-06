@@ -154,23 +154,30 @@ and that is the point.
   or a status like `NOT WIRED YET`; a row with no number shows *no number*, not a dead button.
 * **The wording is his, translated to English on request.** He dictated the Taglish (`Hi po, si
   (first name lang ilalagay) po galing PLDT Home 3MDA Cavite. May pending for payment pa po sa
-  approved account 0408222877 ninyo. Makakapag-settle na kaya tayo? Salamat po.`) and said
-  *"gawin itong english at correct grammar ito ang gamitin na mensahe"*, and then twice more with
-  *"paki correct ng grammar"*, so `REMTXT` renders:
-  `Good day. This is Arnel from PLDT Home 3MDA Cavite. Your approved account 0408222877 still has a
-  pending payment. Could you settle it now? Thank you.` Three things are load-bearing and came from
-  his own sentence, not from me: **Cavite** is now in the identity line, the account is called
-  **approved**, and only the **first name** is used — `remFirst` takes the first word of
-  `SUBSCRIBER NAME`, or the word after the comma when a cell is stored `SURNAME, FIRST`, and
-  Title-Cases it because the sheet is ALL CAPS. `po` is gone with the translation; if he wants it
-  back, that is a one-word edit. Length is **147–157 characters across all 40 FOR PAYMENT rows —
-  every one of them a single 160-character segment**, which it was not when the message carried the
-  full name. That matters, not just tidiness: the earlier draft *"Would you be able to settle it
-  now?"* pushed **28 of the 40** clients into a second segment, and *"a payment pending"* was the
-  inversion he was asking me to fix. The sheet stores the account without the leading zero and the
-  client reads it with one on the bill, so `remAcct` prefixes `0` **only when it is missing** (never
-  doubles; an empty cell still renders `-`). No amount and no due date appears, because the sheet
-  does not reliably carry either for a FOR PAYMENT row.
+  approved account 0408222877 ninyo. Makakapag-settle na kaya tayo? Salamat po.`), said
+  *"gawin itong english at correct grammar ito ang gamitin na mensahe"*, corrected it twice more with
+  *"paki correct ng grammar"*, and on the same day pasted **PLDT's own welcome SMS** as the style to
+  follow — *"ganito ang sample na message na ilagay, wag nalang lagyan ng amount pero indicate padin
+  na please pay the initial fee"*. So `REMTXT` renders:
+  `Good day. This is Arnel from PLDT Home 3MDA Cavite. Your approved account 0408222877 has an unpaid
+  initial fee. Please pay it through Maya or Bayad Center to secure your service. Thank you.`
+  Three things are load-bearing and came from his own sentence, not from me: **Cavite** is in the
+  identity line, the account is called **approved**, and only the **first name** is used — `remFirst`
+  takes the first word of `SUBSCRIBER NAME`, or the word after the comma when a cell is stored
+  `SURNAME, FIRST`, and Title-Cases it because the sheet is ALL CAPS. `po` is gone with the
+  translation; if he wants it back, that is a one-word edit.
+* **No amount, and no due date either — the second one is not a choice.** He removed the `Php 999.00`
+  himself. PLDT's sample also carries `on or before 10/27/2025`, but measured across the 40 FOR
+  PAYMENT rows there is **no due-date column to read**: `POSTED DATE` is empty on **40 of 40** and
+  the only filled date is `DATE`, the day of the sale, which would tell a client to pay by the wrong
+  day. So the sentence says *to secure your service* and stops there. If he ever adds a due-date
+  column, that is the place to put it back.
+* **This wording costs two segments, and that is the trade he accepted.** 187–197 characters across
+  all 40 rows, so every message is a concatenated pair on his unlimited load. The earlier one-segment
+  version (147–157) gave up the fee, the channels and the PLDT closing; measured before shipping, so
+  the number is not a guess. The sheet stores the account without the leading zero and the client
+  reads it with one on the bill, so `remAcct` prefixes `0` **only when it is missing** (never doubles;
+  an empty cell still renders `-`).
 * **A tap does not send, it hands over.** On a touch device (`pointer: coarse`) the button navigates
   `sms:09346368975?body=…` and the phone's own Messages app opens with everything filled in; the
   human presses Send, so the carrier sees a person messaging a person and the unlimited-text load is
