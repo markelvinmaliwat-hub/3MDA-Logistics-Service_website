@@ -1058,15 +1058,18 @@ function sendReport_(send, cfg, force) {
 }
 function runSfsNotices() { ensureReportTriggers_(); return sendReport_(true, SFS); }
 function runCvNotices() { ensureReportTriggers_(); return sendReport_(true, CV); }
-/* AFD, AFD12 and RTS deliberately do NOT self-heal and are not in ensureReportTriggers_: AFD is his
+/* AFD and AFD12 deliberately do NOT self-heal and are not in ensureReportTriggers_: AFD is his
    newest rule and he installed its 10AM + 11AM pair by hand on 2026-11-05, so if those two
-   triggers are ever deleted only installAfdTrigger() puts them back, AFD12 stays off the schedule
-   until he runs installAfd12Trigger(), and RTS stays off it until he runs installRtsTrigger().
-   The daily SFS and CV runs are never disturbed by either. These are the scheduled handlers, so
-   these are the ones that obey SEND_FROM and wait for 10:30. */
+   triggers are ever deleted only installAfdTrigger() puts them back, and AFD12 stays off the
+   schedule until he runs installAfd12Trigger(). The daily SFS and CV runs are never disturbed by
+   either. These are the scheduled handlers, so these are the ones that obey SEND_FROM and wait
+   for 10:30.
+   RTS is the odd one: it re-arms ITSELF (see armRtsTrigger_) because a one-shot trigger is gone
+   once it fires, so the run has to schedule tomorrow before anything else can fail. That is why
+   armRtsTrigger_ runs first - not after the mail. */
 function runAfdNotices() { return sendReport_(true, AFD); }
 function runAfd12Notices() { return sendReport_(true, AFD12); }
-function runRtsNotices() { return sendReport_(true, RTS); }
+function runRtsNotices() { armRtsTrigger_(); return sendReport_(true, RTS); }
 /* Dropdown-runnable: sends today's report once, right now, honouring that report's DRY_RUN.
    These ignore SEND_FROM - if he presses it, he means it, early or not. The scheduled handlers
    runAfdNotices / runAfd12Notices are the ones that wait for 10:30. */
@@ -1193,21 +1196,15 @@ function reportStatus_(cfg, handler) {
   };
 }
 /* One day trigger per hour in cfg.SEND_HOURS, and never a duplicate: every trigger already
-   pointing at this handler is deleted first, so running this twice is safe. */
+   pointing at this handler is deleted first, so running this twice is safe. This is the plain
+   hour trigger - ClockTriggerBuilder has no atMinute(), and asking for one is what once broke
+   the RTS install. RTS is armed differently, by armRtsTrigger_, because its owner wants 9:00. */
 function installReportTrigger_(cfg, handler) {
   ScriptApp.getProjectTriggers().filter(t => t.getHandlerFunction() === handler).forEach(t => ScriptApp.deleteTrigger(t));
-  cfg.SEND_HOURS.forEach(h => {
-    const day = ScriptApp.newTrigger(handler).timeBased().everyDays(1).atHour(h);
-    /* Apps Script never fires on the exact minute - it fires somewhere in that hour, and Google
-       adds a few minutes of slack on top. Naming the minute still moves the run as close to the
-       top of the hour as this platform allows, which is the honest version of "9:00 sharp". */
-    if (typeof cfg.SEND_MINUTE === 'number') day.atMinute(cfg.SEND_MINUTE).create();
-    else day.create();
-  });
+  cfg.SEND_HOURS.forEach(h => ScriptApp.newTrigger(handler).timeBased().everyDays(1).atHour(h).create());
   const st = reportStatus_(cfg, handler);
   Logger.log(cfg.NAME + ' trigger: ' + (st.installed ? 'installed' : 'NOT installed') +
-    ' | runs in the ' + hoursText_(cfg) + ' hour' + (typeof cfg.SEND_MINUTE === 'number' ? ' at minute ' + cfg.SEND_MINUTE : '') +
-    ' (' + st.tz + ')' +
+    ' | runs in the ' + hoursText_(cfg) + ' hour (' + st.tz + ')' +
     (cfg.SEND_FROM ? ', mails at or after ' + cfg.SEND_FROM + ' - an earlier run waits and sends nothing' : '') +
     ' | rule: ' + st.rule +
     ' | file: ' + st.file + ' | tabs: ' + st.tabs +
@@ -1220,7 +1217,46 @@ function installSfsTrigger() { return installReportTrigger_(SFS, 'runSfsNotices'
 function installCvTrigger() { return installReportTrigger_(CV, 'runCvNotices'); }
 function installAfdTrigger() { return installReportTrigger_(AFD, 'runAfdNotices'); }
 function installAfd12Trigger() { return installReportTrigger_(AFD12, 'runAfd12Notices'); }
-function installRtsTrigger() { return installReportTrigger_(RTS, 'runRtsNotices'); }
+/* The owner asked for RTS at "9:00 AM exact". A daily trigger can name an HOUR but never a
+   minute - ClockTriggerBuilder has no atMinute() - so the only way to land on the minute is the
+   one-shot .at(date), re-armed by each run. That is what this does: one pending RTS trigger,
+   always pointing at the next 9:00 in the sheet timezone. The trade-off is honest and it is the
+   reason armRtsTrigger_ is called first inside runRtsNotices: if the mail itself throws, the
+   next day is already on the clock. If Apps Script ever refuses to create the trigger, the log
+   says so and one press of installRtsTrigger() puts it back. */
+function nextRtsRun_() {
+  const tz = RTS.TIMEZONE || NOTICE.TIMEZONE;
+  const hh = RTS.SEND_HOURS[0];
+  const mm = typeof RTS.SEND_MINUTE === 'number' ? RTS.SEND_MINUTE : 0;
+  /* The wall-clock parts come from the sheet timezone, never from the machine running the
+     script, so a Manila 9:00 is a Manila 9:00 whatever the project timezone is set to. */
+  const build = day => { const a = String(day).split('-').map(Number); return new Date(a[0], a[1] - 1, a[2], hh, mm, 0); };
+  const today = build(Utilities.formatDate(new Date(), tz, 'yyyy-MM-dd'));
+  return today.getTime() > Date.now() ? today
+    : build(Utilities.formatDate(new Date(Date.now() + 86400000), tz, 'yyyy-MM-dd'));
+}
+function armRtsTrigger_() {
+  ScriptApp.getProjectTriggers().filter(t => t.getHandlerFunction() === 'runRtsNotices').forEach(t => ScriptApp.deleteTrigger(t));
+  const at = nextRtsRun_();
+  try { ScriptApp.newTrigger('runRtsNotices').timeBased().at(at).create(); }
+  catch (e) {
+    Logger.log('RTS could NOT be armed (' + e + ') - the report has no schedule until installRtsTrigger() is pressed again');
+    return null;
+  }
+  return at;
+}
+function installRtsTrigger() {
+  const at = armRtsTrigger_();
+  const st = reportStatus_(RTS, 'runRtsNotices');
+  Logger.log('RTS trigger: ' + (at ? 'armed for ' + Utilities.formatDate(at, st.tz, 'yyyy-MM-dd HH:mm:ss') + ' ' + st.tz
+    : 'NOT armed - the next press of installRtsTrigger() is the only fix') +
+    ' | one-shot, re-armed by every run (a daily trigger can name an hour but not a minute)' +
+    ' | rule: ' + st.rule + ' | file: ' + st.file + ' | tabs: ' + st.tabs +
+    ' | ' + (st.dryRun ? 'DRY_RUN is ON, copies go to ' + NOTICE.ADMIN_EMAILS.join(',') + ' only'
+      : 'LIVE, goes to ' + st.to.join(',') + (st.cc.length ? ' | cc ' + st.cc.join(',') : ' | no cc')) +
+    ' | ' + st.dedupe);
+  return st;
+}
 /* Self-repairing schedule. The owner should not have to press Run for the plan to exist:
    every scheduled run (the agent notices and both reports) checks its own report triggers
    first and rebuilds only the ones whose count does not match cfg.SEND_HOURS. Apps Script

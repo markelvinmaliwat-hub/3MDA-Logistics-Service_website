@@ -358,8 +358,8 @@ mail on the same engine: four conditions instead of one, and it sends **at or af
   each deletes every trigger of its own handler before creating its pair, so a short or duplicated
   pair is fixed by re-running it, never by hand. On 2026-11-05 the owner's Triggers page went from
   **SFS 1 + CV 3** to exactly **2 + 2 + 2 + 2 + 1 agent notice = 9**; `installRtsTrigger()` adds one
-  11AM trigger on top of those, for **10** — since 2026-11-06 that tenth trigger fires in the 9AM
-  hour instead, and re-running `installRtsTrigger()` is what moves an existing one. All five reports — SFS, CV, AFD, AFD12 and RTS — are now
+  one-shot trigger on top of those, for **10** — since 2026-11-06 it is armed for 9:00 sharp and each
+  run re-arms the next day. All five reports — SFS, CV, AFD, AFD12 and RTS — are now
   past the `DRY_RUN` gate, so a paste is the only thing standing between a rule change and its
   recipients receiving it.
 * **AFD is live and on its own schedule.** The path the owner took on 2026-11-05: `afdProbe()` to
@@ -407,10 +407,14 @@ mail on the same engine: four conditions instead of one, and it sends **at or af
   had already gone out looked to him like a run that never happened), the two taggings are
   **alternatives** (`RTS.ANY = true`, so `statusHit_` uses `some`, not `every` — a row carrying only
   one of the two wordings still belongs), and it runs in **one** hour instead of a pair. That hour
-  was 11 AM, and on 2026-11-06 he moved it: `SEND_HOURS: [9]` with `SEND_MINUTE: 0`, the first config
-  to name a minute — `installReportTrigger_` chains `.atMinute()` only when `SEND_MINUTE` is a
-  number, so SFS, CV, AFD and AFD12 keep plain hour triggers. Apps Script still gives no exact
-  minute; `atHour(9).atMinute(0)` lands near the top of the hour with a few minutes of slack. What is
+  was 11 AM, and on 2026-11-06 he moved it and asked for it **exact**: `SEND_HOURS: [9]`,
+  `SEND_MINUTE: 0`. A daily trigger cannot honour that — `ClockTriggerBuilder` has **no
+  `atMinute()`**, and calling it threw `TypeError: day.atMinute is not a function` *after* the old
+  trigger had already been deleted, which left RTS with no schedule at all. The only way to land on
+  a minute is the one-shot `.at(date)`, so `armRtsTrigger_()` keeps exactly one pending
+  `runRtsNotices` trigger pointed at the next 9:00 in the sheet timezone, and `runRtsNotices()`
+  re-arms **before** it sends — a failed mail must not cost tomorrow. `installRtsTrigger()` logs the
+  exact armed datetime. SFS, CV, AFD and AFD12 still use plain `everyDays(1).atHour(h)`. What is
   shared: the file, the tabs, the black-bordered table, the per-day `RTS_SENT_yyyyMMdd` SR list,
   the `[TEST]` copy path. The **words and columns are his own** (2026-11-05): he pasted the
   greeting (*"Hi @bernardsalioa@gmail.com for checking ng ating mga open RTS kung ito ba ay cancelled
