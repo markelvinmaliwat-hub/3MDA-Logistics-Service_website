@@ -465,7 +465,7 @@ const REMARK = {
   LOGO_ABOVE: true,
   FOOTER: '',
   COLS: ['SUBSCRIBER NAME', 'ACCOUNT', 'AGENT', 'ACTION', 'DATE OF PAYMENT', 'REMARKS', 'RECORDED BY', 'RECORDED AT'],
-  DRY_RUN: true,                   // owner has not said go yet - every copy is a [TEST] to ADMIN_EMAILS
+  DRY_RUN: false,                  // LIVE since 2026-11-06 - the owner asked "ano na ang dapat ko gawin upang maging live na ito"
   GAP_MIN: 15,                     // one alert per sale per 15 minutes, however many times the row is saved
   MAX_PER_DAY: 40,                 // the consumer send quota is shared with the 8AM notices and the reports
   TIMEZONE: '',

@@ -83,8 +83,10 @@ agents**: To `ilanoandong@gmail.com`, CC `juliean.rjab@gmail.com` + `markelvinma
 
 It is not a report and it has **no trigger and no schedule**. `logWrite_` calls `remarkAlert_`
 right after it appends a row to `Payment_Updates`, so the mail is a side effect of the save the
-dashboard already makes. `REMARK.DRY_RUN` is **`true` as shipped**: every copy is a `[TEST]` to
-`NOTICE.ADMIN_EMAILS` until he reads one and says go.
+dashboard already makes. **`REMARK.DRY_RUN` is `false` since 2026-11-06** — he asked *"ano na ang
+dapat ko gawin upang maging live na ito"*, which is the go. Until that flip every copy was a
+`[TEST]` to `NOTICE.ADMIN_EMAILS`; run `clearRemarkAlerts()` once so the signatures built while
+testing cannot swallow the first live alert.
 
 * **A save with no remark mails nobody.** Choosing an action alone is not news.
 * **The same sale does not mail twice.** The modal saves automatically, so one person picking an
