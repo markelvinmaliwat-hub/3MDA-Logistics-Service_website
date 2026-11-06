@@ -160,7 +160,10 @@ and that is the point.
   follow — *"ganito ang sample na message na ilagay, wag nalang lagyan ng amount pero indicate padin
   na please pay the initial fee"*. So `REMTXT` renders:
   `Hi Arnel, this is Kenneth from PLDT Home 3MDA Cavite. Your approved account 0408222877 has an
-  unpaid initial fee. Please pay it through Maya or Bayad Center to secure your service. Thank you.`
+  unpaid initial fee. Please pay it to secure your service. Thank you.`
+  The payment channels were in that sentence until 2026-11-06, when he cut them with
+  *"through Maya or Bayad Center to remove this to the message"* — so the text no longer tells the
+  client *where* to pay, only that the fee secures the service.
   Three things are load-bearing and came from his own sentence, not from me: **Cavite** is in the
   identity line, the account is called **approved**, and only the **first name** is used — `remFirst`
   takes the first word of `SUBSCRIBER NAME`, or everything after the comma when a cell is stored
@@ -182,11 +185,12 @@ and that is the point.
   the only filled date is `DATE`, the day of the sale, which would tell a client to pay by the wrong
   day. So the sentence says *to secure your service* and stops there. If he ever adds a due-date
   column, that is the place to put it back.
-* **This wording costs two segments, and that is the trade he accepted.** 187–201 characters across
-  all 40 rows (**40 of 40** in a concatenated pair; signed in as one agent the spread is 189–199, so
-  the sender's name moves the length but never the segment count) on his unlimited load. The earlier
-  one-segment version (147–157) gave up the fee, the channels and the PLDT closing; measured before
-  shipping, so the number is not a guess. The sheet stores the account without the leading zero and
+* **Segment cost, re-measured after every wording change.** Dropping the channels took the message
+  from 187–201 characters to **158–172**, which is **7 of 40 rows back inside a single segment and
+  33 still concatenated** — the sender's and the client's names decide which side of 160 a row lands
+  on. Measured as the signed-in agent instead of the row's agent, the spread is 160–170 (1 of 40 in
+  one segment). All of it is free on an unlimited-text load; the number is here so nobody has to
+  wonder whether the wording silently grew. The sheet stores the account without the leading zero and
   the client reads it with one on the bill, so `remAcct` prefixes `0` **only when it is missing**
   (never doubles; an empty cell still renders `-`).
 * **A tap does not send, it hands over.** On a touch device (`pointer: coarse`) the button navigates

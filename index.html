@@ -238,7 +238,7 @@ const solicited=(r,REC)=>{if(REC[PK(r)])return true;const t=String(r['PAYMENT RE
 const remFirst=v=>{const s=String(v==null?'':v).trim().replace(/\s+/g,' ');if(!s)return '';const f=(s.includes(',')?s.split(',').pop().trim():s.split(' ')[0]);return f.split(' ').map(w=>w?w.charAt(0).toUpperCase()+w.slice(1).toLowerCase():w).filter(Boolean).join(' ')};
 const remAcct=v=>{const a=String(v==null?'':v).trim();return a?(/^0/.test(a)?a:'0'+a):'-'};
 const REMTXT=r=>{const c=remFirst(dv(r,'SUBSCRIBER NAME')),a=remFirst((ME&&ME.name)||'')||remFirst(dv(r,'AGENT NAME'));
- return `${c?`Hi ${c},`:'Good day,'} this is ${a||'your agent'} from PLDT Home 3MDA Cavite. Your approved account ${remAcct(dv(r,'ACCOUNT PID'))} has an unpaid initial fee. Please pay it through Maya or Bayad Center to secure your service. Thank you.`};
+ return `${c?`Hi ${c},`:'Good day,'} this is ${a||'your agent'} from PLDT Home 3MDA Cavite. Your approved account ${remAcct(dv(r,'ACCOUNT PID'))} has an unpaid initial fee. Please pay it to secure your service. Thank you.`};
 const remLoc=v=>{let d=String(v).trim().replace(/\.0+$/,'').replace(/\D/g,'');if(/^00/.test(d))d=d.slice(2);if(/^63/.test(d))d='0'+d.slice(2);else if(/^9/.test(d))d='0'+d;return /^09\d{9}$/.test(d)?d:''};
 const REMNUM=r=>[dv(r,'CBR 1'),dv(r,'CBR 2')].map(remLoc).find(Boolean)||'';
 const remFmt=n=>/^09\d{9}$/.test(n)?n.slice(0,4)+' '+n.slice(4,7)+' '+n.slice(7):n;
