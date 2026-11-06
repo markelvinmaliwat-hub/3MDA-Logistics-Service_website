@@ -199,6 +199,13 @@ and that is the point.
   what pays. On a laptop the same tap copies `0934 636 8975 — <message>` to the clipboard
   (`execCommand` fallback when the Clipboard API is blocked). The Remind cell also prints the number
   under the button, in the same `0934 636 8975` shape, so he can see which `CBR` he is about to text.
+* **Every tap answers on screen.** A laptop tap used to only write to the clipboard, and the owner read
+  that as a broken button (*"walange nanbgyare pagka pindot ko ng remind"*, 2026-11-06) — the only sign
+  had been a small grey *Reminded 11/06 15:39* under the button. So the handler now also raises a card
+  at the bottom of the screen (`toast` + `remCard`) saying which path it took, the number, the exact
+  text, its character count and segment count, with **Kopyahin ulit** and **Isara**. On a phone the card
+  appears alongside the SMS app, which means a `sms:` scheme the browser refused to open is no longer
+  silent either — the text is visible and copyable. `closeM()` hides the card.
 * **`mm_rem` in localStorage** records every reminder (key, time, agent email, client, number, and
   whether the SMS app opened or the copy was blocked), the button becomes **Remind again** and the row
   shows *Reminded 11/06 09:41* — so nobody gets chased twice on the same phone. `logEv('CLIENT
