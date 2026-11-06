@@ -103,6 +103,10 @@ testing cannot swallow the first live alert.
   next save on that sale tries again.
 * **No logo.** `reportLogo_` costs a `UrlFetchApp` call, and this runs inside the request the
   agent is waiting on.
+* **`remarkDate_` prints the payment day as `11/8/2026`.** The modal hands over an
+  `<input type="date">` value, so a fresh save says `2026-11-08` while the same day read back
+  from the tab is a Date that `cell_` says `2026-11-08 00:00:00` — the owner saw both in one day
+  (the live mail and his `remarkPreview`). Both become `m/d/yyyy`, the reports' format.
 * Dropdown entries: `remarkProbe()` (read-only census of `Payment_Updates` — how many rows carry
   remarks, how many a fresh save would alert on, and each reason for staying quiet),
   `remarkPreview()` (logs the exact body, sends nothing, writes nothing), `remarkTestReport()`

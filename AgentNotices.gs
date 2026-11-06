@@ -1695,10 +1695,22 @@ function remarkReason_(row, recent) {
   if (left <= 5) return { mail: false, why: 'the Gmail send quota is down to ' + left + ' - the 8AM notices and the PLDT reports come first' };
   return { mail: true, key: key, sig: sig, used: used };
 }
+/* The modal sends 'YYYY-MM-DD' and Sheets quietly turns that into a Date on the way in, so the
+   same payment day reaches this mail two different ways: a fresh save hands us the text, a row
+   read back from the tab hands us a Date that cell_ prints with ' 00:00:00' glued on. Both are
+   printed here as m/d/yyyy, the format the PLDT reports use, and nothing else about the row
+   changes - logRead_ still gives the dashboard the value it expects. */
+const remarkDate_ = v => {
+  const s = v instanceof Date
+    ? Utilities.formatDate(v, REMARK.TIMEZONE || NOTICE.TIMEZONE, 'yyyy-MM-dd')
+    : String(v == null ? '' : v).slice(0, 10);
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(s);
+  return m ? m[2].replace(/^0/, '') + '/' + m[3].replace(/^0/, '') + '/' + m[1] : s;
+};
 function remarkItem_(row) {
   return {
     sub: String(row.name || ''), account: String(row.account || ''), agent: String(row.agent || ''),
-    action: String(row.label || row.action || ''), paydate: String(row.date || ''),
+    action: String(row.label || row.action || ''), paydate: remarkDate_(row.date),
     remarks: String(row.remarks || ''), savedAt: String(row.at || ''),
     byName: [String(row.byName || ''), row.by ? '(' + row.by + ')' : '', row.code ? '(' + row.code + ')' : '']
       .filter(Boolean).join(' ')
