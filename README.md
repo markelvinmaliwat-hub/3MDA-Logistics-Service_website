@@ -152,18 +152,22 @@ and that is the point.
   the number in the form the owner asked for: **local, `0`-prefixed, no `63`** (`09346368975`, shown
   as `0934 636 8975` by `remFmt`). It returns `''` when the value is an account number, a landline
   or a status like `NOT WIRED YET`; a row with no number shows *no number*, not a dead button.
-* **The wording is the owner's, in Taglish** — including his 2026-11-06 corrections *"gawin na galing
-  PLDT Home 3MDA"*, *"lagyan din ng account number upang alam ano ang babayadan"* and *"lagyan ng 0
-  sa umpisa ang account number"*: `Hi po, si ARNEL AMANTE VILLENA po galing PLDT Home 3MDA. May
-  pending payment pa po sa account 0408222877 ninyo. Makakapag-settle na ba po? Salamat po.` The
-  sheet stores the account **without** the leading zero, so `remAcct` adds it and never doubles one
-  (`0408222877` stays as-is, an empty cell still renders `-`, never `0`). Named `REMTXT`, it takes
-  the row, so the subscriber name and `ACCOUNT PID` come from the same record the button belongs to
-  (all 40 FOR PAYMENT rows carry a 9-digit account). Length is **146–164 characters** across those
-  40 rows: 38 stay inside one 160-character segment and the two with the longest names run into a
-  second, which costs nothing on an unlimited load but is worth knowing before it becomes a daily
-  habit. No amount and no due date appears, because the sheet does not reliably carry either for a
-  FOR PAYMENT row.
+* **The wording is his, translated to English on request.** He dictated the Taglish (`Hi po, si
+  (first name lang ilalagay) po galing PLDT Home 3MDA Cavite. May pending for payment pa po sa
+  approved account 0408222877 ninyo. Makakapag-settle na kaya tayo? Salamat po.`) and said
+  *"gawin itong english at correct grammar ito ang gamitin na mensahe"*, so `REMTXT` renders:
+  `Good day. This is Arnel from PLDT Home 3MDA Cavite. Your approved account 0408222877 still has a
+  payment pending. May we settle this now? Thank you.` Three things are load-bearing and came from
+  his own sentence, not from me: **Cavite** is now in the identity line, the account is called
+  **approved**, and only the **first name** is used — `remFirst` takes the first word of
+  `SUBSCRIBER NAME`, or the word after the comma when a cell is stored `SURNAME, FIRST`, and
+  Title-Cases it because the sheet is ALL CAPS. `po` is gone with the translation; if he wants it
+  back, that is a one-word edit. Length is now **146–156 characters across all 40 FOR PAYMENT rows —
+  every one of them a single 160-character segment**, which it was not when the message carried the
+  full name. The sheet stores the account without the leading zero and the client reads it with one
+  on the bill, so `remAcct` prefixes `0` **only when it is missing** (never doubles; an empty cell
+  still renders `-`). No amount and no due date appears, because the sheet does not reliably carry
+  either for a FOR PAYMENT row.
 * **A tap does not send, it hands over.** On a touch device (`pointer: coarse`) the button navigates
   `sms:09346368975?body=…` and the phone's own Messages app opens with everything filled in; the
   human presses Send, so the carrier sees a person messaging a person and the unlimited-text load is
