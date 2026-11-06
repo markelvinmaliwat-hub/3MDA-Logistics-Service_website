@@ -115,6 +115,42 @@ testing cannot swallow the first live alert.
   `REMARK_ALERT_*` keys — run it once after flipping `DRY_RUN` to `false`, because the state
   built while testing would otherwise swallow the first live alert).
 
+## Client reminder — one tap, sent from the phone holding it
+
+Requested 2026-11-06 after the four queues went live: the *customers* owed a nudge, not only the
+staff. He asked first about texting agents, then about texting the clients directly, then set the
+filter that decided everything: *"para walang cost"*. Apps Script cannot send SMS — there is no SMS
+API in it — and mass-mailing clients from his own Gmail would spend the ~100/day consumer quota that
+the 8AM notices, five PLDT reports and the remark alert already share. So nothing is automated here,
+and that is the point.
+
+* **The client's number is `CBR 1`** (with `CBR 2` as the spare), confirmed by the owner on
+  2026-11-06: *"oo, i-CBR 1 ang client number"*. Measured on the synced snapshot: **40 FOR PAYMENT
+  rows, all 40 carrying a usable `CBR 1`, 39 distinct numbers, 0 in the RED tab**. `CONTACT NUMBER`
+  is a header the SFS report still expects but the sales file does not have.
+* **`REMNUM` accepts what the sheet actually contains** — `639346368975`, `0924…`, `924…`,
+  `+63 924 402 7011`, and the `639244027011.0` a numeric cell can stringify to — and returns a
+  `63`-prefixed digit string, or `''` when the value is an account number, a landline or a status
+  like `NOT WIRED YET`. A row with no number shows *no number*, not a dead button.
+* **The wording is the owner's, in Taglish, one segment**: `Hi po, si <SUBSCRIBER NAME> po galing
+  PLDT Home / RED Fiber. May pending payment pa po sa line ninyo. Makakapag-settle na ba po?
+  Salamat po.` — 139 to 157 characters across all 40 rows, so every message stays inside a single
+  160-character segment. Nothing about the amount or the due date appears, because the sheet does not
+  reliably carry either for a FOR PAYMENT row.
+* **A tap does not send, it hands over.** On a touch device (`pointer: coarse`) the button navigates
+  `sms:63…?body=…` and the phone's own Messages app opens with everything filled in; the human presses
+  Send, so the carrier sees a person messaging a person and the unlimited-text load is what pays.
+  On a laptop the same tap copies `639346368975 — <message>` to the clipboard (`execCommand` fallback
+  when the Clipboard API is blocked).
+* **`mm_rem` in localStorage** records every reminder (key, time, agent email, client, number, and
+  whether the SMS app opened or the copy was blocked), the button becomes **Remind again** and the row
+  shows *Reminded 11/06 09:41* — so nobody gets chased twice on the same phone. `logEv('CLIENT
+  REMINDER', …)` puts the same fact in the shared activity log whenever the dashboard is open as a
+  signed-in agent.
+* **Deliberately absent:** no queue, no Android bridge app, no trigger, no `MailApp`, no sender ID
+  registration. Those are the options that would make it automated, and each one either costs money,
+  risks his number, or needs a phone parked on a shelf.
+
 ## Endorsement reports to PLDT — SFS VALIDATION, CREDIT VALIDATION and AFD RESCHEDULE
 
 Two reports leave this script on their own schedule, and everything about each one — wording,
