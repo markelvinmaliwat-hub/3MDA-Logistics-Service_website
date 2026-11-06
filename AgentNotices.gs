@@ -442,9 +442,16 @@ const REMARK = {
   NAME: 'REMARK',
   TO: ['ilanoandong@gmail.com'],
   CC: ['juliean.rjab@gmail.com', 'markelvinmaliwat@gmail.com'],
-  GREET: 'Good day,',
-  INTRO: 'A remark was recorded on the dashboard for the sale below. Kindly take note of it and ' +
-    'coordinate with the agent concerned.',
+  /* His own words, typed on 2026-11-06: "sa greetings ang ilagay Good Day Ian Ilano, Merong bagong
+     remarks na inaupdate ang agent galing sa dashboard patungkol sa kanyang FOR PAYMENT na client
+     maari mo na itong magamit at ilagay sa iyong database upang magkaroon ka ng record at mapag
+     desisionan kung ito ay kailangan na bang ma kansela upang makapag bawas ng FOR PAYMENT record.
+     gawin ito in english for formality". The Tagalog line below is what this must keep saying. */
+  GREET: 'Good Day Ian Ilano,',
+  INTRO: 'A new remark has been updated by the agent on the dashboard regarding his FOR PAYMENT ' +
+    'client. You may make use of it and record it in your database so that you have a record on ' +
+    'hand and may determine whether the application now requires cancellation, and can be removed ' +
+    'from the FOR PAYMENT list.',
   CLOSE: 'Should you have any concerns, please reply to this email so that we may follow up with ' +
     'the agent accordingly.',
   THANKS: 'Thank you !',
