@@ -970,109 +970,86 @@ setInterval(fetchLiveData, 90000);
 #t3{pointer-events:auto!important;cursor:pointer!important}
 html.vm .hp{left:8px;right:8px;transform:none;justify-content:center}
 html.vm .hp button{padding:8px 10px;font-size:11.5px;letter-spacing:0}
-#llp .llrow{display:grid;grid-template-columns:minmax(0,1.5fr) minmax(0,1fr) minmax(0,1fr) auto;gap:8px;align-items:end}
-#llp .llrow label{margin:0 0 2px}
-#llp .llrow input{margin:0}
-#llp .llgo .go{min-width:180px}
-#llp .llmsg{min-height:18px;font-size:13px;margin:8px 0;line-height:1.4}
-#llp .llmsg.ok{color:#0a7d3c}
+#llp .llf{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:10px;margin-top:8px}
+#llp .llf label{display:block;margin:0 0 2px}
+#llp .llf input{margin:0;width:100%}
+#llp .llsug{margin-top:8px;border:1px solid var(--line);border-radius:10px;max-height:32vh;overflow:auto}
+#llp .llsug:empty{display:none}
+#llp .llrow{display:block;width:100%;text-align:left;background:none;border:0;border-bottom:1px solid var(--line);padding:9px 10px;cursor:pointer;font:inherit;color:var(--ink)}
+#llp .llrow:last-child{border-bottom:0}
+#llp .llrow:hover,#llp .llrow.on{background:#eef4ff}
+#llp .llrow b{font-weight:700}
+#llp .llrow i{font-style:normal;color:var(--mut);font-size:12px;margin-left:6px}
+#llp .llrow u{text-decoration:none;font-size:11px;font-weight:700;color:#0a7d3c;margin-left:6px}
+#llp .llrow u.full{color:#e11d2e}
+#llp .llnone{padding:10px;color:var(--mut);font-size:13px}
+#llp .llmsg{min-height:18px;font-size:13px;margin:8px 0;color:var(--mut)}
 #llp .llmsg.bad{color:#e11d2e}
-#llp .llbar{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin:10px 0 4px}
-#llp .llbar input{flex:1;min-width:180px;width:auto;margin:0}
-#llp .llbar b{font-size:13px;color:var(--mut)}
-#llp .llwrap{overflow:auto;border:1px solid var(--line);border-radius:10px}
-#llp table{min-width:560px}
-#llp td.c{font-weight:700;white-space:normal}
-#llp td.n{font-variant-numeric:tabular-nums}
-#llp .llunk{color:#b7791f;font-weight:400;font-size:11px}
-#llp .llnone{color:var(--mut);font-size:13px;padding:14px}
-#llp .lledit,#llp .lldel{background:none;border:0;font-weight:700;cursor:pointer;padding:6px 8px;font-size:12px}
-#llp .lledit{color:#0b57d0}
-#llp .lledit[on]{text-decoration:underline}
-#llp .lldel{color:var(--red)}
-@media(max-width:760px){#llp .llrow{grid-template-columns:1fr 1fr}#llp .llrow .llgo{grid-column:1/-1}#llp .llgo .go{width:100%}}
-html.vm #llp .llrow input,html.vm #llp #llsave{min-height:44px;font-size:16px}
-html.vm #llp #llq{min-height:44px;font-size:16px}
-html.vm #llp .lledit,html.vm #llp .lldel{padding:11px 12px;font-size:13px}
-html.vm #llp table{min-width:480px}
-html.vm #llp td,html.vm #llp th{padding:7px 8px;font-size:12px}
+#llp .llhead{margin:14px 0 4px;font-size:15px;font-weight:700}
+#llp .llhead span{color:var(--mut);font-weight:400;font-size:13px}
+@media(max-width:760px){#llp .llf{grid-template-columns:1fr}#llp .llf input{min-height:44px;font-size:16px}#llp .llrow{min-height:44px}}
 </style>
 <script id="longlat-js">
-/* ============ LONG/LAT - CAFAC: manu-manong listahan ng node coordinates (browser storage lang, walang API) ============ */
+/* ============ LONG/LAT - CAFAC: subscriber name + type-ahead CAFAC lookup, details mula sa facility blob ============ */
 window.LL=(()=>{
- const KEY='mm_ll';
- let edit='',confirm='',q='',NAPs=null;
- const all=()=>{try{const a=JSON.parse(localStorage.getItem(KEY)||'[]');return Array.isArray(a)?a:[]}catch(e){return[]}};
- const write=a=>{try{localStorage.setItem(KEY,JSON.stringify(a));return''}catch(e){return'Puno na ang browser storage — tanggalin muna ang isa.'}};
- const known=c=>{if(!NAPs){NAPs=new Set();try{(typeof FR==='undefined'?[]:FR).forEach(r=>(r.n||[]).forEach(x=>NAPs.add(String(x[0]))))}catch(e){}}return NAPs.has(c)};
- const fmt=n=>{const v=Number(n);return Number.isFinite(v)?v.toFixed(6):String(n==null?'':n)};
- const when=t=>{try{return new Date(t).toLocaleString()}catch(e){return''}};
- const msg=(t,cls)=>{const m=$('llmsg');if(m){m.textContent=t;m.className='llmsg '+(cls||'')}};
- const clearForm=()=>{edit='';$('llc').value='';$('llo').value='';$('lla').value='';const b=$('llcancel');if(b)b.hidden=true};
- const list=()=>{const low=q.trim().toLowerCase(),a=all();
-  return (low?a.filter(r=>String(r.code).toLowerCase().includes(low)):a).sort((x,y)=>String(x.code).localeCompare(String(y.code)))};
- const render=()=>{if(!$('llp'))init();const tb=$('llbody');if(!tb)return;
-  const rows=list();
-  tb.innerHTML=rows.length?rows.map(r=>'<tr><td class="c">'+esc(r.code)+(known(r.code)?'':' <span class="llunk">walang sa facility data</span>')+
-   '</td><td class="n">'+esc(fmt(r.long))+'</td><td class="n">'+esc(fmt(r.lat))+'</td><td class="n">'+esc(when(r.at))+
-   '</td><td><button class="lledit" data-a="e" data-c="'+esc(r.code)+'"'+(edit===r.code?' on':'')+'>Edit</button>'+
-   '<button class="lldel" data-a="d" data-c="'+esc(r.code)+'">'+(confirm===r.code?'Siguraduhin?':'Tanggalin')+'</button></td></tr>').join(''):
-   '<tr><td colspan="5" class="llnone">'+(q?'Walang CAFAC sa listang tumutugma sa "'+q+'".':'Walang entry pa. Punan ang CAFAC, LONG at LAT sa itaas, tapos pindot Ilagay sa listahan.')+'</td></tr>';
-  const n=$('lln');if(n)n.textContent=rows.length+(q?' match':' entry')};
- const save=()=>{
-  const code=String($('llc').value||'').trim().toUpperCase().replace(/\s+/g,'');
-  const lo=String($('llo').value||'').trim(),la=String($('lla').value||'').trim();
-  if(!code){msg('Kailangan muna ng CAFAC — halimbawa ALFLP213NP2.','bad');$('llc').focus();return}
-  if(!/^[A-Z][A-Z0-9\/-]{2,}$/.test(code)){msg('Ang CAFAC ay nagsisimula sa letra at letra/numero lang — hindi valid ang "'+code+'".','bad');$('llc').focus();return}
-  const vlo=Number(lo),vla=Number(la);
-  if(!lo||!la||!Number.isFinite(vlo)||!Number.isFinite(vla)){msg('Kulang o hindi numero ang LONG/LAT. Decimal lang: LONG 120.876541, LAT 14.123456.','bad');return}
-  if(Math.abs(vlo)>180||Math.abs(vla)>90){msg('Hindi valid ang sukat: LONG -180 hanggang 180, LAT -90 hanggang 90. Sa Cavite/PH ang LONG ay ~120 at LAT ~14 — baka napalit ang dalawa.','bad');return}
-  const a=all(),i=a.findIndex(r=>r.code===code),rec={code:code,long:vlo,lat:vla,at:new Date().toISOString()};
-  if(i>=0)a[i]=rec;else a.push(rec);
-  const err=write(a);if(err){msg(err,'bad');return}
-  logEv('LONGLAT '+(i>=0?'UPDATE':'SAVE'),'LONG/LAT - CAFAC',code);
-  const wasEdit=edit===code;
-  render();clearForm();
-  msg((i>=0?'Na-update: ':'Naka-save: ')+code+' → '+fmt(vlo)+', '+fmt(vla)+
-   (known(code)?' · ✓ nasa facility data ang node.':' · ⚠ Hindi ko natagpuang '+code+' sa facility data — naka-save pa rin, check mo ang spelling.'),'ok')};
- const del=c=>{const a=all(),i=a.findIndex(r=>r.code===c);
-  if(i<0){confirm='';render();msg('Wala na sa listahan ang '+c+'.','bad');return}
-  a.splice(i,1);const err=write(a);if(err){msg(err,'bad');return}
-  logEv('LONGLAT DELETE','LONG/LAT - CAFAC',c);
-  if(edit===c)clearForm();
-  confirm='';render();msg('Tinanggal ang '+c+'. Mali? I-type ulit ang CAFAC, LONG, LAT tapos i-save.','ok')};
- const click=e=>{const b=e.target.closest('button[data-a]');if(!b)return;const c=b.dataset.c;
-  if(b.dataset.a==='d'){
-   if(confirm!==c){confirm=c;render();msg('Pindot ulit ang "Siguraduhin?" para tanggalin ang '+c+'.','bad');
-    setTimeout(()=>{if(confirm===c){confirm='';render()}},5000);return}
-   del(c);return}
-  const r=all().find(x=>x.code===c);if(!r)return;
-  edit=c;confirm='';$('llc').value=c;$('llo').value=fmt(r.long);$('lla').value=fmt(r.lat);
-  const k=$('llcancel');if(k)k.hidden=false;
-  render();msg('Edit mode: '+c+' — baguhin ang LONG/LAT tapos i-save; palit-agad, walang duplicate.','ok')};
- const panel=`<div class="fcp" id="llp" hidden>
-<h2>LONG/LAT - CAFAC</h2>
-<div class="sub">Manu-manong listahan ng coordinates ng bawat CAFAC node. Nasa browser lang ng device na ito ito (localStorage) — hindi pa nakikita ng agents sa ibang phone, at walang internet o API na kailangan.</div>
-<div class="llrow">
-<div><label class="sub">CAFAC</label><input id="llc" placeholder="ALFLP213NP2" autocomplete="off" autocapitalize="characters" spellcheck="false"></div>
-<div><label class="sub">LONG</label><input id="llo" placeholder="120.876541" inputmode="decimal" autocomplete="off"></div>
-<div><label class="sub">LAT</label><input id="lla" placeholder="14.123456" inputmode="decimal" autocomplete="off"></div>
-<div class="llgo"><button class="go" id="llsave">Ilagay sa listahan</button></div>
-</div>
-<div class="llmsg" id="llmsg"></div>
-<div class="llbar"><input id="llq" placeholder="Hanapin ang CAFAC sa listahan" autocomplete="off"><b id="lln"></b><button class="lnk" id="llcancel" hidden>Kanselahin ang edit</button></div>
-<div class="llwrap"><table><thead><tr><th>CAFAC</th><th>LONG</th><th>LAT</th><th>Kailan isinulat</th><th>Action</th></tr></thead><tbody id="llbody"></tbody></table></div>
-<div class="sub" style="margin-top:10px">Para makakuha ng LONG/LAT: buksan ang puntong gusto mo sa Google Maps, kopyahin ang numero sa address bar (halimbawa <b>14.123456, 120.876541</b>) — ang unang numero ay LAT, ang pangalawa ay LONG.</div>
-</div>`;
- const init=()=>{const fcp=$('fcp');if(!fcp||$('llp'))return;
+ let codes=null,picked='';
+ const $=id=>document.getElementById(id);
+ const msg=(t,cls)=>{const m=$('llmsg');if(m){m.textContent=t||'';m.className='llmsg'+(cls?' '+cls:'')}};
+ const all=()=>{if(codes)return codes;codes=[];
+  try{(typeof FR==='undefined'?[]:FR).forEach(r=>(r.n||[]).forEach(x=>codes.push({c:String(x[0]),x:x,r:r})))}catch(e){}
+  codes.sort((a,b)=>a.c.localeCompare(b.c));return codes};
+ const sug=()=>{
+  const box=$('llsug');if(!box)return;
+  const t=String($('llc').value||'').trim().toUpperCase();
+  if(t.length<2){box.innerHTML='<div class="llnone">Mag-type ng kahit 2 letra o numero — halimbawa <b>ALFLP</b>, <b>MGNLP010</b> o <b>NP7</b>. Pinaka-unang 60 lang ng match ang ipapakita.</div>';return}
+  const hits=all().filter(o=>o.c.indexOf(t)>=0);
+  if(!hits.length){box.innerHTML='<div class="llnone">Walang CAFAC sa '+all().length+' node ang naglalaman ng '+t+'.</div>';msg('');return}
+  box.innerHTML=hits.slice(0,60).map(o=>{
+   const av=o.x[1],cls=o.c===picked?' on':'';
+   const tag=av?av+'/'+o.x[2]+' available':'FULL';
+   return '<button class="llrow'+cls+'" data-c="'+esc(o.c)+'"><b>'+esc(o.c)+'</b><i>'+esc(o.r.b)+' · '+esc(o.r.c)+'</i><u class="'+(av?'':'full')+'">'+tag+'</u></button>';
+  }).join('');
+  msg(hits.length>60?hits.length+' match — 60 lang ang ipinapakita, mag-type pa ng mas marami':'')};
+ const det=o=>{
+  const x=o.x,r=o.r,nm=String($('llnm').value||'').trim();
+  $('lldet').innerHTML=kv([['Node (NAP)',o.c],['Status',x[1]?'AVAILABLE':'FULL'],['Available slots',x[1]],['Equipped slots',x[2]],
+   ['Utilization',x[3]+'%'],['LCP',r.l],['Exchange',r.e],['Site / subdivision',r.s],['Site address',r.a],
+   ['Barangay',r.b],['City',r.c],['Type',r.h],['FA date',r.f]]);
+  const head=(nm?'Para kay <b>'+esc(nm)+'</b> · ':'')+'CAFAC <b>'+esc(o.c)+'</b> ';
+  const tail=x[1]?x[1]+' pa available sa '+x[2]+' equipped na slot'+(r.a?' · '+esc(r.a):r.s?' · '+esc(r.s):''):'wala nang available — FULL';
+  $('llhead').innerHTML=head+'<span>'+tail+'</span>'};
+ const pick=c=>{
+  const o=all().find(v=>v.c===c);
+  if(!o){picked='';$('lldet').innerHTML='';$('llhead').innerHTML='';msg('Hindi nasa facility data ang '+c+'.','bad');return}
+  picked=c;$('llc').value=c;det(o);sug();
+  logEv('LONGLAT PICK','LONG/LAT - CAFAC',(String($('llnm').value||'').trim()||'-')+' -> '+c)};
+ const typed=()=>{picked='';$('lldet').innerHTML='';$('llhead').innerHTML='';sug()};
+ const panel='<div class="fcp" id="llp" hidden>'+
+  '<h2>LONG/LAT - CAFAC</h2>'+
+  '<div class="sub">I-type ang pangalan ng bagong application, tapos mag-type ng CAFAC — searchable siya habang ka nagta-type. Pindot ang CAFAC na hanap mo para makita ang <b>available</b>, <b>ports</b> at <b>lokasyon</b> nito.</div>'+
+  '<div class="llf">'+
+  '<div><label class="sub">SUBSCRIBER NAME</label><input id="llnm" placeholder="Pangalan ng subscriber" autocomplete="off"></div>'+
+  '<div><label class="sub">CAFAC</label><input id="llc" placeholder="ALFLP, MGNLP010, NP7..." autocomplete="off" autocapitalize="characters" spellcheck="false"></div>'+
+  '</div>'+
+  '<div class="llsug" id="llsug"></div>'+
+  '<div class="llmsg" id="llmsg"></div>'+
+  '<div class="llhead" id="llhead"></div>'+
+  '<div id="lldet"></div>'+
+  '<div class="sub" style="margin-top:10px">Kung i-type mo ang buong code at wala siyang match, ibig sabihin <b>hindi nasa facility data</b> ang node na iyan — tignan mo ang spelling o ang city sa Facility Checking.</div>'+
+  '</div>';
+ const init=()=>{
+  const fcp=$('fcp');if(!fcp||$('llp'))return;
   fcp.insertAdjacentHTML('afterend',panel);
-  $('llsave').onclick=save;
-  $('llcancel').onclick=()=>{clearForm();render();msg('Wala nang edit mode.','ok')};
-  $('llq').addEventListener('input',e=>{q=e.target.value;render()});
-  $('llbody').onclick=click;
-  ['llc','llo','lla'].forEach(i=>$(i).addEventListener('keydown',e=>{if(e.key==='Enter')save()}));
+  $('llc').addEventListener('input',typed);
+  $('llc').addEventListener('keydown',e=>{
+   if(e.key!=='Enter')return;
+   const b=$('llsug').querySelector('.llrow');
+   if(b){e.preventDefault();b.click()}});
+  $('llsug').onclick=e=>{const b=e.target.closest('.llrow');if(b)pick(b.dataset.c)};
+  $('llnm').addEventListener('input',()=>{if(picked)det(all().find(v=>v.c===picked))});
   const t3=$('t3');if(t3)t3.onclick=()=>{document.body.classList.add('fcv');mode('ll')}};
  init();
- return {render,open:()=>{init();render()},count:()=>all().length}})();
+ const render=()=>{if(!$('llp'))init();sug()};
+ return {render,pick,count:()=>all().length}})();
 </script>
 </body></html>

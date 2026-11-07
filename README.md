@@ -250,27 +250,33 @@ side-scrolling to reach the **Remind** button — the one thing the agents actua
 ## LONG/LAT - CAFAC tab sa login header
 
 Asked 2026-11-07: *"sa bandang LOG IN AT FACILITY CHECKING lagyan ng bagong portion at pangalanan mo ito na
-LONG/LAT - CAFAC"*. It is the third pill in `.hp` (`#t1` LOG IN, `#t2` FACILITY CHECKING, `#t3` LONG/LAT -
-CAFAC), so it is reachable before any login - it holds no client data, so it is not gated.
+LONG/LAT - CAFAC"*, then on seeing the first build: *"baguhin ang mga naka paloob dito gawin na SUBSCRIBER NAME
+at CAFAC tapos sa pag type ng cafac gawin ito na searchable lang ang CAFAC habang nag type kapag na click ang
+cafac na hinahanap saka ilagay ang detalye kung available at ilan ang ports at kung saan ang location nito wag
+na mag lagay ng kagaya ng nasa litrato"*. So it is the third pill in `.hp` (`#t1` LOG IN, `#t2` FACILITY
+CHECKING, `#t3` LONG/LAT - CAFAC) and it is a **lookup**, not a registry.
 
-* **What it is.** A manual registry: `CAFAC` + `LONG` + `LAT` + Save, then a searchable table with Edit and
-  Delete per row. It exists because the facility blob has **zero coordinates** - a NAP name like
-  `ALFLP213NP2` is a code, not a place - so this is where his hand-entered coordinates can finally live.
-* **No map, no geocoder, no API, no cost.** He removed both earlier map builds (`2d85069`, `53d83fa`), so this
-  tab deliberately stores numbers only. Nothing here draws a route or measures a distance.
-* **Saved in `localStorage` key `mm_ll`** as `[{code,long,lat,at}]`. Per browser only - an agent on another
-  phone will not see it. Sharing it means a Sheet tab plus an Apps Script endpoint, which is his call.
-* **Guards, all measured in a real browser:** empty code, non-node-shaped code, missing/non-numeric values,
-  and `|LONG| > 180` or `|LAT| > 90` each answer with a red line naming the fix (a swapped pair is caught
-  that way, because PH latitude cannot exceed 90). Saving a code that already exists updates it instead of
-  duplicating. Deleting needs a second tap on `Siguraduhin?`, which reverts itself after 5 s. Every save also
-  checks the code against the facility blob and says `✓ nasa facility data` or `⚠ hindi ko natagpuan`.
-* **Mobile:** the three pills stay on one line (`html.vm` shrinks them to 11.5 px / 8 px padding - measured
-  58 + 128 + 124 px inside a 735 px viewport, no overflow), inputs and Save become 44 px, and the table
-  scrolls inside `.llwrap` instead of squashing.
-* **Existing behavior untouched:** `mode()` still returns `in` and `fc` exactly as before (the new
-  `ll` branch is additive and null-guards `#llp`, which only exists after the block's own `init()`); the
-  6 inline scripts still parse, and the page still auto-synced `LIVE V9 OK: 2454 records` with no console errors.
+* **Fields:** `SUBSCRIBER NAME` (free text - he said the name is not in the database *"kasi ito lang ay bago
+  lang collected application"*) and `CAFAC`, which searches while he types.
+* **The type-ahead** scans the NAP codes inside the facility blob (`FR[].n` - 56,685 entries) for a
+  case-insensitive substring, shows the first 60 as tappable rows with `barangay · city` and
+  `<available>/<equipped> available` (red `FULL` when none), and says how many more matches exist. Measured
+  6.6 ms for a 3-character query, so no debounce is needed. `Enter` picks the first row.
+* **Clicking a CAFAC** renders the same `kv()` detail grid Facility Checking uses: Status, Available slots,
+  Equipped slots, Utilization, LCP, Exchange, Site / subdivision, Site address, Barangay, City, Type, FA date,
+  plus one summary line `Para kay <name> · CAFAC <code> 4 pa available sa 8 equipped na slot · Brgy. Kaytitinga
+  3, Alfonso, Cavite` (the site-address value, because `s` repeats the city). Typing the name afterwards
+  refreshes that line without re-picking.
+* **What it is NOT:** no LONG/LAT inputs, no saved list, no `localStorage`, no map, no geocoder, no API, no
+  cost. The earlier registry shape (`mm_ll` + table) was removed on his word `wag na mag lagay ng kagaya ng
+  nasa litrato`. See [[project-3mda-facility-route]] for the two map builds he reverted before this.
+* **Mobile (`html.vm`):** the three pills stay on one line (shrunk to 11.5 px / 8 px padding - measured 58 +
+  128 + 124 px inside a 735 px viewport), the two fields stack to one column at 44 px, and the suggestion rows
+  are 44 px inside a scrollable `.llsug` (measured 182 px box, 2,640 px of content).
+* **Existing behavior untouched:** `mode()` keeps `in` and `fc` exactly as before and only gained the null-
+  guarded `ll` branch; the panel is injected by the block's own `init()` (`window.LL`) after `#fcp`, not in
+  the HTML, so it survives the minified markup. 6 inline scripts still parse, no console errors, and the page
+  still auto-syncs (`LIVE V9 OK: 2454 records`).
 
 ## Endorsement reports to PLDT — SFS VALIDATION, CREDIT VALIDATION and AFD RESCHEDULE
 
