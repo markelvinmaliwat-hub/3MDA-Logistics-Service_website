@@ -970,9 +970,10 @@ setInterval(fetchLiveData, 90000);
 #t3{pointer-events:auto!important;cursor:pointer!important}
 html.vm .hp{left:8px;right:8px;transform:none;justify-content:center}
 html.vm .hp button{padding:8px 10px;font-size:11.5px;letter-spacing:0}
-#llp .llf{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:10px;margin-top:8px}
-#llp .llf label{display:block;margin:0 0 2px}
-#llp .llf input{margin:0;width:100%}
+#llp .llgrid{display:grid;grid-template-columns:minmax(230px,300px) minmax(0,1fr);gap:14px;align-items:start;margin-top:10px}
+#llp .llleft label{display:block;margin:8px 0 2px}
+#llp .llleft label:first-child{margin-top:0}
+#llp .llleft input{margin:0;width:100%}
 #llp .llsug{margin-top:8px;border:1px solid var(--line);border-radius:10px;max-height:32vh;overflow:auto}
 #llp .llsug:empty{display:none}
 #llp .llrow{display:block;width:100%;text-align:left;background:none;border:0;border-bottom:1px solid var(--line);padding:9px 10px;cursor:pointer;font:inherit;color:var(--ink)}
@@ -983,14 +984,15 @@ html.vm .hp button{padding:8px 10px;font-size:11.5px;letter-spacing:0}
 #llp .llrow u{text-decoration:none;font-size:11px;font-weight:700;color:#0a7d3c;margin-left:6px}
 #llp .llrow u.full{color:#e11d2e}
 #llp .llnone{padding:10px;color:var(--mut);font-size:13px}
-#llp .llmsg{min-height:18px;font-size:13px;margin:8px 0;color:var(--mut)}
+#llp .llmsg{min-height:18px;font-size:13px;margin-top:8px;color:var(--mut)}
 #llp .llmsg.bad{color:#e11d2e}
-#llp .llhead{margin:14px 0 4px;font-size:15px;font-weight:700}
-#llp .llhead span{color:var(--mut);font-weight:400;font-size:13px}
-@media(max-width:760px){#llp .llf{grid-template-columns:1fr}#llp .llf input{min-height:44px;font-size:16px}#llp .llrow{min-height:44px}}
+#llp .lldet h4{margin:0 0 8px;font-size:13px;letter-spacing:0.04em;text-transform:uppercase;color:var(--ink)}
+#llp .lldet .fdg{grid-template-columns:repeat(auto-fill,minmax(165px,1fr))}
+@media(max-width:900px){#llp .llgrid{grid-template-columns:1fr}}
+@media(max-width:760px){#llp .llleft input{min-height:44px;font-size:16px}#llp .llrow{min-height:44px}}
 </style>
 <script id="longlat-js">
-/* ============ LONG/LAT - CAFAC: subscriber name + type-ahead CAFAC lookup, details mula sa facility blob ============ */
+/* ============ LONG/LAT - CAFAC: subscriber name + type-ahead CAFAC, details sa kanang box ============ */
 window.LL=(()=>{
  let codes=null,picked='';
  const $=id=>document.getElementById(id);
@@ -1011,30 +1013,26 @@ window.LL=(()=>{
   }).join('');
   msg(hits.length>60?hits.length+' match — 60 lang ang ipinapakita, mag-type pa ng mas marami':'')};
  const det=o=>{
-  const x=o.x,r=o.r,nm=String($('llnm').value||'').trim();
-  $('lldet').innerHTML=kv([['Node (NAP)',o.c],['Status',x[1]?'AVAILABLE':'FULL'],['Available slots',x[1]],['Equipped slots',x[2]],
-   ['Utilization',x[3]+'%'],['LCP',r.l],['Exchange',r.e],['Site / subdivision',r.s],['Site address',r.a],
-   ['Barangay',r.b],['City',r.c],['Type',r.h],['FA date',r.f]]);
-  const head=(nm?'Para kay <b>'+esc(nm)+'</b> · ':'')+'CAFAC <b>'+esc(o.c)+'</b> ';
-  const tail=x[1]?x[1]+' pa available sa '+x[2]+' equipped na slot'+(r.a?' · '+esc(r.a):r.s?' · '+esc(r.s):''):'wala nang available — FULL';
-  $('llhead').innerHTML=head+'<span>'+tail+'</span>'};
+  const x=o.x,r=o.r;
+  $('lldet').innerHTML=kv([['Status',x[1]?'AVAILABLE':'FULL'],['Available slots',x[1]],['Site / subdivision',r.s]])};
  const pick=c=>{
   const o=all().find(v=>v.c===c);
-  if(!o){picked='';$('lldet').innerHTML='';$('llhead').innerHTML='';msg('Hindi nasa facility data ang '+c+'.','bad');return}
+  if(!o){picked='';$('lldet').innerHTML='';msg('Hindi nasa facility data ang '+c+'.','bad');return}
   picked=c;$('llc').value=c;det(o);sug();
   logEv('LONGLAT PICK','LONG/LAT - CAFAC',(String($('llnm').value||'').trim()||'-')+' -> '+c)};
- const typed=()=>{picked='';$('lldet').innerHTML='';$('llhead').innerHTML='';sug()};
+ const typed=()=>{picked='';$('lldet').innerHTML='';sug()};
  const panel='<div class="fcp" id="llp" hidden>'+
   '<h2>LONG/LAT - CAFAC</h2>'+
-  '<div class="sub">I-type ang pangalan ng bagong application, tapos mag-type ng CAFAC — searchable siya habang ka nagta-type. Pindot ang CAFAC na hanap mo para makita ang <b>available</b>, <b>ports</b> at <b>lokasyon</b> nito.</div>'+
-  '<div class="llf">'+
-  '<div><label class="sub">SUBSCRIBER NAME</label><input id="llnm" placeholder="Pangalan ng subscriber" autocomplete="off"></div>'+
-  '<div><label class="sub">CAFAC</label><input id="llc" placeholder="ALFLP, MGNLP010, NP7..." autocomplete="off" autocapitalize="characters" spellcheck="false"></div>'+
-  '</div>'+
+  '<div class="sub">I-type ang pangalan ng bagong application, tapos mag-type ng CAFAC — searchable siya habang ka nagta-type. Pindot ang CAFAC na hanap mo para makita ang <b>available</b> at <b>lokasyon</b> nito.</div>'+
+  '<div class="llgrid">'+
+  '<div class="llleft">'+
+  '<label class="sub">SUBSCRIBER NAME</label><input id="llnm" placeholder="Pangalan ng subscriber" autocomplete="off">'+
+  '<label class="sub">CAFAC</label><input id="llc" placeholder="ALFLP, MGNLP010, NP7..." autocomplete="off" autocapitalize="characters" spellcheck="false">'+
   '<div class="llsug" id="llsug"></div>'+
   '<div class="llmsg" id="llmsg"></div>'+
-  '<div class="llhead" id="llhead"></div>'+
-  '<div id="lldet"></div>'+
+  '</div>'+
+  '<div class="fbox lldet"><h4>CAFAC DETAILS</h4><div id="lldet"></div></div>'+
+  '</div>'+
   '<div class="sub" style="margin-top:10px">Kung i-type mo ang buong code at wala siyang match, ibig sabihin <b>hindi nasa facility data</b> ang node na iyan — tignan mo ang spelling o ang city sa Facility Checking.</div>'+
   '</div>';
  const init=()=>{
@@ -1046,7 +1044,6 @@ window.LL=(()=>{
    const b=$('llsug').querySelector('.llrow');
    if(b){e.preventDefault();b.click()}});
   $('llsug').onclick=e=>{const b=e.target.closest('.llrow');if(b)pick(b.dataset.c)};
-  $('llnm').addEventListener('input',()=>{if(picked)det(all().find(v=>v.c===picked))});
   const t3=$('t3');if(t3)t3.onclick=()=>{document.body.classList.add('fcv');mode('ll')}};
  init();
  const render=()=>{if(!$('llp'))init();sug()};

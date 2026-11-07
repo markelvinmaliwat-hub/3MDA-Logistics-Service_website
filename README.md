@@ -253,26 +253,30 @@ Asked 2026-11-07: *"sa bandang LOG IN AT FACILITY CHECKING lagyan ng bagong port
 LONG/LAT - CAFAC"*, then on seeing the first build: *"baguhin ang mga naka paloob dito gawin na SUBSCRIBER NAME
 at CAFAC tapos sa pag type ng cafac gawin ito na searchable lang ang CAFAC habang nag type kapag na click ang
 cafac na hinahanap saka ilagay ang detalye kung available at ilan ang ports at kung saan ang location nito wag
-na mag lagay ng kagaya ng nasa litrato"*. So it is the third pill in `.hp` (`#t1` LOG IN, `#t2` FACILITY
-CHECKING, `#t3` LONG/LAT - CAFAC) and it is a **lookup**, not a registry.
+na mag lagay ng kagaya ng nasa litrato"*, then on two screenshots of the intended layout: **"GANYAN LANG ANG
+ITSURA"** and **"Status, Available slots, Site / subdivision LANG ANG ILALAGAY SA DETAILS"**. So it is the third
+pill in `.hp` (`#t1` LOG IN, `#t2` FACILITY CHECKING, `#t3` LONG/LAT - CAFAC) and it is a **lookup**, not a
+registry.
 
-* **Fields:** `SUBSCRIBER NAME` (free text - he said the name is not in the database *"kasi ito lang ay bago
-  lang collected application"*) and `CAFAC`, which searches while he types.
+* **Layout (his drawing):** a two-column grid (`#llp .llgrid`). Left column, stacked: `SUBSCRIBER NAME`
+  (free text - he said the name is not in the database *"kasi ito lang ay bago lang collected application"*),
+  then `CAFAC`, then the type-ahead list, then the count/no-match message. Right column: one bordered
+  `.fbox` headed **CAFAC DETAILS**. At 735 px the columns stack (`@media(max-width:900px)`); the side-by-side
+  geometry was measured with the media query temporarily overridden (left 300 px, box starts at x=346, no
+  right overflow) because the in-app browser surface could not be screenshotted.
 * **The type-ahead** scans the NAP codes inside the facility blob (`FR[].n` - 56,685 entries) for a
   case-insensitive substring, shows the first 60 as tappable rows with `barangay · city` and
   `<available>/<equipped> available` (red `FULL` when none), and says how many more matches exist. Measured
-  6.6 ms for a 3-character query, so no debounce is needed. `Enter` picks the first row.
-* **Clicking a CAFAC** renders the same `kv()` detail grid Facility Checking uses: Status, Available slots,
-  Equipped slots, Utilization, LCP, Exchange, Site / subdivision, Site address, Barangay, City, Type, FA date,
-  plus one summary line `Para kay <name> · CAFAC <code> 4 pa available sa 8 equipped na slot · Brgy. Kaytitinga
-  3, Alfonso, Cavite` (the site-address value, because `s` repeats the city). Typing the name afterwards
-  refreshes that line without re-picking.
+  8 ms per keystroke on the live build, so no debounce is needed. `Enter` picks the first row.
+* **Clicking a CAFAC** puts exactly three values in the details box, through the same `kv()` grid Facility
+  Checking uses: **Status** (`AVAILABLE` green / `FULL` red), **Available slots**, **Site / subdivision**.
+  Nothing else - no summary line, no LCP/Exchange/Barangay/City/Type/FA date, no LONG/LAT.
 * **What it is NOT:** no LONG/LAT inputs, no saved list, no `localStorage`, no map, no geocoder, no API, no
   cost. The earlier registry shape (`mm_ll` + table) was removed on his word `wag na mag lagay ng kagaya ng
   nasa litrato`. See [[project-3mda-facility-route]] for the two map builds he reverted before this.
 * **Mobile (`html.vm`):** the three pills stay on one line (shrunk to 11.5 px / 8 px padding - measured 58 +
-  128 + 124 px inside a 735 px viewport), the two fields stack to one column at 44 px, and the suggestion rows
-  are 44 px inside a scrollable `.llsug` (measured 182 px box, 2,640 px of content).
+  128 + 124 px inside a 735 px viewport), the inputs and suggestion rows are 44 px, and `.llsug` scrolls
+  inside a 182 px box (32 vh).
 * **Existing behavior untouched:** `mode()` keeps `in` and `fc` exactly as before and only gained the null-
   guarded `ll` branch; the panel is injected by the block's own `init()` (`window.LL`) after `#fcp`, not in
   the HTML, so it survives the minified markup. 6 inline scripts still parse, no console errors, and the page
