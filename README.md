@@ -247,6 +247,31 @@ side-scrolling to reach the **Remind** button — the one thing the agents actua
   reads `Action`, `#pf` is `block`. I could not screenshot it (no visible surface in this browser),
   so the *look* is still his to confirm on a real phone.
 
+## LONG/LAT - CAFAC tab sa login header
+
+Asked 2026-11-07: *"sa bandang LOG IN AT FACILITY CHECKING lagyan ng bagong portion at pangalanan mo ito na
+LONG/LAT - CAFAC"*. It is the third pill in `.hp` (`#t1` LOG IN, `#t2` FACILITY CHECKING, `#t3` LONG/LAT -
+CAFAC), so it is reachable before any login - it holds no client data, so it is not gated.
+
+* **What it is.** A manual registry: `CAFAC` + `LONG` + `LAT` + Save, then a searchable table with Edit and
+  Delete per row. It exists because the facility blob has **zero coordinates** - a NAP name like
+  `ALFLP213NP2` is a code, not a place - so this is where his hand-entered coordinates can finally live.
+* **No map, no geocoder, no API, no cost.** He removed both earlier map builds (`2d85069`, `53d83fa`), so this
+  tab deliberately stores numbers only. Nothing here draws a route or measures a distance.
+* **Saved in `localStorage` key `mm_ll`** as `[{code,long,lat,at}]`. Per browser only - an agent on another
+  phone will not see it. Sharing it means a Sheet tab plus an Apps Script endpoint, which is his call.
+* **Guards, all measured in a real browser:** empty code, non-node-shaped code, missing/non-numeric values,
+  and `|LONG| > 180` or `|LAT| > 90` each answer with a red line naming the fix (a swapped pair is caught
+  that way, because PH latitude cannot exceed 90). Saving a code that already exists updates it instead of
+  duplicating. Deleting needs a second tap on `Siguraduhin?`, which reverts itself after 5 s. Every save also
+  checks the code against the facility blob and says `✓ nasa facility data` or `⚠ hindi ko natagpuan`.
+* **Mobile:** the three pills stay on one line (`html.vm` shrinks them to 11.5 px / 8 px padding - measured
+  58 + 128 + 124 px inside a 735 px viewport, no overflow), inputs and Save become 44 px, and the table
+  scrolls inside `.llwrap` instead of squashing.
+* **Existing behavior untouched:** `mode()` still returns `in` and `fc` exactly as before (the new
+  `ll` branch is additive and null-guards `#llp`, which only exists after the block's own `init()`); the
+  6 inline scripts still parse, and the page still auto-synced `LIVE V9 OK: 2454 records` with no console errors.
+
 ## Endorsement reports to PLDT — SFS VALIDATION, CREDIT VALIDATION and AFD RESCHEDULE
 
 Two reports leave this script on their own schedule, and everything about each one — wording,
