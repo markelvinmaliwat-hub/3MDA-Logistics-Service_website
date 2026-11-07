@@ -105,6 +105,12 @@ html.vm .onlyvw{display:none}
 .bar.fpb{grid-template-columns:22px 150px 1fr 54px}.tr2{display:flex;flex-direction:column;gap:3px}.tr2 i{display:block;height:9px;border-radius:5px;min-width:2px}.tr2 .a{background:var(--red)}.tr2 .b{background:#111}
 .fplg{display:flex;gap:6px;align-items:center;font-size:12px;margin:2px 0 6px}.fplg span{display:inline-block;width:12px;height:9px;border-radius:5px;margin-left:8px}.fplg .k1{background:var(--red);margin-left:0}.fplg .k2{background:#111}
 .pay td{vertical-align:top}.pay select,.pay input{width:100%;min-width:120px;padding:6px;border:1px solid var(--line);border-radius:6px;font:inherit}.pay .pt{margin-top:4px}.pay .perr{color:#c00;font-size:12px}.pay .pok{color:#0a7a2f;font-size:12px}.pay th:last-child,.pay td:last-child{min-width:104px}.pay .brem{padding:5px 10px;font-size:12px}.pay .rms{margin-top:4px;font-size:11px}
+.rt{margin:10px 0 2px;padding:10px 11px;background:var(--alt);border:1px solid var(--line);border-radius:10px}
+.rt input{width:100%;padding:8px 9px;border:1px solid var(--line);border-radius:7px;font:inherit;background:var(--card)}
+.rtb{display:flex;gap:7px;flex-wrap:wrap;margin-top:8px}
+.rt .sub{font-size:11.5px;line-height:1.45}
+html.vm .rt input{min-height:44px;font-size:16px;padding:11px 12px}
+html.vm .rtb{gap:8px}html.vm .rtb .btn{flex:1 1 auto;min-height:44px;font-size:14px}
 .tz{position:fixed;left:50%;transform:translateX(-50%);bottom:16px;z-index:90;width:min(620px,94vw);background:#101820;color:#fff;border-radius:14px;padding:12px 13px;box-shadow:0 10px 28px rgba(0,0,0,.35);font-size:12.5px;line-height:1.5;opacity:0;pointer-events:none;transition:opacity .18s}
 .tz.on{opacity:1;pointer-events:auto}.tz .th{font-weight:700;font-size:13px;margin-bottom:2px}.tz .to{color:#9fb3c8;font-size:11.5px}.tz .m{background:#1b2530;border:1px solid #2b3a4a;border-radius:10px;padding:9px 10px;margin:8px 0 8px;word-break:break-word}.tz .act{display:flex;gap:8px;align-items:center;flex-wrap:wrap}.tz button{background:#fff;border:none;border-radius:8px;padding:7px 12px;font:inherit;font-weight:700;font-size:12px;cursor:pointer}.tz .x{background:#2b3a4a;color:#cfe0ee;margin-left:auto}
 .fpt{width:100%;border-collapse:collapse}.fpt th,.fpt td{padding:4px 8px;text-align:left}.fpt th:nth-child(n+3),.fpt td.num{text-align:center;width:90px;font-weight:700}.fpt td:first-child{width:28px;color:var(--mut)}.fpt tfoot td{border-top:2px solid var(--line)}
@@ -247,8 +253,12 @@ function mdl(h){$('mc').innerHTML=h;$('md').classList.add('on')}
 function closeM(){hideToast();window.__plRefresh=null;$('md').classList.remove('on')}
 function showDetail(r,back){logEv('VIEW DETAILS','Dashboard',dv(r,'SUBSCRIBER NAME'));
  const pd=toD(r['POSTED DATE']);
- mdl(`<div class="mh"><div>${back?'<button class="btn" id="mback">← Back</button> ':''}</div><button class="btn" id="mx">✕</button></div><h2 class="bl nmB" style="margin:8px 0 2px">${esc(dv(r,'SUBSCRIBER NAME')||'—')}</h2><div class="sub">Sale date ${fmt(r._d)||'—'}${pd?' · Posted '+fmt(pd):''}</div><div class="dg">`+DF.filter(l=>(l!=='PR'||'PR' in r)&&(l!=='ADMIN REMARKS'||'ADMIN REMARKS' in r)).map(l=>{const v=dv(r,l);return `<div><label>${l.replace(' PID','')}</label><b class="${v&&BL.includes(l)?'bl':''}${l==='PR'&&v?' rd':''}${l==='SUBSCRIBER NAME'&&v?' nmB':''}${l==='ACCOUNT PID'&&v?' acR':''}${l==='FINAL STATUS'&&v?' stH':''}">${v?esc(v):'—'}</b></div>`+(l==='CSP REMARKS'?upRem(r):'')}).join('')+'</div>');
- $('mx').onclick=closeM;if(back)$('mback').onclick=back}
+ mdl(`<div class="mh"><div>${back?'<button class="btn" id="mback">← Back</button> ':''}</div><button class="btn" id="mx">✕</button></div><h2 class="bl nmB" style="margin:8px 0 2px">${esc(dv(r,'SUBSCRIBER NAME')||'—')}</h2><div class="sub">Sale date ${fmt(r._d)||'—'}${pd?' · Posted '+fmt(pd):''}</div><div class="dg">`+DF.filter(l=>(l!=='PR'||'PR' in r)&&(l!=='ADMIN REMARKS'||'ADMIN REMARKS' in r)).map(l=>{const v=dv(r,l);return `<div><label>${l.replace(' PID','')}</label><b class="${v&&BL.includes(l)?'bl':''}${l==='PR'&&v?' rd':''}${l==='SUBSCRIBER NAME'&&v?' nmB':''}${l==='ACCOUNT PID'&&v?' acR':''}${l==='FINAL STATUS'&&v?' stH':''}">${v?esc(v):'—'}</b></div>`+(l==='CSP REMARKS'?upRem(r):'')}).join('')+'</div>'+`<div class="rt"><div class="sub"><b>Papuntang bahay</b> — naka-fill mula sa HOUSE #, ST NAME, BRGY at CITY; itama lang kung kailangan</div><input id="dh_addr" maxlength="170" value="${esc(homeAddr(r))}"><div class="rtb"><button class="btn" id="dh_pin">Bahay sa Maps</button><button class="btn" id="dh_earth">Bahay sa Earth</button><button class="btn" id="dh_route">Ruta: node → bahay</button></div><div class="sub rthint" id="dh_hint">Ang <b>Ruta</b> ay magbubukas sa Facility Checking na naka-filter sa barangay ng client na ito; doon pumili ng site at NAP, may button na <b>Ruta sa Google Maps</b>.</div></div>`);
+ $('mx').onclick=closeM;if(back)$('mback').onclick=back;
+ const D=()=>$('dh_addr').value.trim()||homeAddr(r);
+ $('dh_pin').onclick=()=>{logEv('MAP','Client',D());openUrl(mapPin(D()))};
+ $('dh_earth').onclick=()=>{logEv('EARTH','Client',D());openUrl(earthLink(D()))};
+ $('dh_route').onclick=()=>{FCDEST=D();closeM();goFc(r)}}
 const payRec=()=>{try{return JSON.parse(localStorage.getItem('mm_pay'))||{}}catch(e){return {}}};
 const payH=()=>{try{return JSON.parse(localStorage.getItem('mm_payh'))||[]}catch(e){return []}};
 const paySave=R=>{try{localStorage.setItem('mm_pay',JSON.stringify(R))}catch(e){}};
@@ -265,6 +275,19 @@ const REMTXT=r=>{const c=remFirst(dv(r,'SUBSCRIBER NAME')),a=remFirst((ME&&ME.na
 const remLoc=v=>{let d=String(v).trim().replace(/\.0+$/,'').replace(/\D/g,'');if(/^00/.test(d))d=d.slice(2);if(/^63/.test(d))d='0'+d.slice(2);else if(/^9/.test(d))d='0'+d;return /^09\d{9}$/.test(d)?d:''};
 const REMNUM=r=>[dv(r,'CBR 1'),dv(r,'CBR 2')].map(remLoc).find(Boolean)||'';
 const remFmt=n=>/^09\d{9}$/.test(n)?n.slice(0,4)+' '+n.slice(4,7)+' '+n.slice(7):n;
+const tCase=s=>String(s||'').replace(/\s+/g,' ').trim().toLowerCase().replace(/(^|[ .\-/,])([a-z0-9])/g,(m,p,c)=>p+c.toUpperCase());
+const STK=/(^|[^a-z])(st|street|road|rd|ave|avenue|hwy|highway|dr|drive|blvd|ext|extension|purok|sitio|phase|block|blk|lot|zone|village|villas|subd|circle)(\s|,|$)/i;
+const homeAddr=r=>{const H=String(dv(r,'HOUSE #')||'').replace(/[.,]+$/,'').trim(),SD=tCase(dv(r,'SUBDIVISION')),ST=tCase(dv(r,'ST NAME')),bN=tCase(String(dv(r,'BRGY')||'').replace(/^B[GY][RY]?\.?\s+/i,'')),B=/^[0-9]+[a-z]?$/.test(bN)?'Brgy. '+bN:bN,C=tCase(dv(r,'CITY'));
+ const road=ST?(STK.test(ST.toLowerCase())?ST:ST+' Street'):'';
+ const v=[road?((H?H+' ':'')+road):(H?'House '+H:''),SD&&!(road&&road.toLowerCase().includes(SD.toLowerCase()))?SD:'',B,C,'Cavite'].filter(Boolean);
+ return [...new Set(v)].join(', ')};
+const nodeAddr=x=>{let t=String(x.a||x.s||'').replace(/\b[A-Z]{2,}[0-9]{2,}[A-Z0-9]*\b/g,' ').replace(/\s+/g,' ').trim().replace(/[.,]+$/,'');
+ if(!t)t=[x.b,x.c].filter(Boolean).join(' ');t=tCase(t.replace(/^B[GY][RY]?\.?\s+/i,''));
+ return /cavite/i.test(t)?t:[t,tCase(x.c),'Cavite'].filter(Boolean).join(', ')};
+const mapDir=(o,d)=>'https://www.google.com/maps/dir/?api=1&travelmode=driving'+(o?'&origin='+encodeURIComponent(o):'')+'&destination='+encodeURIComponent(d||o||'Cavite,+Philippines');
+const mapPin=q=>'https://www.google.com/maps/search/?api=1&query='+encodeURIComponent(q||'Cavite, Philippines');
+const earthLink=q=>'https://earth.google.com/web/search/'+encodeURIComponent(q||'Cavite, Philippines')+'/';
+const openUrl=u=>{const w=window.open(u,'_blank','noopener');if(!w)copyText(u);return w};
 const remLog=()=>{try{return JSON.parse(localStorage.getItem('mm_rem'))||[]}catch(e){return []}};
 const remSeen=()=>{const o={};remLog().forEach(x=>{if(x.k&&!o[x.k])o[x.k]=x.at});return o};
 const remAdd=(k,r,how)=>{const d=new Date(),p=n=>String(n).padStart(2,'0');
@@ -687,6 +710,24 @@ $('fcity').innerHTML='<option value="">Select city</option>'+[...FAC.c].sort().m
 let fsel='';
 function mode(m){const fc=m==='fc';$('t1').classList.toggle('on',!fc);$('t2').classList.toggle('on',fc);$('fcp').hidden=!fc;document.querySelector('.lc').hidden=fc;if(fc)fcRender()}
 let FS=null;
+let FCDEST='';/* the client address handed over by "Ruta: node -> bahay" so the facility route box starts filled */
+function goFc(r){
+ if(document.body.classList.contains('lo')){pendFc=true;mode('in');$('lerr').textContent='Please log in to use Facility Checking.';return}
+ mode('fc');
+ const cu=String(dv(r,'CITY')||'').trim().toUpperCase(),bu=String(dv(r,'BRGY')||'').trim().toUpperCase();
+ const co=[...$('fcity').options].find(o=>String(o.value).toUpperCase()===cu);
+ if(co){$('fcity').value=co.value;fcBrgy();const bo=[...$('fb').options].find(o=>String(o.value).toUpperCase()===bu);$('fb').value=bo?bo.value:'';fcRun('c');return}
+ const t=bu||cu||'';$('fs').value=t;fcRun('s');
+ if(!t)$('fres').innerHTML='<div class="empty">Walang BRGY o CITY ang client na ito — i-type ang barangay sa Site search.</div>'}
+function fcRouteUi(origin){return `<div class="rt"><div class="sub"><b>Mula sa node na ito:</b> ${esc(origin)}</div><input id="fo_addr" maxlength="170" placeholder="Papuntang bahay: House no., street, brgy, city" value="${esc(FCDEST)}"><div class="rtb"><button class="btn" id="fo_go">Ruta sa Google Maps</button><button class="btn" id="fo_pin">Pin ang node</button><button class="btn" id="fo_earth">Earth</button><button class="btn" id="fo_cp">Kopyahin ang link</button></div><div class="sub" id="fo_hint">${FCDEST?'Naka-fill ang bahay mula sa client.':'Isulat ang address ng bahay, o pumunta muna sa client at pindutin ang <b>Ruta: node \u2192 bahay</b>.'} Google Maps ang maglilista ng daan, layo at ETA — walang API, walang bayad.</div></div>`}
+function fcWire(origin){
+ const go=$('fo_go'),i=$('fo_addr'),h=$('fo_hint');if(!go)return;
+ go.onclick=()=>{const d=i.value.trim();if(!d){h.textContent='Isulat muna ang address ng bahay.';i.focus();return}
+  FCDEST=d;logEv('MAP ROUTE','Facility checking',origin+' \u2192 '+d);openUrl(mapDir(origin,d));
+  h.textContent='Binuksan ang Google Maps: node \u2192 '+d+'. Kung mali ang naka-pin sa node, i-drag mo ang asul na marker.'};
+ $('fo_pin').onclick=()=>{logEv('MAP PIN','Facility checking',origin);openUrl(mapPin(origin));h.textContent='Pin lang ang node — kaya mo itong i-verify kung saang eksaktong lugar ang site.'};
+ $('fo_earth').onclick=()=>{logEv('EARTH','Facility checking',origin);openUrl(earthLink(origin));h.textContent='Google Earth: satellite ng lugar ng node. Para sukatin ang layo gamit ang daan, Ruta sa Google Maps ang may km at ETA; dito may Tools > Measure distance na kailangan i-click-click mano-mano.'};
+ $('fo_cp').onclick=()=>copyText(mapDir(origin,i.value.trim()||origin)).then(ok=>{h.textContent=ok?'Nakopya ang link \u2713':'Hindi pinayagan ng browser ang copy'})}
 function fcRun(m){
  const n=$('fn').value.trim(),st=$('fs').value.trim(),city=$('fcity').value,b=$('fb').value.trim(),msg=t=>{FS=null;$('fdet').innerHTML='';$('fres').innerHTML='<div class="empty">'+t+'</div>'};
  if(m==='n'){if(n.length<3)return msg('Enter at least 3 characters of the node.');FS={m,n};logEv('SEARCH','Facility checking - CAFAC search (node)',n)}
@@ -715,12 +756,14 @@ function fcDetail(g){
  logEv('FACILITY CHECK','Facility checking',g.s+' \u00b7 '+g.c+' \u00b7 '+g.av+' available slots');
  const r0=g.rows[0],u=g.eq?Math.round((g.eq-g.av)/g.eq*100):0,ex=[...new Set(g.rows.map(r=>r.e))].join(', '),ns=[];
  g.rows.forEach(r=>r.n.forEach(x=>ns.push([x,r])));ns.sort((a,b)=>b[0][1]-a[0][1]);
- $('fdet').innerHTML=`<h3 class="fh">${esc(g.s)} \u00b7 ${esc(g.c)}</h3>`+kv([['Site / subdivision',g.s],['Site address',r0.a],['City',g.c],['Barangay',[...g.bs].join(', ')],['Exchange',ex],['Type',r0.h],['FA date',r0.f],['LCPs',g.l],['NAPs',g.n],['Available slots',g.av],['Equipped slots',g.eq],['Utilization',u+'%'],['Status',g.av?'AVAILABLE':'FULL']])+`<div class="sub" style="margin-top:8px">NAPs in this site \u00b7 click a NAP for its details</div><div class="sc2" style="max-height:30vh"><table><thead><tr><th>NAP</th><th>LCP</th><th>Barangay</th><th>Available</th><th>Equipped</th><th>Util.</th><th>Status</th></tr></thead><tbody>`+ns.slice(0,400).map(([x,r],i)=>`<tr class="rr" data-n="${i}"><td class="bl">${esc(x[0])}</td><td>${esc(r.l)}</td><td>${esc(r.b)}</td><td><b>${x[1]}</b></td><td>${x[2]}</td><td>${x[3]}%</td><td class="${x[1]?'fav':'ffull'}">${x[1]?'AVAILABLE':'FULL'}</td></tr>`).join('')+'</tbody></table></div>'+(ns.length>400?'<div class="sub">Showing first 400 NAPs</div>':'');
+ $('fdet').innerHTML=`<h3 class="fh">${esc(g.s)} \u00b7 ${esc(g.c)}</h3>`+kv([['Site / subdivision',g.s],['Site address',r0.a],['City',g.c],['Barangay',[...g.bs].join(', ')],['Exchange',ex],['Type',r0.h],['FA date',r0.f],['LCPs',g.l],['NAPs',g.n],['Available slots',g.av],['Equipped slots',g.eq],['Utilization',u+'%'],['Status',g.av?'AVAILABLE':'FULL']])+fcRouteUi(nodeAddr(r0))+`<div class="sub" style="margin-top:8px">NAPs in this site \u00b7 click a NAP for its details</div><div class="sc2" style="max-height:30vh"><table><thead><tr><th>NAP</th><th>LCP</th><th>Barangay</th><th>Available</th><th>Equipped</th><th>Util.</th><th>Status</th></tr></thead><tbody>`+ns.slice(0,400).map(([x,r],i)=>`<tr class="rr" data-n="${i}"><td class="bl">${esc(x[0])}</td><td>${esc(r.l)}</td><td>${esc(r.b)}</td><td><b>${x[1]}</b></td><td>${x[2]}</td><td>${x[3]}%</td><td class="${x[1]?'fav':'ffull'}">${x[1]?'AVAILABLE':'FULL'}</td></tr>`).join('')+'</tbody></table></div>'+(ns.length>400?'<div class="sub">Showing first 400 NAPs</div>':'');
  $('fdet').querySelectorAll('tr[data-n]').forEach(tr=>tr.onclick=()=>fcNode(...ns[+tr.dataset.n]));
+ fcWire(nodeAddr(r0));
  $('fdet').scrollIntoView({block:'nearest'})}
 function fcNode(x,r){
  logEv('FACILITY CHECK','Facility checking','Node '+x[0]);
- $('fdet').innerHTML=`<h3 class="fh">Node ${esc(x[0])}</h3>`+kv([['Node (NAP)',x[0]],['LCP',r.l],['Exchange',r.e],['Site / subdivision',r.s],['Site address',r.a],['Barangay',r.b],['City',r.c],['Type',r.h],['FA date',r.f],['Available slots',x[1]],['Equipped slots',x[2]],['Utilization',x[3]+'%'],['Status',x[1]?'AVAILABLE':'FULL']]);
+ $('fdet').innerHTML=`<h3 class="fh">Node ${esc(x[0])}</h3>`+kv([['Node (NAP)',x[0]],['LCP',r.l],['Exchange',r.e],['Site / subdivision',r.s],['Site address',r.a],['Barangay',r.b],['City',r.c],['Type',r.h],['FA date',r.f],['Available slots',x[1]],['Equipped slots',x[2]],['Utilization',x[3]+'%'],['Status',x[1]?'AVAILABLE':'FULL']])+fcRouteUi(nodeAddr(r));
+ fcWire(nodeAddr(r));
  $('fdet').scrollIntoView({block:'nearest'})}
 function fcBrgy(){const c=$('fcity').value,bs=c?[...new Set(FR.filter(r=>r.c===c).map(r=>r.b))].sort():[];$('fb').innerHTML=c?'<option value="">All barangays</option>'+bs.map(b=>`<option value="${esc(b)}">${esc(b)}</option>`).join(''):'<option value="">Select city first</option>';$('fb').disabled=!c}
 function fcClrVis(){$('fclr').hidden=!($('fn').value||$('fs').value||$('fcity').value||FS)}
