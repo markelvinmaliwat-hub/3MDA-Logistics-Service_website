@@ -247,6 +247,45 @@ side-scrolling to reach the **Remind** button — the one thing the agents actua
   reads `Action`, `#pf` is `block`. I could not screenshot it (no visible surface in this browser),
   so the *look* is still his to confirm on a real phone.
 
+## Facility map — node (CAFAC) to client house, inside Facility Checking
+
+Leaflet 1.9.4 is inlined in this file (no CDN, so a blocked `unpkg` cannot blank the map), and the
+map block is appended under the node details whenever he opens a NAP in Facility Checking.
+Three free services do the rest — OpenStreetMap raster tiles (plus optional keyless Esri World
+Imagery for satellite), Nominatim for the approximate point, and `router.project-osrm.org` for the
+road route. No key, no billing, no quota of his.
+
+* **What the map shows.** A blue pin labelled `⬡ <CAFAC> · <available>/<equipped>`, a green pin
+  labelled `🏠 <SUBSCRIBER NAME>`, and the driving polyline between them with **Daan** (road km),
+  **Biyahe** (minutes) and **Tuwid na linya** (straight line, shown so he can see the difference).
+* **Which client is picked for him.** `byCode()` scans `CSP REMARKS`, `HD RECOMMENDATION` and
+  `ADMIN REMARKS` of every client row for a token that is a real NAP code in the facility blob.
+  Measured on the 2026-11-07 database: 1,734 client rows, 157 of them name a CAFAC that exists in
+  the facility data, across 147 distinct codes; the facility blob has 56,681 NAPs in 23 cities.
+  When exactly one client names the node it is selected automatically; when none do, the list
+  falls back to the clients in that city and he can type a name.
+* **The other direction also works.** A client record whose remarks name a real CAFAC gets a
+  `🗺 Mapa: <CAFAC> → <name>` button in its detail modal; tapping it opens Facility Checking
+  already pointing at that node and that house.
+* **The point is approximate, and he corrects it.** The facility data has zero coordinates, and the
+  ALL-CAPS sheet addresses geocode to a business, not a house — so the first drop is the barangay
+  centre, labelled as such, with a city-centre fallback if Nominatim lands more than 25 km away
+  (12 km for a house). Corrections are his: drag the pin, or select 🟢/⬡ then `⌖ Ilagay sa gitna
+  ng crosshair`. He accepted this: *"hayaan na hayagayin ng map ang measure hangan sa pin kahit
+  walng bubong"* — the measurement goes to the pin, not to the rooftop.
+* **Saved where?** `localStorage` key `mm_geo`, entries `N|<CAFAC>` and `H|<name>|<date>|<PID>` plus
+  a `q|<query>` cache for every geocoding answer, so a repeat open costs no request. Nominatim is
+  throttled to one call per 1.15 s. The save is per browser — it is not shared with the agents yet
+  (that needs a `GEO` tab in the sheet).
+* **No surprise zoom.** Dropping or dragging a pin never calls `fitBounds`, `panTo`, `setZoom` or
+  `setView`; verified by counting the calls before and after two drops (unchanged). Only
+  `📍 Ipakita ang buong daan` reframes.
+* **Verified numbers.** `ALFLP213NP2` → `JUSTINE EMADEM DANAO`: 6.55 km road, 7 min, 5.83 km
+  straight line. `MGNLP010NP1` → `JAY-AR CUNANAN DAQUIOAG` (Maragondon): 2.71 km, 3 min, 1.92 km.
+  Two pins dropped on the same point show `0.00 km` and a warning instead of a fake route.
+  `↺ Ibalik sa auto` deletes the saved points and re-geocodes; CLEAR SEARCH tears the map down
+  before `#fdet` is rewritten, so no detached Leaflet instance is left behind.
+
 ## Endorsement reports to PLDT — SFS VALIDATION, CREDIT VALIDATION and AFD RESCHEDULE
 
 Two reports leave this script on their own schedule, and everything about each one — wording,
