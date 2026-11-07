@@ -221,6 +221,78 @@ and that is the point.
   registration. Those are the options that would make it automated, and each one either costs money,
   risks his number, or needs a phone parked on a shelf.
 
+## Phone-first FOR PAYMENT cards
+
+Asked 2026-11-06: *"maari mo bang gawin ang number 4 na phone-first layout para sa agents (karamihan
+sa kanila phone lang ang gamit)"*. The modal was a six-column table, which on a phone meant
+side-scrolling to reach the **Remind** button — the one thing the agents actually press.
+
+* **Keyed to `html.vm`, not to screen size.** The page already has a view switcher (`#vsw`, auto when
+  `Math.min(screen.width,innerWidth)<=900`, stored in `localStorage.mm_view`), so every new rule is
+  `html.vm .pay …`. That respects his own switch: an agent on a laptop who taps *Switch to Mobile view*
+  sees the cards, and a phone in *Web view* still sees the table.
+* **CSS over the same DOM.** The rows are still `<tr>/<td>` with `display:block`, so every existing
+  handler selector (`.po`, `.pd`, `.pm`, `.pt`, `.brem`, `.rms`, `tr[data-i]`) keeps working — the JS
+  contracts were not touched. Labels come from `td[data-l]::before{content:attr(data-l)}`, and the
+  account number became its own `<td class="bl acc">` so the column count still matches `<thead>`.
+* **Touch targets** 44–48 px (`select`/`input` 44, Remind 48, full width), the modal list scrolls to
+  `72vh` on mobile, and the long English note is `.onlyvw` while the short Taglish one is `.onlyvm`.
+* **A search box** (`#pf`, `.pfwrap`, mobile-only) filters the up-to-200 visible rows by subscriber
+  name, account **with or without the leading 0**, and the number both raw (`09625170696`) and as
+  printed (`0962 517 0696`); nothing matched shows *Walang match sa inilagay mo.* Measured on the 13
+  live November FOR PAYMENT rows: name → 1, raw number → 1, spaced number → 1, `409565506` → 1,
+  `0409565506` → 1, junk → 0.
+* **Verified in a real browser, not by eye.** Computed styles on the rendered modal: `tr` is
+  `display:block`, radius 14 px, Remind 48 px, inputs 46 px, `thead` `none`, the `::before` label
+  reads `Action`, `#pf` is `block`. I could not screenshot it (no visible surface in this browser),
+  so the *look* is still his to confirm on a real phone.
+
+## Facility route — node to house
+
+Requested 2026-11-07: *"kaya mo bang lagyan ng google earth sa facility check? yung pwede mag lagay
+ng pin mula sa node papunta sa bahay at kung paano yung daan na gagawin upang ma measure ng tama ang
+layo nito simula sa node papunta sa bahay"*.
+
+**Measured first, because the answer depended on it.** The facility data is the `FAC` blob inside this
+file (`const FAC=` — `getAllData` does **not** serve it; it only returns PLDT, RED and VALIDATORS):
+15,999 records, 5,726 distinct site strings, 809 barangays, 23 cities (Cavite only), **56,681 distinct
+NAP nodes**, of which **38,731 (68%) still have a free slot** and **4,679 sites** have at least one.
+Client side, from the live database (1,414 PLDT + 303 RED): `ST NAME` 1,407/1,414, `BRGY` 1,408,
+`CITY` 1,407, `HOUSE #` 752 (53%), `SUBDIVISION` 523 — and **1,119 clients (79%) live in a
+city+barangay pair that exists in the facility data** (1,077 where an *open* node exists there).
+
+* **There are no coordinates anywhere in his facility data.** `FAC` has five keys only — `c` city,
+  `b` barangay, `s` site, `a` address, `r` rows. A node name (`ALFLP03NP1`) is a code, not a place.
+  So the origin of every route is the *site text*, which is barangay-level. The distance is exact as
+  a road route, but only as precise as that text: it answers "paano Pumunta at gaano kalayo", not
+  "magkano ang fiber drop".
+* **Free by construction.** `homeAddr()` / `nodeAddr()` build the two strings, and the page opens
+  Google's own URLs — `maps/dir/?api=1&travelmode=driving&origin=…&destination=…`,
+  `maps/search/?api=1&query=…` and `earth.google.com/web/search/<place>/`. No API key, no billing
+  account, no quota, nothing to pay: Google computes the route inside its app, and the driver (or
+  phone) sees the km, the ETA and the turn-by-turn. Verified end-to-end in a real browser: the tested
+  pair returned **10.5 km / 22 min via Emilio Aguinaldo Hwy/R-2** (alternative 11.1 km).
+* **The raw sheet text geocodes wrong, so the address is rebuilt.** Sent as
+  `House 79, NARRA St, BGY SAN MIGUEL 2, SILANG, Cavite`, Maps answered *"can't find"*; the same place
+  in ALL CAPS but trimmed resolved to a **beauty salon**, not the house. `homeAddr()` therefore puts
+  the house number *in front of the street* (`79 Narra Street`), Title-Cases every part, appends
+  `Street` only when the value has no road word already (1,407 street values, only 2 spell one),
+  keeps `SUBDIVISION` when it is not just the street repeated, drops the `BGY ` prefix — but keeps
+  `Brgy.` when the barangay is a bare number, because `4, Alfonso, Cavite` matches nothing.
+  `nodeAddr()` strips the LCP code that is pasted inside 479 of the site addresses.
+* **Flow:** client row → *Papuntang bahay* box (`Bahay sa Maps` · `Bahay sa Earth` ·
+  **`Ruta: node → bahay`**). That last one hands the address over (`FCDEST`), switches to Facility
+  Checking **pre-filtered to that client's city and barangay** (or, when the city is not in the
+  facility list, searches the site names for the barangay text), and every site/NAP card it opens
+  then shows the destination already typed. Verified: SILANG + BGY SAN MIGUEL 2 → 6 sites, and each
+  card carries `Ruta sa Google Maps` · `Pin ang node` · `Earth` · `Kopyahin ang link`.
+* **`logEv('MAP ROUTE' | 'MAP PIN' | 'EARTH', …)`** records the pair in the shared activity log, so
+  the owner can see which node each agent was sent to.
+* **Not done, and it is the only way to get a drop-length number:** a coordinate column. Pinning the
+  4,679 sites that have a free node (one-time, from the field: press-and-hold the pin, copy the
+  coordinates) would let the page show straight-line distance with no API at all and make the road
+  route start at the actual cabinet instead of the barangay. That is his decision, not a default.
+
 ## Endorsement reports to PLDT — SFS VALIDATION, CREDIT VALIDATION and AFD RESCHEDULE
 
 Two reports leave this script on their own schedule, and everything about each one — wording,
