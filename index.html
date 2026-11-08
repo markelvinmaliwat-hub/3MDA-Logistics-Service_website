@@ -1671,15 +1671,6 @@ html.vm .hp button{padding:8px 10px;font-size:11.5px;letter-spacing:0}
 #llp .llbtn:hover{background:#eef4ff}
 #llp .llbtn.on{background:var(--red);border-color:var(--red);color:#fff}
 #llp .llbtn.red{border-color:#e11d2e;color:#e11d2e;background:#fff}
-#llp .llsrch{display:flex;gap:6px;margin-bottom:6px}
-#llp .llsrch input{flex:1;min-width:0;margin:0;padding:9px 10px;border:1px solid var(--line);border-radius:10px;background:#fff;color:var(--ink);font:inherit;font-size:13.5px}
-#llp .llsrch .llbtn{flex:0 0 auto}
-#llp .llres{border:1px solid var(--line);border-radius:10px;overflow:auto;max-height:22vh;margin-bottom:6px}
-#llp .llres:empty{display:none}
-#llp .llr{display:block;width:100%;text-align:left;background:none;border:0;border-bottom:1px solid var(--line);padding:8px 10px;cursor:pointer;font:inherit;font-size:12.5px;color:var(--ink)}
-#llp .llr:last-child{border-bottom:0}
-#llp .llr:hover{background:#eef4ff}
-#llp .llr i{display:block;font-style:normal;color:var(--mut);font-size:11.5px;margin-top:1px}
 #llp .rtmap{height:min(46vh,380px);min-height:280px;border:1px solid var(--line);border-radius:12px;background:#e8eef6}
 #llp .rtwrap{position:relative}
 #llp .xh{position:absolute;left:50%;top:50%;width:0;height:0;z-index:600;pointer-events:none}
@@ -1707,7 +1698,7 @@ html.vm .hp button{padding:8px 10px;font-size:11.5px;letter-spacing:0}
 #llp .rte i{background:#0a7d3c}
 #llp .rtw i{width:18px;height:18px;line-height:14px;font-size:10px;background:#e11d2e}
 @media(max-width:900px){#llp .llgrid{grid-template-columns:1fr}#llp .lllr{grid-template-columns:1fr 1fr}#llp .lllr .llbtn{grid-column:1/-1}}
-@media(max-width:760px){#llp .llleft input{min-height:44px;font-size:16px}#llp .llrow{min-height:44px}#llp .lllr input{min-height:44px;font-size:16px}#llp .llbtn{min-height:44px;flex:1 1 calc(50% - 4px)}#llp .llsrch .llbtn{flex:0 0 auto}#llp .llsrch input{min-height:44px;font-size:16px}#llp .llr{min-height:44px}#llp .rtmap{height:52vh}}
+@media(max-width:760px){#llp .llleft input{min-height:44px;font-size:16px}#llp .llrow{min-height:44px}#llp .lllr input{min-height:44px;font-size:16px}#llp .llbtn{min-height:44px;flex:1 1 calc(50% - 4px)}#llp .rtmap{height:52vh}}
 </style>
 <script id="longlat-js">
 /* ============ LONG/LAT - CAFAC: lookup + mano-manong pag-tap ng daan (CAFAC -> bahay) ============ */
@@ -2047,12 +2038,12 @@ window.LL=(()=>{
   logEv('LONGLAT PICK','LONG/LAT - CAFAC',(nameOf()||'-')+' -> '+c)};
  const typed=()=>{picked='';$('lldet').innerHTML='';fill();saved();sug();cnt()};
 
- /* ---- Hanapin (Nominatim / OpenStreetMap): walang API key, walang bayad, 1 hiling bawat segundo ---- */
+ /* ---- Nominatim (OpenStreetMap) — ang tanging gamit ngayon ay ang awtomatikong izoom sa barangay ng
+    CAFAC; ang 🔍 Hanapin search box ay inalis noong 2026-11-08 sa utos ng may-ari. ---- */
  // limit=3, hindi 5: sukat ng sagot ang bangingang binabawi ng WAF. Sa parehong hiling mula sa kanyang
  // github.io origin — limit=3 = 200 / boundary:Anabu II-A (10 ms), limit=5 = "Failed to fetch" (10 ms).
  const NQ='https://nominatim.openstreetmap.org/search?format=jsonv2&limit=3&countrycodes=ph&accept-language=en&q=';
- const HIT=[];
- let seq=0,lastReq=0,lastQ='',blockT=0,blockFor=60000;
+ let seq=0,lastReq=0,blockT=0,blockFor=60000;
  const gap=()=>Date.now()-lastReq;
  const vb=()=>{if(!M)return '';const b=M.getBounds();
   return '&viewbox='+b.getWest().toFixed(5)+','+b.getNorth().toFixed(5)+','+b.getEast().toFixed(5)+','+b.getSouth().toFixed(5)};
@@ -2061,7 +2052,7 @@ window.LL=(()=>{
   // hindi bilang 403 — kaya ang cooldown ay dinidilan sa kahit anong nabigong hiling, hindi lang sa 403.
   if(blockT&&Date.now()-blockT<blockFor){cb([],'','paulit-ulit na hiling');return false}
   if(gap()<1100)return false;
-  const my=++seq;lastReq=Date.now();lastQ=q;
+  const my=++seq;lastReq=Date.now();
   // cache:'no-store' — isang naka-cache na 403 ay paulit-ulit na ibabalik ng browser kahit walang CORS header.
   fetch(NQ+encodeURIComponent(q).replace(/%2C/g,'%20')+(bias?vb():''),{cache:'no-store'})
    .then(r=>{if(r.status===403){blockT=Date.now();blockFor=65000}if(!r.ok)throw new Error('HTTP '+r.status);return r.json()})
@@ -2098,34 +2089,6 @@ window.LL=(()=>{
     step()},false);
    if(gap()<1160)setTimeout(fire,1170-gap());else fire()}
   step()};
- const clrRes=()=>{HIT.length=0;const e=$('rtres');if(e)e.innerHTML='';const x=$('rtqx');if(x)x.style.display='none'};
- const listRes=(list,q)=>{
-  const e=$('rtres');if(!e)return;
-  HIT.length=0;
-  if(!list.length){e.innerHTML='<div class="llnone">Walang natagpuang <b>'+esc(q)+'</b> sa Pilipinas. Subukan ang <b>barangay + ciudad</b>, hal. <b>Anabu 1-A Imus</b>, o pangalan ng kalye.</div>';return}
-  e.innerHTML=list.map((r,i)=>{HIT.push(r);
-   const p=String(r.display_name||'').split(',').map(x=>x.trim()).filter(x=>x);
-   const head=(p[0]||'')+(p[1]?', '+p[1]:'');
-   return '<button class="llr" data-i="'+i+'"><b>'+esc(head.trim())+'</b><i>'+esc(p.slice(2).join(', ').trim()||q)+'</i></button>'}).join('')};
- const goRes=(i)=>{const r=HIT[i];if(!r)return;
-  if(!mkMap())return;
-  const p=place(r);
-  if(!p){m2('Hindi mabasa ang coordinates ng resultang iyon.','bad');return}
-  m2('Nandyan na ang mapa (zoom '+p.z+'): <b>'+String(r.display_name||'').split(',').map(x=>x.trim()).filter(x=>x).slice(0,3).join(', ')+'</b> ('+p.lat.toFixed(5)+', '+p.lng.toFixed(5)+'). I-tap na rito ang susunod na pin — awtomatiko ang ① CAFAC, ② Bahay, ③ kada likuan.','ok');
-  logEv('MAP SEARCH','LONG/LAT - CAFAC',lastQ+' -> '+String(r.display_name||'').slice(0,90))};
- const search=()=>{
-  const el=$('rtq');if(!el)return;
-  const q=String(el.value||'').trim();
-  const x=$('rtqx');if(x)x.style.display=q?'':'none';
-  if(q.length<3){m2('Mag-type ng kahit 3 letra — halimbawa <b>Anabu 1-A Imus</b> o <b>Magsinhorn Alfonso Cavite</b>.','bad');return}
-  if(!mkMap()){m2('Hindi nag-load ang mapa — gamitin ang <b>Manual na LONG/LAT</b> sa baba.','bad');return}
-  if(gap()<1100){m2('Hintay sandali — isang hiling bawat segundo lang ang tinatanggap ng OSM search, para hindi tayo ma-block. Pindot ulit ng <b>🔍 Hanapin</b>.','');return}
-  m2('Hinahanap ang '+q+' ...','');
-  nom(q,(list,qq,err)=>{
-   if(err){m2('Hindi naabot ang search ('+err+') — hintayin ng isang minuto bago ulitin, bina-bawalan ng OSM ang mabilis-mabilis na hiling. Samantala: i-tap na lang mismo ang mapa o gamitin ang <b>Manual na LONG/LAT</b> sa baba — walang bayad ang pareho.','bad');return}
-   listRes(list,qq);
-   if(x)x.style.display='';
-   m2(list.length?list.length+' resulta para sa <b>'+qq+'</b> — pindot ang isa para ilipat doon ang mapa.':'Walang natagpuang <b>'+qq+'</b> — subukan ang <b>barangay + ciudad</b> o pangalan ng kalye.',list.length?'ok':'bad')},true)};
  const cleanB=s=>String(s||'').replace(/^(BARANGAY|BOBARANGAY|BRGY|BGY|BAYAN)\.?\s*/i,'').replace(/\s+/g,' ').trim();
  const place=(r)=>{const la=+r.lat,lo=+r.lon;
   if(!isFinite(la)||!isFinite(lo))return null;
@@ -2150,7 +2113,7 @@ window.LL=(()=>{
   if(bOk)push(b);
   if(s)push(cleanB(s)+' '+c);
   if(c)push(c+' Cavite');
-  if(!qs.length){m2('Walang nakalagay na barangay sa '+o.c+' sa facility data — hanapin sa <b>🔍 Hanapin</b> o i-type ang LONG/LAT.','bad');return}
+  if(!qs.length){m2('Walang nakalagay na barangay sa '+o.c+' sa facility data — i-drag ang mapa o i-type ang <b>Manual na LONG/LAT</b> sa baba.','bad');return}
   const want=cleanB(o.r.b).toUpperCase();
   const toks=want.split(/[^A-Z]+/).filter(x=>x.length>2);
   // Place result whose NAME leads the display string ay tama na — maraming barangay sa OSM ang
@@ -2160,7 +2123,7 @@ window.LL=(()=>{
   chain(qs,(hit)=>{
    if(picked!==o.c)return;
    if(hit&&hit.err){m2('Hindi naabot ang OSM search ('+hit.err+') — hintayin ng isang minuto, pagkatapos pindot ulit ang CAFAC. Samantala: i-drag na lang ang mapa o gamitin ang <b>Manual na LONG/LAT</b>.','bad');return}
-   if(!hit){m2('Hindi matagpuan sa OSM ang '+cleanB(o.r.b)+', '+o.r.c+' — mag-search sa <b>🔍 Hanapin</b> o gamitin ang <b>Manual na LONG/LAT</b>.','bad');return}
+   if(!hit){m2('Hindi matagpuan sa OSM ang '+cleanB(o.r.b)+', '+o.r.c+' — i-drag na lang ang mapa sa lugar o gamitin ang <b>Manual na LONG/LAT</b> sa baba.','bad');return}
    const p=place(hit.r);
    if(!p){m2('Hindi mabasa ang coordinates ng '+hit.q+'.','bad');return}
    const disp=String(hit.r.display_name||'');
@@ -2171,7 +2134,7 @@ window.LL=(()=>{
    const tama=!hit.alt&&yes;
    if(tama)m2('Izoom sa barangay na <b>'+nm+'</b> (zoom '+p.z+'). I-tap na doon ang ① CAFAC — pagkatapos niyan ay awtomatiko na ang ② bahay at ③ kada likuan.','ok');
    else if(hit.alt)m2('Walang barangay boundary sa OSM para sa '+cleanB(o.r.b)+' — eto ang pinakamalapit na match: <b>'+nm+'</b> (zoom '+p.z+'). Kumpirmahin bago mag-tap ng ① CAFAC.','bad');
-   else m2('Hindi eksakto ang pangalan ng barangay na <b>'+cleanB(o.r.b)+'</b> sa nakita — pinakamalapit ay <b>'+nm+'</b> (zoom '+p.z+'). Kumpirmahin bago mag-tap ng ① CAFAC, o hanapin sa <b>🔍 Hanapin</b>.','bad');
+   else m2('Hindi eksakto ang pangalan ng barangay na <b>'+cleanB(o.r.b)+'</b> sa nakita — pinakamalapit ay <b>'+nm+'</b> (zoom '+p.z+'). Kumpirmahin bago mag-tap ng ① CAFAC, o i-drag ang mapa sa eksaktong lugar.','bad');
    let sfx=' (BND)';
    if(hit.alt){sfx=' (POI)'}
    else if(hit.soft){sfx=' (PLACE)'}
@@ -2203,10 +2166,6 @@ window.LL=(()=>{
   '<button class="llbtn" id="rtsave">💾 I-save ang daan</button>'+
   '<button class="llbtn red" id="rtdel">🗑 Tanggalin ang naka-save</button>'+
   '</div>'+
-  '<div class="llsrch"><input id="rtq" placeholder="Hanapin: barangay, ciudad o kalye (hal. Anabu 1-A Imus)" autocomplete="off" spellcheck="false" enterkeyhint="search">'+
-  '<button class="llbtn" id="rtgo">&#128269; Hanapin</button>'+
-  '<button class="llbtn red" id="rtqx" style="display:none">&#10006;</button></div>'+
-  '<div class="llres" id="rtres"></div>'+
   '<div class="rtwrap"><div class="rtmap" id="rtmap"></div>'+
   '<div class="xh" id="xh" style="display:none"><i></i><j></j></div></div>'+
   '<div class="lltools lltools2">'+
@@ -2272,11 +2231,6 @@ window.LL=(()=>{
   $('rtclear').onclick=()=>{clearAll();m2('Binura ang mga punto sa mapa — hindi ang naka-save.','')};
   $('rtsave').onclick=saveR;
   $('rtdel').onclick=delR;
-  $('rtgo').onclick=search;
-  $('rtqx').onclick=()=>{const el=$('rtq');el.value='';el.focus();clrRes();m2('','')};
-  $('rtres').onclick=e=>{const b=e.target.closest('.llr');if(b)goRes(+b.dataset.i)};
-  $('rtq').addEventListener('input',()=>{const x=$('rtqx');if(x)x.style.display=$('rtq').value?'':'none'});
-  $('rtq').addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();search()}});
   $('bmap').onclick=()=>baseWhich('osm');
   $('bsat').onclick=()=>baseWhich('sat');
   const t3=$('t3');if(t3)t3.onclick=()=>{document.body.classList.add('fcv');mode('ll')};
@@ -2289,8 +2243,6 @@ window.LL=(()=>{
  return {render,pick,count:()=>all().length,kml:kmlText,gpx:gpxText,pins:()=>P,routes:()=>R,save:savePin,saveRoute:saveR,n:keys,
   tool:(t)=>setTool(t),
   tap:(lng,lat)=>{if(!mkMap())return null;putPin([lat,lng],'tap');return [lat,lng]},
-  km:()=>+totKm().toFixed(3),straight:()=>+straightKm().toFixed(3),clear:clearAll,map:()=>M,
-  search:(s)=>{const e=$('rtq');if(e&&typeof s==='string')e.value=s;search()},
-  hits:()=>HIT.length,names:()=>HIT.map(r=>r.display_name),go:goRes,clr:clrRes}})();
+  km:()=>+totKm().toFixed(3),straight:()=>+straightKm().toFixed(3),clear:clearAll,map:()=>M}})();
 </script>
 </body></html>
