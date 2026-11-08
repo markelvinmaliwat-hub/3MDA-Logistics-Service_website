@@ -278,11 +278,35 @@ FACILITY CHECKING, `#t3` LONG/LAT - CAFAC): a lookup first, then a map the agent
   `.llmap` is now an in-dashboard Leaflet map he can trace on. He rejected the pin-only version - *"mali ang map
   nais ko gawin ay mag lagay ng mapa kung saan puwede mag PIN si agent simula sa cafac papunta sa bahay ni client
   pero hindi lang basta pin kundi ipipin nila yung pinaka daan papunta doon para eksakto ang sukat"* - and chose
-  **"A puro manual, B dalawang hakbang"**: no auto-routing now, sharing with the agents in step 2 after he
-  approves the look. Tool row: `① CAFAC`, `② Bahay ng client`, `③ Punto ng daan`, `↺ Bawi`, `⤢ I-fit`,
-  `✖ Burahin lahat`, `💾 I-save ang daan`, `🗑 Tanggalin ang naka-save`; below the map `🗺️ Mapa` / `🛰️ Satellite`
-  and the KML/GPX/Google buttons. The distance is the **sum of his own taps** (`hav()` over start &rarr; waypoints
-  &rarr; end), shown next to the straight-line value with the gap called out, so a lazy trace is visible.
+  **"A puro manual, B dalawang hakbang"**, then came back for more: *"MAARI MO BANG GAWIN NA MAS MADALI PARA SA
+  AHENTE NA MAG LAGAY NG PIN NG CAFAC AT PIN NG BAHAY AT PADALIIN DIN ANG PAG ZOOM IN AT ZOOM OUT NG MAP BIGYAN MO
+  DIN NG MABILIS AT MADALING PAG TRACE NG DAAN PAPUNTA SA BAWAT PIN YUNG ACURATE NA MISMO"* - and chose
+  **"A: Auto-sunod sa kalye"**, so the line and the measurement now follow the **actual street geometry** from the
+  free OpenStreetMap routing server (step 2, sharing with the agents, is still waiting on his approval of the look).
+  Tool row above the map: `① CAFAC`, `② Bahay ng client`, `③ Punto ng daan`, `↺ Bawi`, `⤢ I-fit`,
+  `✖ Burahin lahat`, `💾 I-save ang daan`, `🗑 Tanggalin ang naka-save`; a second row below it `➕ Zoom in`,
+  `➖ Zoom out`, `🎯 Sa gitna ng mapa`, `✛ Ipakita ang gitna`, `📌 ① mula sa naka-save`; then `🗺️ Mapa` / `🛰️ Satellite`
+  and the KML/GPX/Google buttons.
+  * **Auto-sunod: ① &rarr; ② &rarr; ③④⑤ without touching a tool button.** `nextTool()` returns `start` while
+    there is no CAFAC pin, `end` while there is no house pin, then `road` forever, and `putPin()` re-arms it after
+    every tap - so the agent's whole job is **tap the CAFAC, tap the house, tap each likuan**. The same helper serves
+    the tap, the `🎯` center button and the `📌` saved-pin button, so all three advance in the same order. The ①
+    tap also **auto-saves** the CAFAC pin to `mm_cafac_ll` on the spot (no `💾` press), which is what makes
+    `📌 ① mula sa naka-save` able to drop it back later.
+  * **Ang daan = totoong kalye, OSRM public demo** `router.project-osrm.org/route/v1/driving/<lng,lat;…>?overview=full&geometries=geojson` -
+    **no key, no billing, CORS `*`**, measured HTTP 200 from his `github.io` origin (752 ms / 142 points / 1,429 m;
+    a 3-coordinate request answered in 265 ms and `routes[0].legs[i].distance` summed exactly to `routes[0].distance`).
+    Traps measured the hard way: `/match/v1/driving` &rarr; **400 NoMatch**, and asking for `annotations=geometry`
+    or `legs=true` &rarr; **400 InvalidQuery** (the legs arrive free with `geometries=geojson` anyway). **OSRM takes
+    `lng,lat`** while internal points are `[lat,lng]`, so `sigOf()` is the single place that flips the order for both
+    the URL and the dedupe key. One request per **changed** set of taps (`oSig`), throttled to 1 req/s (`oLast`),
+    60 s cool-down on a 403/429, and a `oSeq` guard so a slow answer to an old tap-set cannot paint over a new one.
+  * **Honest fallback: "hop".** If the routing server cannot be reached the readout falls back to the straight
+    hops between his taps and *says so* - the label after every distance is `kalye` or `hop`, and the total line
+    reads either *"(sunod sa totoong kalye, N punto sa pagitan)"* or *"(hop mula sa mga tap mo, N punto)"*. The
+    failure message tells him to keep tapping and press `⤢ I-fit` to retry, because `fit()` calls `osrm()` and the
+    failure path clears `oSig` (without that reset, re-tapping looked dead). Verified with a rejecting `fetch` stub:
+    hop message &rarr; `⤢ I-fit` &rarr; 1.43 km kalye.
   * **Search bar (`🔍 Hanapin`) above the map** (he asked: *"lagyan ng search bar sa maps upang mas madali makita
     ang location na hinahanap dito"*, then picked **"B: Nominatim lang"** over a local-first index). One GET to
     `nominatim.openstreetmap.org/search?format=jsonv2&limit=3&countrycodes=ph&accept-language=en&q=` - **no key,
@@ -291,9 +315,8 @@ FACILITY CHECKING, `#t3` LONG/LAT - CAFAC): a lookup first, then a map the agent
     hiling bawat segundo lang ang tinatanggap ng OSM search"*, because that is OSM's published policy. Fewer than
     3 characters is refused. Results are tappable rows (`Anabu I-A, Imus` / `Cavite, Calabarzon, 4103, Philippines`);
     a tap hands it to `place()` (fit the polygon when OSM returns one, else `setView` at `zoomOf` - **17 for a way**)
-    and the trace tools are untouched, so the
-    measurement is still his own taps. Anything that cannot be reached says so and points at the tap flow or the
-    manual `LONG/LAT` inputs.
+    and the trace tools are untouched, so searching to look around never loses his pins. Anything that cannot be
+    reached says so and points at the tap flow or the manual `LONG/LAT` inputs.
     * **`limit=3`, not `limit=5`.** On his `github.io` origin, at the same second and the same query,
       `q=ANABU%202-A%20IMUS&limit=3` answered **HTTP 200 / boundary `Anabu II-A, Imus, Cavite, 4103`** while
       `...&limit=5` died with **`TypeError: Failed to fetch` in 10 ms** - the refusal is the *bigger* answer, and a
@@ -359,13 +382,37 @@ FACILITY CHECKING, `#t3` LONG/LAT - CAFAC): a lookup first, then a map the agent
     * **Why this matters for his data (measured over all 15,999 CAFAC rows):** 15,164 (94.8%) name a barangay that can
       be searched, 835 (5.2%) hold only a bare number (`BGY 2`, `BGY 3`) and 0 are blank; the distinct
       `BRGY|CITY` pairs total **917**. The numbered ones get the honest warning above, not a wrong zoom.
-  * **The readout row under the map now carries the measurement and both pins' coordinates** - `#rtrow`:
-    `<X> m ang daan (N punto sa pagitan)`, `<Y> m layo ng CAFAC &rarr; bahay (tuwiran, hindi daan)`, `Lumibot ng &hellip;`
-    when the trace wanders more than 20 m off the straight line, then one `.rtp` line per end:
+  * **The readout row under the map (`#rtrow`) is now the measurement, the pins, and the road section by section:**
+    `<X> m ang daan (sunod sa totoong kalye, N punto sa pagitan)` or the `hop` wording above,
+    `<Y> m layo ng CAFAC &rarr; bahay (tuwiran, hindi daan)`, `Lumibot ng &hellip;` when the trace wanders more than
+    20 m off the straight line, then a headed block **ANG DAAN PIN BY PIN** with one `.rtp` row per leg -
+    `CAFAC &rarr; BAHAY · 660 m · kalye · LONG 120.940700 · LAT 14.401200` - where `lbl()` names leg 0 `CAFAC`, the last
+    point `BAHAY` and everything between is numbered from 1, so each likuan's distance and coordinates are readable
+    without opening the map. Below it, one `.rtp` line per end:
     `PIN NG CAFAC LONG 120.936500 &middot; LAT 14.384200` and `PIN NG BAHAY LONG 120.939000 &middot; LAT 14.387000`
     (6 decimals, `LONG` first - the order his SW Maps export uses). If the CAFAC end is not tapped yet but that CAFAC
-    already has a saved pin, the line reads `PIN NG CAFAC (naka-save)`. Measured with 2 waypoints: **413 m road vs
-    412 m straight**; with 0 waypoints after `💾 I-save ang daan` the row reloads at zoom 16 and both lines print.
+    already has a saved pin, the line reads `PIN NG CAFAC (naka-save)`.
+    Measured live on his `github.io` origin, `DASLPE73NP1` + two real map taps and **0 waypoints**:
+    **660 m ang daan (kalye) vs 382 m tuwiran, lumibot ng 278 m** - the road is *longer* than the straight line by
+    design, which is the whole point of routing; the old tap-sum build reported 413 m vs 412 m for the same job.
+    A second pair 411 m apart answered **2.95 km kalye / lumibot ng 2.54 km**, and `curl` on the identical URL
+    confirmed the server really said that (HTTP 200 in 0.82 s, 87 points, `legs=[2950.1]`, start snapped 75 m to the
+    nearest mapped road) - so a big *Lumibot ng* number is **OSM's drivable network**, not my arithmetic, and it is
+    exactly the signal that tells the agent to tap the likuan himself with `③`.
+  * **Zoom is now a button, not a gesture** (`➕ Zoom in` / `➖ Zoom out`, +1 step each, and the Leaflet `+`/`-`
+    controls were enlarged to 38 px for thumbs). `🎯 Sa gitna ng mapa` drops the next pin at the exact center, which
+    is how an agent aims a pin he cannot see under his thumb, and `✛ Ipakita ang gitna` turns on `#xh` - a red
+    crosshair with a white halo, `pointer-events:none`, dead-center over `#rtmap` inside `.rtwrap` - so the center is
+    visible before he presses `🎯`.
+  * **Every programmatic view change passes `{animate:false}`** - `zoomIn`, `zoomOut`, `setView`, `fitBounds` and
+    the saved-pin jump. Measured: `M.setZoom(14)` in this browser surface **never completes** (the zoom stayed 11
+    forever, because Leaflet waits for a `transitionend` that does not fire here), while `setZoom(14,{animate:false})`
+    landed instantly. It looked like dead buttons until the flag was added.
+  * **Test trap: measure the zoom with the panel open.** Calling `LL.pick()` while `#llp` is still `hidden` leaves
+    the map container `0x0`, and `fitBounds` on a zero-size map resolves to `minZoom` - the readout then says
+    *"Anabu II-A, Imus, Cavite **(zoom 0)**"*, which is not a code regression (an agent can only pick a CAFAC from
+    the suggestion rows *inside* the open panel). Clicking the `LONG/LAT - CAFAC` pill first re-measures the same
+    pick as **zoom 15**, center `14.38451, 120.93687`, 8/8 tiles loaded and **0 stuck at opacity 0**, 1 OSM request.
   * Leaflet 1.9.4 is **inlined** in the page (no CDN, no SRI, no key) with keyless OSM tiles + Esri World Imagery,
     and markers are `L.divIcon` text icons so no image assets ship. `scrollWheelZoom:false`; `invalidateSize()`
     on open/resize; **no auto-fit on tap** (his old complaint *"bigla bigla syang nag zoom out"*) - fit only via
@@ -379,14 +426,25 @@ FACILITY CHECKING, `#t3` LONG/LAT - CAFAC): a lookup first, then a map the agent
     150/600 ms after open, and `⤢ I-fit` doubles as the manual repair when there is no trace yet. Measured after
     the fix: **8/8 tiles loaded, 0 at opacity 0**, on the OSM and the Esri layer alike.
   * Routes live in `localStorage.mm_routes` keyed `"<CAFAC>|<SUBSCRIBER NAME UPPERCASE>"` as
-    `{c,nm,s:[lng,lat],e:[lng,lat],w:[[lng,lat]...],km,ts}`. `💾 I-save` requires a picked CAFAC + a name + both
+    `{c,nm,s:[lng,lat],e:[lng,lat],w:[[lng,lat]...],km,ts,rd,L:[km per leg],g:[[lng,lat]... thinned to &le;400]}` -
+    `rd`/`L`/`g` are new with routing: the OSRM total, the per-leg distances and the fitted street line itself, so
+    **a reload costs 0 requests** (measured: `loadR()` restores `RG/RD/RL`, sets `oSig=sigOf()` and the next
+    `sync()` sees an unchanged signature and never asks OSRM again). `thin()` keeps the saved blob under ~400 points
+    so one route is a few KB, not 142 raw vertices. `💾 I-save` requires a picked CAFAC + a name + both
     ends, and auto-writes the CAFAC pin into `mm_cafac_ll` if it has none. Re-picking that CAFAC reloads and fits
-    the trace (measured: zoom 16, center 14.082/120.9835).
+    the trace (measured: zoom 16, center 14.082/120.9835) and the per-leg rows still say `kalye`, not `hop` -
+    they said `hop` until `L` was persisted.
+  * The **export follows the same source as the readout**: the KML `<LineString>` and the GPX `<rte>` use `r.g`
+    when the record has real street geometry (its `<description>` says `totoong kalye (OSRM)`) and fall back to his
+    taps with the `mga tap` wording when it does not, so a file he hands to PLDT is the road he traced, not a
+    polyline between his fingers.
   * A waypoint marker tap deletes that point (*"Tinanggal ang punto 1."*); `↺ Bawi` refuses when empty
     (*"Wala pang punto ng daan ang babawiin."*); `✖ Burahin lahat` clears the map but not the saved route.
-  * Measured on a 3-waypoint trace: **892 m road vs 876 m straight**, save &rarr; 1 key in `mm_routes`, export
+  * Measured on a 3-waypoint trace **before the kalye routing landed**: **892 m road vs 876 m straight**, save &rarr;
+    1 key in `mm_routes`, export
     &rarr; KML 1,000 B with 2 `<Placemark>` (pin + one `<LineString><tessellate>1</tessellate>`) and GPX 805 B with
     1 `<wpt>` + 1 `<rte>` of 5 `<rtept>` (`CAFAC &rarr; 1..3 &rarr; BAHAY`); both re-parse clean with `DOMParser`.
+    The same file shapes now carry `r.g` when the trace has street geometry; the numbers above are the tap-hop case.
   * Empty-state guards all answer on screen: no CAFAC + `🗑` &rarr; *"Pumili muna ng CAFAC sa listahan bago
     mag-bura."*, no points + export &rarr; *"Wala pang naka-save na pin o daan — mag-tap muna sa mapa at pindot
     ang I-save."*
@@ -398,14 +456,21 @@ FACILITY CHECKING, `#t3` LONG/LAT - CAFAC): a lookup first, then a map the agent
     balikan mo."*, and `14,080000` (comma) is accepted and stored as `14.08`; values round to 6 decimals.
   * Still device-only: no server, no cost, and **agents do not see each other's pins or roads** until he exports
     the KML. Step 2 (only after he approves the look) is a `ROUTES` tab in his Sheet + an Apps Script endpoint.
-* **What it is NOT:** no table, no saved-list UI of its own, no geocoder, **no auto-routing / road API**, no
-  offline tile cache, no API key, no bill. The earlier registry shape (`mm_ll` + table) was removed on his word
-  `wag na mag lagay ng kagaya ng nasa litrato`, and the two routing builds are gone too - see
-  [[project-3mda-facility-route]].
+* **What it is NOT:** no table, no saved-list UI of its own, no offline tile cache, **no API key and no bill** -
+  the geocode is OSM Nominatim and the road fit is the public OSRM demo server, both free and both used only
+  inside his rate limit. Step 2 of the earlier plan still holds: **agents do not see each other's roads** until he
+  approves the look and the `ROUTES` tab exists. The earlier registry shape (`mm_ll` + its table) was removed on
+  his word `wag na mag lagay ng kagaya ng nasa litrato` and stays removed. The two *facility-tab* routing builds
+  are still gone - see
+  [[project-3mda-facility-route]]; this routing lives only in `LONG/LAT - CAFAC` and is what he asked for on
+  2026-11-08.
 * **Mobile (`html.vm`):** the three pills stay on one line (shrunk to 11.5 px / 8 px padding - measured 79 + 163
   + 157 px inside a 417 px row at a 735 px viewport), the inputs and suggestion rows are 44 px, `.llsug` scrolls
   inside a 182 px box (32 vh), and under 900 px all three boxes stack. In the maps box the tool buttons wrap
-  2-per-row at 44 px+ (measured 133x56 px for `① CAFAC` at 735 px), the map is 634 x 296 px, and
+  2-per-row at 44 px+ (measured 133x56 px for `① CAFAC` at 735 px). With the `➕ / ➖ / 🎯 / ✛ / 📌` row the panel now
+  holds **24 buttons** - 23 visible at 735 px (the search-clear `✖` only appears once there is a query) and the
+  measured **minimum height is 44 px**, none under it, `scrollWidth` == `clientWidth` == 735 px. The map is
+  634 x 296 px, and
   `documentElement.scrollWidth` stays at the viewport width - no horizontal overflow.
 * **Existing behavior untouched:** `mode()` keeps `in` and `fc` exactly as before and only gained the null-
   guarded `ll` branch; the panel is injected by the block's own `init()` (`window.LL`) after `#fcp`, not in
