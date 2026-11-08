@@ -1969,7 +1969,7 @@ window.LL=(()=>{
   if(gap()<1100)return false;
   const my=++seq;lastReq=Date.now();lastQ=q;
   // cache:'no-store' — isang naka-cache na 403 ay paulit-ulit na ibabalik ng browser kahit walang CORS header.
-  fetch(NQ+encodeURIComponent(q)+(bias?vb():''),{cache:'no-store'})
+  fetch(NQ+encodeURIComponent(q).replace(/%2C/g,'%20')+(bias?vb():''),{cache:'no-store'})
    .then(r=>{if(r.status===403){blockT=Date.now()}if(!r.ok)throw new Error('HTTP '+r.status);return r.json()})
    .then(a=>{if(my===seq)cb(Array.isArray(a)?a:[],q,'')})
    .catch(e=>{if(my===seq)cb([],q,String(e&&e.message||e))});
@@ -1984,13 +1984,13 @@ window.LL=(()=>{
  // ang POI ay last-resort lang kasi hindi iyon ang hugis ng barangay.
  const chain=(qs,done,onQ)=>{
   if(!qs.length){done(null);return}
-  let alt=null,i=0;
+  let alt=null,i=0,err1='';
   const step=()=>{
-   if(i>=qs.length){done(alt?{r:alt,alt:true}:null);return}
+   if(i>=qs.length){done(alt?{r:alt,alt:true}:(err1?{err:err1}:null));return}
    const q=qs[i++];
    if(onQ)onQ(q,i);
    const fire=()=>nom(q,(list,qq,err)=>{
-    if(err){done({err:err,q:qq});return}
+    if(err){if(!err1)err1=err;step();return}
     const a=list.find(isArea);
     if(a){done({r:a,q:qq});return}
     if(!alt&&list.length)alt=list[0];
@@ -2042,11 +2042,13 @@ window.LL=(()=>{
   const qs=[],seen={};
   const push=q=>{const k=q.toUpperCase();if(q.length>2&&!seen[k]&&qs.length<4){seen[k]=1;qs.push(q)}};
   const bOk=b&&/[A-Za-z]/.test(b);
-  if(bOk&&c)push(b+', '+c);
+  // Walang kuwit sa query: ang "ANABU 2-A, IMUS" ay tinatanggap ng curl pero tinatanggihan ng browser
+  // (Failed to fetch sa 11 ms — ang sagot ng WAF ay walang Access-Control-Allow-Origin), ang
+  // "ANABU 2-A IMUS" naman ay 200/1 resulta. Espasyo lang ang gambalat.
+  if(bOk&&c)push(b+' '+c);
   if(bOk)push(b);
-  if(bOk&&c)push(b+', '+c+', Cavite');
-  if(s&&c)push(cleanB(s)+', '+c);
-  if(c)push(c+', Cavite');
+  if(s)push(cleanB(s)+' '+c);
+  if(c)push(c+' Cavite');
   if(!qs.length){m2('Walang nakalagay na barangay sa '+o.c+' sa facility data — hanapin sa <b>🔍 Hanapin</b> o i-type ang LONG/LAT.','bad');return}
   chain(qs,(hit)=>{
    if(picked!==o.c)return;
