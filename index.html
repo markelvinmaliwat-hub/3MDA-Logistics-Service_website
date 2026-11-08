@@ -1979,20 +1979,23 @@ window.LL=(()=>{
   if(c==='boundary')return 15;
   if(c==='highway')return 17;
   return 16};
- const isArea=r=>{const c=String(r.category);return c==='boundary'||c==='place'};
- // Sunod-sunod na pag-hanap (barangay+city, barangay lang, site, ciudad) — ang BOUNDARY ang pinipili,
- // ang POI ay last-resort lang kasi hindi iyon ang hugis ng barangay.
+ const isBnd=r=>String(r.category)==='boundary';
+ const isPlc=r=>String(r.category)==='place';
+ // Sunod-sunod na pag-hanap (barangay+ciudad, barangay lang, site, ciudad). Ang BOUNDARY polygon ang
+ // hinahanap; ang place/suburb ay hintayin hanggang sa maubos ang mga query bago gamitin, kasi ang
+ // "ANABU 2-A" nagbabalik ng PLAZA HOMES (isang subdivision sa loob ng barangay) bilang place.
  const chain=(qs,done,onQ)=>{
   if(!qs.length){done(null);return}
-  let alt=null,i=0,err1='';
+  let plc=null,alt=null,i=0,err1='';
   const step=()=>{
-   if(i>=qs.length){done(alt?{r:alt,alt:true}:(err1?{err:err1}:null));return}
+   if(i>=qs.length){done(plc?{r:plc.r,q:plc.q,soft:true}:(alt?{r:alt,alt:true}:(err1?{err:err1}:null)));return}
    const q=qs[i++];
    if(onQ)onQ(q,i);
    const fire=()=>nom(q,(list,qq,err)=>{
     if(err){if(!err1)err1=err;step();return}
-    const a=list.find(isArea);
-    if(a){done({r:a,q:qq});return}
+    const bnd=list.find(isBnd);
+    if(bnd){done({r:bnd,q:qq});return}
+    if(!plc){const pl=list.find(isPlc);if(pl)plc={r:pl,q:qq}}
     if(!alt&&list.length)alt=list[0];
     step()},false);
    if(gap()<1160)setTimeout(fire,1170-gap());else fire()}
@@ -2067,7 +2070,11 @@ window.LL=(()=>{
    if(tama)m2('Izoom sa barangay na <b>'+nm+'</b> (zoom '+p.z+'). I-tap na doon ang ① CAFAC, pagkatapos ② Bahay.','ok');
    else if(hit.alt)m2('Walang barangay boundary sa OSM para sa '+cleanB(o.r.b)+' — eto ang pinakamalapit na match: <b>'+nm+'</b> (zoom '+p.z+'). Kumpirmahin bago mag-tap ng ① CAFAC.','bad');
    else m2('Hindi eksakto ang pangalan ng barangay na <b>'+cleanB(o.r.b)+'</b> sa nakita — pinakamalapit ay <b>'+nm+'</b> (zoom '+p.z+'). Kumpirmahin bago mag-tap ng ① CAFAC, o hanapin sa <b>🔍 Hanapin</b>.','bad');
-   logEv('MAP BARANGAY','LONG/LAT - CAFAC',o.c+' -> '+hit.q+' @ '+p.lat.toFixed(5)+','+p.lng.toFixed(5)+' z'+p.z+(hit.alt?' (POI)':(tama?'':' (LAAS)')))},
+   let sfx=' (BND)';
+   if(hit.alt)sfx=' (POI)';
+   else if(hit.soft)sfx=' (PLACE)';
+   else if(!tama)sfx=' (LAAS)';
+   logEv('MAP BARANGAY','LONG/LAT - CAFAC',o.c+' -> '+hit.q+' @ '+p.lat.toFixed(5)+','+p.lng.toFixed(5)+' z'+p.z+sfx)},
    (q,i)=>{if(picked===o.c)m2('Izoom sa barangay ng '+o.c+' — pagsubok '+i+': <b>'+q+'</b> ...','')})};
 
  const panel='<div class="fcp" id="llp" hidden>'+
