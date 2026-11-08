@@ -1692,6 +1692,13 @@ html.vm .hp button{padding:8px 10px;font-size:11.5px;letter-spacing:0}
 #llp .rtmini{width:104px;height:78px;flex:0 0 104px;border-radius:10px;border:1px solid var(--line);background:#e8eef6;overflow:hidden}
 #llp .rtmini canvas{display:block;width:104px;height:78px}
 #llp .llmini{font-size:9px;color:var(--mut);text-align:center;padding-top:30px}
+#llp .rtzoom{display:flex;align-items:center;gap:10px;margin:2px 0 8px;padding:0 2px}
+#llp .rtzoom span{font-size:10.5px;font-weight:800;letter-spacing:0.07em;color:var(--mut);white-space:nowrap}
+#llp .rtzoom input{flex:1;height:34px;accent-color:var(--red);touch-action:none;cursor:pointer}
+#llp .rtzoom b{font-size:12.5px;font-weight:800;min-width:26px;text-align:right}
+#llp .lltools2 .llbtn{touch-action:manipulation;-webkit-touch-callout:none;user-select:none}
+@media(max-width:760px){#llp .rtzoom input{height:44px}}
+
 #llp .rtsend{display:block;width:100%;margin-top:4px;padding:13px 0;min-height:44px;border:0;border-radius:14px;background:var(--red);color:#fff;font:inherit;font-size:14.5px;font-weight:800;letter-spacing:0.06em;cursor:pointer}
 #llp .llsaved{margin-top:8px;font-size:12.5px;color:var(--mut)}
 #llp .llsaved b{color:var(--ink)}
@@ -1937,6 +1944,9 @@ window.LL=(()=>{
   if(cv)box.appendChild(cv)};
  const sendShot=()=>{
   const a=path();
+  if(!picked){m2('Kailangan muna pumili ng <b>① CAFAC</b> - may node bago ang mail.','bad');return}
+  if(!nameOf()){m2('Kailangan muna ilagay ang <b>SUBSCRIBER NAME</b> - '+
+   'isang application ang nasasave, hindi lang mapa.','bad');return}
   if(a.length<2){m2('Kulang pa ang daan \u2014 i-tap muna ang \u2460 CAFAC at \u2461 bahay bago mag-SEND.','bad');return}
   if(!M){m2('Hindi nag-load ang mapa \u2014 walang makuha na screenshot.','bad');return}
   let cv=null,er='';
@@ -1990,6 +2000,38 @@ window.LL=(()=>{
  const wake=(hard)=>{if(!M)return;M.invalidateSize({animate:false});
   if(hard){const l=RT.sat&&RT.sat._map===M?RT.sat:RT.osm;if(l&&l.redraw)l.redraw()}
   paint();setTimeout(paint,150);setTimeout(paint,600)};
+ /* ---- ZOOM: isang drag o isang hold, hindi pindot-pindot. Ang animated na zoom ay Leaflet
+    mismo. Sa mga surface na hindi natatapos ang transition (in-app browser) ay 420 ms
+    pagkatapos pipilitin namin ang eksaktong level - iisang resulta, walang stuck na transform. */
+ let zTok=0,zWant=null;
+ const zClamp=(z)=>Math.max(3,Math.min(19,Math.round(z)));
+ const zsync=()=>{const s=$('rtzsl'),v=$('rtzvl');if(!s||!M)return;const z=M.getZoom();
+  if(+s.value!==z)s.value=z;if(v)v.textContent=z};
+ // Leaflet mismo ang gumagawa ng transition. Ang target ay naka-memorya (zWant) para ang
+ // hold-repeat ay tumayo sa susunod na hakbang kahit hindi pa tapos ang nauna.
+ const zTo=(want)=>{if(!M)return;const z=zClamp(want);
+  if(z===M.getZoom()&&zWant===null){zsync();return}
+  const tok=++zTok,c=M.getCenter();let done=false;
+  zWant=z;
+  const clr=()=>{done=true;zWant=null;M.off('zoomend',ok)};
+  const ok=()=>{if(M.getZoom()===z)clr()};
+  M.on('zoomend',ok);
+  M.setView(c,z,{animate:true});
+  // Sa surface na hindi natatapos ang transition (hidden page, in-app browser) ang level ay
+  // hindi kailanman naa-apply — 650 ms pipilitin namin ang parehong level nang walang animation.
+  setTimeout(()=>{if(done||tok!==zTok)return;clr();zsync();
+   if(M.getZoom()!==z){M.setView(M.getCenter(),z,{animate:false});wake(false);m2('Zoom '+z+'.','')}},650)};
+ // Isang pindot = isang hakbang (may transition); iyak = tuloy-tuloy, isang hakbang bawat 240 ms
+ // (may-akma sa tagal ng Leaflet transition) para hindi mag-aberahan ang animation.
+ const zNudge=(step)=>{if(!mkMap())return false;
+  zTo((zWant!==null?zWant:M.getZoom())+step);return true};
+ const holdZoom=(id,step)=>{const b=$(id);if(!b)return;let tl=null,iv=null;
+  const stop=()=>{if(tl){clearTimeout(tl);tl=null}if(iv){clearInterval(iv);iv=null}};
+  b.addEventListener('pointerdown',e=>{if(e.button)return;if(!zNudge(step))return;stop();
+   tl=setTimeout(()=>{tl=null;iv=setInterval(()=>zNudge(step),240)},400)});
+  ['pointerup','pointercancel','pointerleave'].forEach(x=>b.addEventListener(x,stop));
+  window.addEventListener('blur',stop);
+  b.addEventListener('click',e=>{if(e.detail>0)return;zNudge(step)})};
  let terr=0;
  const tileErr=()=>{terr++;m2('Hindi ma-load ang tile ng mapa ('+terr+') — kung mahina ang internet, gamitin ang <b>Manual na LONG/LAT</b> sa baba ng box.','bad')};
  const home=()=>{const v=picked&&P[picked];
@@ -2025,12 +2067,14 @@ window.LL=(()=>{
   if(typeof L==='undefined'){m2('Hindi nag-load ang map library (Leaflet).','bad');return false}
   const el=$('rtmap');if(!el)return false;
   const h=home();
-  M=L.map(el,{zoomControl:true,scrollWheelZoom:false}).setView(h.c,h.z);
+  M=L.map(el,{zoomControl:true,scrollWheelZoom:false,zoomAnimation:true,zoomAnimationThreshold:5,
+    touchZoom:true,doubleClickZoom:true,bounceAtZoomLimits:false,inertia:true}).setView(h.c,h.z);
   RT.osm=L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:19,crossOrigin:true,attribution:'&copy; OpenStreetMap'}).addTo(M);
   RT.sat=L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',{maxZoom:19,crossOrigin:true,attribution:'&copy; Esri'});
   RT.osm.on('tileerror',tileErr);RT.sat.on('tileerror',tileErr);
   RT.osm.on('tileload',paint);RT.sat.on('tileload',paint);
   M.on('load zoomend moveend viewreset',paint);
+  M.on('zoomend moveend',zsync);
   M.on('click',e=>putPin([e.latlng.lat,e.latlng.lng],'tap'));
   setTimeout(()=>{wake(true)},90);
   autoTool();xhOn(true);
@@ -2137,6 +2181,26 @@ window.LL=(()=>{
   m2(m,'')};
  const openMy=()=>{window.open('https://www.google.com/maps/d/','_blank','noopener');
   m2('Binuksan ang Google My Maps. Bagong map, pagkatapos Import — doon makikita ang buong daan, hindi lang mga punto.','')};
+ /* Street View nang walang API key: ang Google Maps "api=1" deep link, na ang map_action=pano
+    ay nagbubukas ng panorama sa eksaktong punto. Ang Street View Image API ay nangangailangan
+    ng key at billing - hindi iyon ang gustong bayad ng may-ari, kaya link. Kung walang coverage
+    ang kalye, ang Google mismo ang magsasabi niyon sa screen niya. */
+ const stLat=(p)=>(+p[0]).toFixed(6),stLng=(p)=>(+p[1]).toFixed(6);
+ const streetUrl=(p)=>'https://www.google.com/maps/@?api=1&map_action=pano&viewpoint='+stLat(p)+','+stLng(p);
+ const streetPoint=()=>{
+  if(pts.end)return{p:pts.end,s:'pin ng bahay'};
+  if(pts.start)return{p:pts.start,s:'pin ng CAFAC'};
+  if(M){const c=M.getCenter();return{p:[c.lat,c.lng],s:'gitna ng mapa'}}
+  return null};
+ const openStreet=()=>{
+  const q=streetPoint();
+  if(!q){m2('Buksan muna ang mapa (① CAFAC) bago ang Street View.','bad');return}
+  window.open(streetUrl(q.p),'_blank','noopener');
+  const A='\u2014';
+  m2('Binuksan ang <b>Street View</b> sa '+q.s+': <b>'+stLat(q.p)+', '+stLng(q.p)+A+'</b>. '
+   +'Kung walang larawan doon, walang coverage ang kalye '+A+' i-tap na lang sa mapa. '
+   +'Mas tumpak: mag-pan sa Google, pagkatapos dito <b>✛ Crosshair</b> at <b>🎯 Sa gitna</b>.','')
+  logEv('STREET VIEW','LONG/LAT - CAFAC',(picked||'-')+' '+q.s+' '+stLat(q.p)+' '+stLng(q.p))};
  const pick=c=>{
   const o=nodeOf(c);
   if(!o){picked='';$('lldet').innerHTML='';msg('Hindi nasa facility data ang '+c+'.','bad');saved();cnt();return}
@@ -2282,9 +2346,11 @@ window.LL=(()=>{
   '<button class="llbtn" id="rtzin">➕ Zoom in</button>'+
   '<button class="llbtn" id="rtzout">➖ Zoom out</button>'+
   '<button class="llbtn" id="rtctr">🎯 Sa gitna ng mapa</button>'+
+  '<button class="llbtn" id="rtstreet">🎥 Street View</button>'+
   '<button class="llbtn" id="rtxh" aria-pressed="false">✛ Ipakita ang gitna</button>'+
   '<button class="llbtn" id="rtcpin">📌 ① mula sa naka-save</button>'+
   '</div>'+
+  '<div class="rtzoom"><span>ZOOM</span><input type="range" id="rtzsl" min="10" max="19" step="1" value="11" aria-label="I-drag para mag-zoom in at zoom out"><b id="rtzvl">11</b></div>'+
   '<div class="rtlay"><button class="llbtn on" id="bmap">🗺️ Mapa</button><button class="llbtn" id="bsat">🛰️ Satellite</button>'+
   '<span class="llsaved" style="margin-top:0">Kailangan ng internet para sa tiles at para sa <b>totoong kalye</b> (OpenStreetMap routing, libre, walang API key). Kapag walang internet, ang mga tap mo na lang ang susukatin — at sasabihin namin iyan.</span></div>'+
   '<div class="rtrow" id="rtrow"></div>'+
@@ -2326,8 +2392,11 @@ window.LL=(()=>{
   $('rtroad').onclick=()=>{setTool('road');m2('I-tap ang mga likuan ng daan, punto-punto. Kailangan mo itong pindutin lang kung may pin-bura ka — auto na ang ③ sa bawat tap at ang app ang sumusunod sa totoong kalye.','')};
   // {animate:false}: ang Leaflet zoom transition ay hindi tumatapos sa ilang device (at sa
   // headless browser), kaya nananatili ang zoom kung may animation. Direkta = sigurado.
-  $('rtzin').onclick=()=>{if(!mkMap())return;M.zoomIn(1,{animate:false});paint();m2('Zoom in → '+M.getZoom()+'. Mas malapit ang bawat detalye ng kalye.','')};
-  $('rtzout').onclick=()=>{if(!mkMap())return;M.zoomOut(1,{animate:false});paint();m2('Zoom out → '+M.getZoom()+'.','')};
+  holdZoom('rtzin',1);
+  holdZoom('rtzout',-1);
+  $('rtzsl').oninput=e=>{if(!mkMap())return;const z=zClamp(+e.target.value);
+   M.setView(M.getCenter(),z,{animate:false});zsync()};
+  $('rtzsl').onchange=()=>{if(M){wake(false);m2('Zoom '+M.getZoom()+'.','')}};
   $('rtxh').onclick=()=>{mkMap();const e=$('xh');xhOn(!e||e.style.display==='none');if($('rtctr'))$('rtctr').style.display='';
    m2($('xh')&&$('xh').style.display!=='none'?'Nakikita na ang gitna: i-drag ang mapa para nasa crosshair ang tamang lugar, pagkatapos pindot 🎯.':'Nakago ang crosshair.','')};
   $('rtctr').onclick=()=>{if(!mkMap())return;xhOn(true);const c=M.getCenter();putPin([c.lat,c.lng],'center')};
@@ -2343,6 +2412,7 @@ window.LL=(()=>{
   $('rtsave').onclick=saveR;
   $('rtdel').onclick=delR;
   $('rtsend').onclick=sendShot;
+  $('rtstreet').onclick=openStreet;
   $('bmap').onclick=()=>baseWhich('osm');
   $('bsat').onclick=()=>baseWhich('sat');
   const t3=$('t3');if(t3)t3.onclick=()=>{document.body.classList.add('fcv');mode('ll')};
@@ -2356,6 +2426,9 @@ window.LL=(()=>{
   tool:(t)=>setTool(t),
   tap:(lng,lat)=>{if(!mkMap())return null;putPin([lat,lng],'tap');return [lat,lng]},
   km:()=>+totKm().toFixed(3),straight:()=>+straightKm().toFixed(3),clear:clearAll,map:()=>M,
-  shot:(w,h)=>{const c=shot(w||640,h||420);return c?{w:c.width,h:c.height,b:c.toDataURL('image/png').length}:null}};})();
+  shot:(w,h)=>{const c=shot(w||640,h||420);return c?{w:c.width,h:c.height,b:c.toDataURL('image/png').length}:null},
+  sview:()=>{const q=streetPoint();return q?{url:streetUrl(q.p),src:q.s}:null},
+  z:(v)=>{if(!M)return null;zTo(v);return M.getZoom()},
+  zlvl:()=>M?M.getZoom():null};})();
 </script>
 </body></html>
