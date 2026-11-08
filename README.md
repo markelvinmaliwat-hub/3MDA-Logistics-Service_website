@@ -307,20 +307,35 @@ FACILITY CHECKING, `#t3` LONG/LAT - CAFAC): a lookup first, then a map the agent
   * **Picking a CAFAC now zooms to the barangay written in the facility data** (he asked: *"gamit ang cafac zoom in
     agad ito sa barangay na naka lagay tapos hayaan na ang agent mag Pin... lagyan ng measurement kung gaano kalayo
     at lagay ang longlat ng PIN ng cafac at longlat ng pin na bahay"*). `pick()` calls `toBgy()` only when that CAFAC
-    has **no** saved pin; `toBgy` builds at most 4 queries from `b`/`c`/`s` (`"ANABU 2-A, IMUS"` &rarr; `"ANABU 2-A"`
-    &rarr; `"... , Cavite"` &rarr; subdivision+city &rarr; `"IMUS, Cavite"`, `BGY `/trailing ` CITY` stripped by
-    `cleanB`/`cleanC`, a bare-number barangay like `3` is not queried at all) and walks them at OSM's 1 req/s until
-    one returns a **`boundary`/`place`** result (`isArea`) - POIs are kept only as a last resort and say so. `place()`
+    has **no** saved pin; `toBgy` builds at most 4 queries from `b`/`c`/`s` (`"ANABU 2-A IMUS"` &rarr; `"ANABU 2-A"`
+    &rarr; subdivision+city &rarr; `"IMUS Cavite"` - `BGY `/trailing ` CITY` stripped by `cleanB`/`cleanC`, and a
+    bare-number barangay like `3` is not queried at all) and walks them at OSM's 1 req/s until one returns a
+    **`boundary`/`place`** result (`isArea`) - POIs are kept only as a last resort and say so. `place()`
     fits the polygon with `M.fitBounds(L.latLngBounds(...),{animate:false,maxZoom:16})` when the box is under 0.2 deg,
     otherwise `setView` at `zoomOf()` (city 12 / municipality 13 / boundary 15 / way 17).
+    * **No commas in the query - measured, not guessed.** From his `github.io` origin,
+      `q=ANABU%202-A%2C%20IMUS` died with `TypeError: Failed to fetch` in **18 ms** while
+      `q=ANABU%202-A%20IMUS` on the same page returned **HTTP 200 / 1 hit in 755 ms** (`IMUS Cavite` &rarr; 200/1 too).
+      `curl` gets 200 for *both*, so the search is not the problem - only the **CORS answer** to the comma form is
+      usable by a browser. `nom()` therefore rewrites `%2C` &rarr; `%20` before the request, which also protects an
+      agent who types `Anabu 2-A, Imus` into `🔍 Hanapin`.
+    * **A burst gets us 403, so the code backs off instead of retrying harder.** After ~10 geocode requests inside a
+      minute the endpoint answered `403 Forbidden` (`Server: Varnish`, `Retry-After: 0`) even to curl, and it lifted
+      again under a minute later. Three defences: `fetch(...,{cache:'no-store'})` (a cached headerless 403 used to be
+      replayed to every later attempt, which looked like a permanent break), a **65-second cool-down** armed the
+      moment any answer is a 403 (`blockT`, with its own on-screen text telling the agent to wait a minute and tap
+      the CAFAC again), and `chain()` now **continues to the next query** after a refused one - it only reports the
+      error if every attempt failed.
     * **The message only claims a barangay when the match really is it.** `tama` = not a POI fallback **and** every
-      alphabetic token of the stored barangay appears in OSM's `display_name`. His own data needs this: `ANABU 2-A`
-      is written `Anabu II-A` in OSM, so a literal string compare would have cried wolf on the best case. Measured:
+      alphabetic token of the stored barangay appears in the **leading** component of OSM's `display_name` (before the
+      first comma). Both halves are earned: `ANABU 2-A` is written `Anabu II-A` in OSM (a literal compare would cry
+      wolf on the best case), and the space query once answered
+      `Plaza Homes, Anabu II-A, Imus` - a subdivision *inside* the barangay, zoom 16, correct ground but a wrong claim,
+      so it now reads *"Hindi eksakto ang pangalan ng barangay na **ANABU 2-A** sa nakita..."*. Measured:
       `IMULP012NP1` &rarr; *"Izoom sa barangay na **Anabu II-A, Imus, Cavite** (zoom 15)"* green, center
-      `14.38451, 120.93687`, 8/8 tiles at opacity 1. `ALFLP213NP1` &rarr; `Kaytitinga III, Alfonso` z13.
-      `ALFLP03NP1` (`BGY 3` - no name to search) &rarr; red *"Hindi makita sa OSM ang barangay na **3** - pinakapalapit
-      ay Alfonso, Cavite, Calabarzon (zoom 11). Hanapin sa 🔍 Hanapin o i-drag ang mapa."*, so the agent is never told
-      a town-wide view is his CAFAC. `logEv('MAP BARANGAY',...)` records the query that landed plus `(POI)`/`(LAAS)`.
+      `14.38449, 120.93688`, 8/8 tiles at opacity 1. `ALFLP213NP1` &rarr; `Kaytitinga III, Alfonso` z13.
+      `ALFLP03NP1` (`BGY 3` - no name to search) &rarr; red, so the agent is never told a town-wide view is his CAFAC.
+      `logEv('MAP BARANGAY',...)` records the query that landed plus `(POI)`/`(LAAS)`.
     * **Why this matters for his data (measured over all 15,999 CAFAC rows):** 15,164 (94.8%) name a barangay that can
       be searched, 835 (5.2%) hold only a bare number (`BGY 2`, `BGY 3`) and 0 are blank; the distinct
       `BRGY|CITY` pairs total **917**. The numbered ones get the honest warning above, not a wrong zoom.
