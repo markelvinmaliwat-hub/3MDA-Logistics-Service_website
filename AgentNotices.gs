@@ -2136,6 +2136,7 @@ function noticeDiag() {
    goes into index.html as NOTICE_APP_URL). If you hook into an existing doGet instead,
    delete this function and add the notice dispatch line from the header comment. */
 function doGet(e) {
+  if (String(e && e.parameter && e.parameter.action) === 'daanAck') return jsonOut_(daanAck_(e.parameter.id), e.parameter.callback); /* DaanMail.gs: ang dashboard nagpoll kung ang SEND mail ay nakaraat */
   const p = (e && e.parameter) || {};
   const a = String(p.action || '');
   if (/^notice(Preview|Send|Status|Install)$/.test(a)) return noticeWebApp_(e);
@@ -2152,6 +2153,6 @@ function doGet(e) {
     return jsonOut_(out, p.callback);
   }
   return ContentService.createTextOutput(JSON.stringify({
-    error: 'unknown action', use: 'noticeStatus | noticePreview | noticeSend | noticeInstall | logRead | logWrite | logStatus | acct'
+    error: 'unknown action', use: 'noticeStatus | noticePreview | noticeSend | noticeInstall | logRead | logWrite | logStatus | acct | daanAck'
   })).setMimeType(ContentService.MimeType.JSON);
 }

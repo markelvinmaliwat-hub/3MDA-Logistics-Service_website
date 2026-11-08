@@ -1942,35 +1942,99 @@ window.LL=(()=>{
   try{cv=shot(104,78)}catch(e){cv=null}
   if(cv&&taintOf(cv)){box.innerHTML='<div class="llmini">walang screenshot</div>';return}
   if(cv)box.appendChild(cv)};
- const sendShot=()=>{
-  const a=path();
-  if(!picked){m2('Kailangan muna pumili ng <b>① CAFAC</b> - may node bago ang mail.','bad');return}
-  if(!nameOf()){m2('Kailangan muna ilagay ang <b>SUBSCRIBER NAME</b> - '+
-   'isang application ang nasasave, hindi lang mapa.','bad');return}
-  if(a.length<2){m2('Kulang pa ang daan \u2014 i-tap muna ang \u2460 CAFAC at \u2461 bahay bago mag-SEND.','bad');return}
-  if(!M){m2('Hindi nag-load ang mapa \u2014 walang makuha na screenshot.','bad');return}
-  let cv=null,er='';
-  try{cv=shot(640,420)}catch(e){er=String(e&&e.message||e)}
-  if(!cv){m2('Hindi makuha ang screenshot'+(er?' ('+er+')':'')+' \u2014 pindot muna ang <b>\u2922 I-fit</b>, pagkatapos SEND.','bad');return}
-  const tt=taintOf(cv);
-  if(tt){m2('Hindi makuha ang screenshot ('+esc(tt)+') \u2014 i-reload muna ang page, pagkatapos SEND.','bad');return}
-  const nm='daan-'+(picked||'mapa')+'.png';
+ const DAAN_TO='Markelvinmaliwat@gmail.com';/* lang ito ang padadalhan — ang may-ari mismo ang humingi niyon */
+ // Ang mail: isang POST sa Apps Script na sa kanya na — MailApp ng kanyang account ang
+ // nagsasend, kaya walang bagong serbisyo, walang key, walang bayad. Opaque ang sagot ng
+ // no-cors POST sa browser, kaya ang JSONP na daanAck (GET) ang nagpapakita kung talagang
+ // may naipadalang email. Kung wala pa ang daanAck sa script, hindi kami magpa-announce ng
+ // naipadala — ibabalik lang namin sa share/download at sasabihin kung ano ang kulang.
+ const daanUrl=()=>{try{return (typeof NURL==='function'?NURL():(typeof NOTICE_APP_URL!=='undefined'?NOTICE_APP_URL:''))||''}catch(e){return ''}};
+ const whoName=()=>{try{return (typeof ME!=='undefined'&&ME)?(ME.name||ME.code||ME.email||'-'):'-'}catch(e){return '-'}};
+ const daanInfo=()=>{
+  const oo=nodeOf(picked),n=pts.ways.length+2;
+  return {cafac:picked,name:nameOf(),place:oo?(cleanB(oo.r.b)+' \u00b7 '+cleanC(oo.r.c)):'',
+   km:km(totKm()),straight:(straightKm()<0?'\u2014':km(straightKm())),points:n,cafll:pts.start?stLng(pts.start)+' '+stLat(pts.start):'',
+   bahll:pts.end?stLng(pts.end)+' '+stLat(pts.end):'',by:whoName(),
+   at:new Date().toLocaleString('en-PH',{hour12:false}),
+   dev:String(navigator.userAgent||'').replace(/\s+/g,' ').slice(0,90)}};
+ let ackKnown=null;
+ const ackProbe=(url)=>{if(ackKnown!==null)return Promise.resolve(ackKnown);
+  if(typeof jsonpReq!=='function')return Promise.resolve(false);
+  return jsonpReq(url,{action:'daanAck',id:'probe'},9000)
+   .then(r=>{ackKnown=!!(r&&typeof r.found!=='undefined');return ackKnown},()=>{ackKnown=false;return false})};
+ const waitAck=(url,rid)=>{
+  let n=0;
+  const again=()=>new Promise(res=>setTimeout(res,2200)).then(once);
+  const once=()=>jsonpReq(url,{action:'daanAck',id:rid},9000).then(r=>{
+    if(r&&r.found&&r.sent)return{state:'sent',to:r.to,subject:r.subject,kb:r.kb,at:r.at};
+    if(r&&r.found)return{state:'refused',error:String(r.error||'walang dahilan')};
+    return ++n<4?again():{state:'unknown',tries:n};
+   },()=>++n<3?again():{state:'error',error:'hindi mabasa ang sagot'});
+  return once()};
+ const shareShot=(cv,why)=>{
+  const nm='daan-'+picked+'-'+nameOf().replace(/[^A-Za-z0-9]+/g,'-').slice(0,28)+'.png';
+  const pre=why?esc(why)+' \u2014 ':'';
   const dl=()=>{
    try{const l=document.createElement('a');l.href=cv.toDataURL('image/png');l.download=nm;
     document.body.appendChild(l);l.click();l.remove();
-    m2('Na-download ang <b>'+esc(nm)+'</b> \u2014 i-attach ito sa email ng admin.','ok')}
-   catch(e){m2('Hindi i-save ang PNG ('+String(e&&e.message||e)+') \u2014 screenshot mismo ng screen ang gamitin.','bad')}};
+    m2(pre+'Na-download ang <b>'+esc(nm)+'</b> \u2014 i-attach ito sa email sa '+DAAN_TO+'.','ok')}
+   catch(e){m2('Hindi i-save ang PNG ('+esc(String(e&&e.message||e))+') \u2014 screenshot mismo ng screen ang gamitin.','bad')}};
   if(!cv.toBlob){dl();return}
   cv.toBlob(bl=>{
    if(!bl){dl();return}
    let f=null;
    try{f=new File([bl],nm,{type:'image/png'})}catch(e){f=null}
    if(f&&navigator.canShare&&navigator.canShare({files:[f]})){
-    navigator.share({title:'Daan '+((picked||'-')+' \u2192 '+(nameOf()||'client')),files:[f]})
-     .then(()=>{m2('Naipasa ang screenshot ng daan \u2014 sa app na pinili mo (Gmail) isulat ang email ng admin.','ok')},
-      (e)=>{if(!e||e.name!=='AbortError')dl()});
+    navigator.share({title:'Daan '+picked+' \u2192 '+nameOf(),files:[f]})
+     .then(()=>{m2(pre+'Naipasa ang screenshot \u2014 sa Gmail, ang padadalhan ay '+DAAN_TO+'.','ok')},
+      e=>{if(!e||e.name!=='AbortError')dl()});
     return}
    dl()},'image/png')};
+ const mailShot=(cv)=>{
+  const url=daanUrl();
+  if(!url){shareShot(cv,'Walang Apps Script URL sa page');return}
+  let j='';
+  try{j=cv.toDataURL('image/jpeg',0.82)}catch(e){j=''}
+  if(j.indexOf('data:image/jpeg')!==0){shareShot(cv,'Hindi kayang gawing JPEG ang screenshot');return}
+  const kb=Math.round(j.length*0.75/1024);
+  const btn=$('rtsend'),lab=btn?btn.textContent:'\ud83d\udce4 SEND';
+  const restore=()=>{if(btn){btn.disabled=false;btn.textContent=lab}};
+  const info=daanInfo();
+  if(btn){btn.disabled=true;btn.textContent='\u23F3 Susuriin ang Apps Script\u2026'}
+  ackProbe(url).then(known=>{
+   if(!known){restore();
+    shareShot(cv,'Hindi pa tinatanggap ng Apps Script ang mail na ito \u2014 idagdag ang isang linya ng daanAck sa doGet pagkatapos i-redeploy ang /exec');
+    return}
+   const rid='d'+Date.now().toString(36)+Math.random().toString(36).slice(2,7);
+   const body=JSON.stringify({mode:'daan',id:rid,to:DAAN_TO,info:info,mime:'image/jpeg',img:j.slice(j.indexOf(',')+1)});
+   if(btn)btn.textContent='\u23F3 Ipinapapadala ('+kb+' KB)\u2026';
+   fetch(url,{method:'POST',mode:'no-cors',cache:'no-store',
+     headers:{'Content-Type':'text/plain;charset=utf-8'},body:body})
+    .then(()=>{if(btn)btn.textContent='\u23F3 Hinihintay ang confirmation\u2026';return waitAck(url,rid)})
+    .then(r=>{restore();
+     if(r.state==='sent'){
+      m2('Naipadala sa <b>'+esc(r.to||DAAN_TO)+'</b> \u2014 '+esc(r.subject||'daan '+picked)+' ('+r.kb+' KB, '+esc(r.at||'')+'). '+
+       'Kung hindi lumitaw sa loob ng isang minuto, tingnan ang Spam.','ok');
+      logEv('DAAN MAIL','LONG/LAT - CAFAC',picked+' '+nameOf()+' '+info.km);return}
+     if(r.state==='refused'){
+      m2('Tinanggihan ng Apps Script: '+esc(r.error),'bad');
+      logEv('DAAN MAIL FAIL','LONG/LAT - CAFAC',picked+' '+r.error);return}
+     shareShot(cv,r.state==='error'?('Naipadala ang hiling pero '+r.error+' \u2014 buksan ang Gmail mo sa '+DAAN_TO):
+      ('Hindi nakumpirma ang Apps Script ('+(r.tries||0)+' na subok) \u2014 baka naniniimplahan pa lang, buksan ang Gmail'))})
+    .catch(e=>{restore();shareShot(cv,'Hindi naabot ang Apps Script ('+esc(String(e&&e.message||e))+')')})})};
+ const sendShot=()=>{
+  const a=path();
+  if(!picked){m2('Kailangan muna pumili ng <b>\u2460 CAFAC</b> - may node bago ang mail.','bad');return}
+  if(!nameOf()){m2('Kailangan muna ilagay ang <b>SUBSCRIBER NAME</b> - '+
+   'isang application ang nasasave, hindi lang mapa.','bad');return}
+  if(a.length<2){m2('Kulang pa ang daan \u2014 i-tap muna ang \u2460 CAFAC at \u2461 bahay bago mag-SEND.','bad');return}
+  if(!M){m2('Hindi nag-load ang mapa \u2014 walang makuha na screenshot.','bad');return}
+  let cv=null,er='';
+  try{cv=shot(640,420)}catch(e){er=String(e&&e.message||e)}
+  if(!cv){m2('Hindi makuha ang screenshot'+(er?' ('+esc(er)+')':'')+' \u2014 pindot muna ang <b>\u2922 I-fit</b>, pagkatapos SEND.','bad');return}
+  const tt=taintOf(cv);
+  if(tt){m2('Hindi makuha ang screenshot ('+esc(tt)+') \u2014 i-reload muna ang page, pagkatapos SEND.','bad');return}
+  mailShot(cv)};
  const sync=()=>{
   if(!M){draw();return}
   if(mS){M.removeLayer(mS);mS=null}
@@ -2429,6 +2493,8 @@ window.LL=(()=>{
   shot:(w,h)=>{const c=shot(w||640,h||420);return c?{w:c.width,h:c.height,b:c.toDataURL('image/png').length}:null},
   sview:()=>{const q=streetPoint();return q?{url:streetUrl(q.p),src:q.s}:null},
   z:(v)=>{if(!M)return null;zTo(v);return M.getZoom()},
-  zlvl:()=>M?M.getZoom():null};})();
+  zlvl:()=>M?M.getZoom():null,
+  daan:()=>({url:daanUrl(),info:daanInfo(),to:DAAN_TO}),
+  ack:()=>ackProbe(daanUrl())};})();
 </script>
 </body></html>

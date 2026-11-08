@@ -9,6 +9,7 @@ their own PLDT / RED sales, and the owner can trigger the daily sales-status ema
 | --- | --- |
 | `index.html` | The whole app: markup, styles and logic. Published as-is by GitHub Pages. |
 | `AgentNotices.gs` | **Mirror only** of the Google Apps Script file that actually sends the emails. |
+| `DaanMail.gs` | **Mirror only** of the new Apps Script file that receives the dashboard's `📤 SEND` and mails the map picture. Needs pasting + one line added to `doGet` + a New version deploy. |
 | `assets/mmmda-logo.jpg` | The logo attached to the signature of the two PLDT reports. |
 
 ## The email code does not live here
@@ -487,6 +488,25 @@ FACILITY CHECKING, `#t3` LONG/LAT - CAFAC): a lookup first, then a map the agent
     balikan mo."*, and `14,080000` (comma) is accepted and stored as `14.08`; values round to 6 decimals.
   * Still device-only: no server, no cost, and **agents do not see each other's pins or roads** until he exports
     the KML. Step 2 (only after he approves the look) is a `ROUTES` tab in his Sheet + an Apps Script endpoint.
+* **`📤 SEND` mails the picture (2026-11-08, asked: *"kapag pinindot ang send ipadala ito sa email na
+  Markelvinmaliwat@gmail.com"*).** The page renders the map into a 640 x 420 canvas (`shot()`), converts it to a
+  JPEG at quality 0.82 (measured 40-140 KB for a normal trace), and POSTs `{mode:'daan',id,to,info,mime,img}` to
+  the V9 `/exec` as `text/plain` with `mode:'no-cors'` - the only shape a browser may send to Apps Script without a
+  preflight. The POST reply is opaque by design, so the confirmation is a separate JSONP GET
+  `action=daanAck&id=<id>` that reads the receipt `DaanMail.gs` leaves in Script Properties (`DAAN_ACK_MAP`,
+  pruned to 40 keys / 3 h). Before the first POST the page probes once with `id=probe`: if the endpoint does not
+  answer `found`, **SEND refuses to claim anything was mailed** and falls back to share/download with the exact
+  missing step - measured live, with the endpoint still uninstalled, the message is *"Hindi pa tinatanggap ng
+  Apps Script ang mail na ito - idagdag ang isang linya ng daanAck sa doGet pagkatapos i-redeploy ang /exec -
+  Na-download ang daan-IMULP012NP1-QA-MAIL-TEST.png - i-attach ito sa email sa Markelvinmaliwat@gmail.com."* The
+  server half is `DaanMail.gs`: one mail per route to the one address he named (`DAAN.TO`), his own mail shape
+  (GREET / INTRO / black-#4d4d4d-bordered label-value table / CLOSE / `Thank you !` / SIGN), the picture both
+  inline (`cid:daan-map`) and attached (`daan-<CAFAC>.jpg`), guardrails `MAX_KB 900 / MAX_PER_DAY 80 / GAP_SEC 20 /
+  MIN_CHARS 3`, and `doPost` - which AgentNotices.gs did not have, so this file owns it (a project may define only
+  one). It costs nothing: `MailApp` is his own 100-free-emails-a-day quota, shared with the 8AM notices and the
+  PLDT reports. **Installing it is three manual steps for him** (paste `DaanMail.gs` as a new file, add the one
+  `daanAck` line under `function doGet(e) {` in `AgentNotices.gs`, Deploy -> New version); the page cannot do any
+  of them and will not pretend otherwise.
 * **What it is NOT:** no table, no saved-list UI of its own, no offline tile cache, **no API key and no bill** -
   the geocode is OSM Nominatim and the road fit is the public OSRM demo server, both free and both used only
   inside his rate limit. Step 2 of the earlier plan still holds: **agents do not see each other's roads** until he
@@ -498,13 +518,26 @@ FACILITY CHECKING, `#t3` LONG/LAT - CAFAC): a lookup first, then a map the agent
 * **Mobile (`html.vm`):** the three pills stay on one line (shrunk to 11.5 px / 8 px padding - measured 79 + 163
   + 157 px inside a 417 px row at a 735 px viewport), the inputs and suggestion rows are 44 px, `.llsug` scrolls
   inside a 182 px box (32 vh), and under 900 px all three boxes stack. In the maps box the tool buttons wrap
-  2-per-row at 44 px+ (measured 133x56 px for `① CAFAC` at 735 px). With `📤 SEND` the panel holds **22 buttons**
-  (was 21), every visible one at the measured **minimum height of 44 px** - `SEND` itself is 634 x 46 px and
-  `🗑 Tanggalin ang naka-save` is the one that stays hidden until a route exists for the current CAFAC + name;
-  with a CAFAC typed and a saved route loaded the measurement is 23 visible buttons (the extra one is a suggestion
-  row, which is a `button` too). The summary card is 634 x 100 px with its 104 x 78 mini-map canvas inside, the map is
-  634 x 296 px, and
-  `documentElement.scrollWidth` stays at the viewport width - no horizontal overflow (735 / 735).
+  2-per-row at 44 px+ (measured 133x56 px for `① CAFAC` at 735 px). With `📤 SEND` and `🎥 Street View` the panel
+  holds **24 buttons** (was 21 before SEND), every visible one at the measured **minimum height of 44 px** -
+  `SEND` itself is 634 x 46 px and `🗑 Tanggalin ang naka-save` is the one that stays hidden until a route exists
+  for the current CAFAC + name; the new `ZOOM` slider is 44 x 529 px under the tool row. The summary card is
+  634 x 100 px with its 104 x 78 mini-map canvas inside, the map is 619 x 296 px (measured at the 720 px width of
+  this browser surface; 634 px at the 735 px viewport) and the panel keeps `scrollWidth == clientWidth` - no
+  horizontal overflow (673 / 673 here, 735 / 735 before).
+* **Zoom motion (asked: *"gawin smooth lang ang zoom in at out wag na pindot pindot pa ng sobra"*):** `+` and `-`
+  now animate one level with `zoomAnimationThreshold:5`, hold-to-repeat after 400 ms at 240 ms per step, and a
+  `ZOOM` range slider (10-19, `oninput` = instant target) sits under the tool row with the number beside it; the
+  slider and the map stay in sync through `zoomend moveend` (`zsync()`), and pinch/double-tap are untouched.
+  `zTo()` keeps a token so a newer press always wins, and a **650 ms rescue** applies the zoom with
+  `{animate:false}` when the transition never reports. The rescue is not decoration: measured here, Leaflet's
+  `_zoom` only advances when the CSS transition ends, and transitions/rAF are frozen while this page is hidden, so
+  `zoomend` arrived at ~564 ms and an animated `setView` without the rescue never applied at all. **Honest gap: the
+  smooth feel could not be seen in this surface** - only the end zoom level was measurable (11 -> 19 by holding,
+  back down with the slider). Street View is keyless too: `🎥 Street View` opens
+  `https://www.google.com/maps/@?api=1&map_action=pano&viewpoint=lat,lng` (measured
+  `viewpoint=14.392100,120.940200`) at the house pin, else the CAFAC pin, else the centre of the map - the
+  *Street View Image API* was rejected because it needs a key and a billing account.
 * **Existing behavior untouched:** `mode()` keeps `in` and `fc` exactly as before and only gained the null-
   guarded `ll` branch; the panel is injected by the block's own `init()` (`window.LL`) after `#fcp`, not in
   the HTML, so it survives the minified markup. 7 inline scripts parse (`new Function` clean), no console
