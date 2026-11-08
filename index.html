@@ -1888,11 +1888,15 @@ window.LL=(()=>{
   const k=Math.min(w/pw,hh/ph);
   const ox=(w-pw*k)/2,oy=(hh-ph*k)/2;
   const el=M.getContainer(),mr=el.getBoundingClientRect();
+  // Ang screen offset ng tile ay kailangang ihambing sa world pixel ng KANYANG container,
+  // hindi sa zero: `nw` ay raanlibong pixel, kaya dating laging nasa labas ng canvas ang tiles.
+  const o0=M.project(M.containerPointToLatLng([0,0]),z);
   const tiles=[].slice.call(el.querySelectorAll('img.leaflet-tile'));
   tiles.forEach(i=>{
    if(!i.classList.contains('leaflet-tile-loaded')||!i.naturalWidth)return;
    const t=i.getBoundingClientRect();
-   try{x.drawImage(i,(t.left-mr.left-nw.x)*k+ox,(t.top-mr.top-nw.y)*k+oy,t.width*k,t.height*k)}catch(e){}});
+   const dx=o0.x+(t.left-mr.left)-nw.x,dy=o0.y+(t.top-mr.top)-nw.y;
+   try{x.drawImage(i,dx*k+ox,dy*k+oy,t.width*k,t.height*k)}catch(e){}});
   const px=(ll)=>{const q=M.project(ll,z);return [(q.x-nw.x)*k+ox,(q.y-nw.y)*k+oy]};
   const g=(RG&&RG.length>1)?RG:a;
   if(g.length>1){
