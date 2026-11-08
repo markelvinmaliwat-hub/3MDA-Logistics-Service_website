@@ -254,9 +254,9 @@ LONG/LAT - CAFAC"*, then on seeing the first build: *"baguhin ang mga naka paloo
 at CAFAC tapos sa pag type ng cafac gawin ito na searchable lang ang CAFAC habang nag type kapag na click ang
 cafac na hinahanap saka ilagay ang detalye kung available at ilan ang ports at kung saan ang location nito wag
 na mag lagay ng kagaya ng nasa litrato"*, then on two screenshots of the intended layout: **"GANYAN LANG ANG
-ITSURA"** and **"Status, Available slots, Site / subdivision LANG ANG ILALAGAY SA DETAILS"**. So it is the third
-pill in `.hp` (`#t1` LOG IN, `#t2` FACILITY CHECKING, `#t3` LONG/LAT - CAFAC) and it is a **lookup**, not a
-registry.
+ITSURA"** and **"Status, Available slots, Site / subdivision LANG ANG ILALAGAY SA DETAILS"**, then on 2026-11-08:
+**"NGAYON MAG LAGAY NG SW MAPS + GOOGLE MY MAPS"**. So it is the third pill in `.hp` (`#t1` LOG IN, `#t2` FACILITY
+CHECKING, `#t3` LONG/LAT - CAFAC): a lookup first, and now a pin collector whose output goes to his mapping apps.
 
 * **Layout (his drawing):** a two-column grid (`#llp .llgrid`). Left column, stacked: `SUBSCRIBER NAME`
   (free text - he said the name is not in the database *"kasi ito lang ay bago lang collected application"*),
@@ -268,15 +268,33 @@ registry.
   case-insensitive substring, shows the first 60 as tappable rows with `barangay · city` and
   `<available>/<equipped> available` (red `FULL` when none), and says how many more matches exist. Measured
   8 ms per keystroke on the live build, so no debounce is needed. `Enter` picks the first row.
-* **Clicking a CAFAC** puts exactly three values in the details box, through the same `kv()` grid Facility
-  Checking uses: **Status** (`AVAILABLE` green / `FULL` red), **Available slots**, **Site / subdivision**.
-  Nothing else - no summary line, no LCP/Exchange/Barangay/City/Type/FA date, no LONG/LAT.
-* **What it is NOT:** no LONG/LAT inputs, no saved list, no `localStorage`, no map, no geocoder, no API, no
-  cost. The earlier registry shape (`mm_ll` + table) was removed on his word `wag na mag lagay ng kagaya ng
-  nasa litrato`. See [[project-3mda-facility-route]] for the two map builds he reverted before this.
+* **What the details box is:** clicking a CAFAC writes exactly three values through the same `kv()` grid Facility
+  Checking uses - **Status** (`AVAILABLE` green / `FULL` red), **Available slots**, **Site / subdivision** - and
+  nothing else (no summary line, no LCP/Exchange/Utilization/Equipped slots/Site address/Barangay/City/Type/FA
+  date). The coordinates are deliberately **outside** it, in their own third box below the grid, so that rule
+  still holds.
+* **SW MAPS + GOOGLE MY MAPS (2026-11-08):** a third bordered box `.llmap` under the grid. `LONG (East)` and
+  `LAT (North)` inputs + `💾 I-save ang pin`, then `⬇ KML para sa SW Maps + My Maps`, `⬇ GPX para sa SW Maps`,
+  `📍 Buksan sa Google Maps` and `⭐ Buksan sa Google My Maps`, plus `✖ Tanggalin ang pin nito` (only shown when
+  the picked CAFAC has one). This exists because the facility data has **zero coordinates** - 56,685 nodes, no
+  lat/lng anywhere - so the pin is his measurement from SW Maps in the field, not something the page can guess.
+  * Pins live in `localStorage.mm_cafac_ll` as `<CODE>: [lng, lat, ts, subscriberName]`. Device-only, so no
+    server, no cost, and **the agents do not see each other's pins** until he exports the KML.
+  * Validation: empty/non-numeric and anything outside `lat 3-22 / lng 113-127` is refused in red. Measured:
+    `999 / 14` → *"Nasa labas ng Pilipinas ang numero (999, 14) — balikan mo."*; `14,080000` (comma) is accepted
+    and stored as `14.08`; values round to 6 decimals.
+  * KML order is `lng,lat,0` (correct for KML/GPX), and `api=1&query=` gets `lat,lng` - **the two orders are not
+    the same** and the first build had them swapped. A 2-pin file measured 822 bytes / 2 `<Placemark>` and 572
+    bytes / 2 `<wpt>`, both well-formed when re-parsed with `DOMParser`.
+  * Each pin's `<description>` carries `<code> | <avail>/<equipped> AVAILABLE or FULL | barangay, city |
+    site: <subdivision> | para kay: <name the agent typed when saving>`.
+* **What it is NOT:** no table, no saved list UI, no Leaflet/tile layer, no geocoder, no routing, no API key, no
+  bill. The earlier registry shape (`mm_ll` + table) was removed on his word `wag na mag lagay ng kagaya ng
+  nasa litrato`, and the in-dashboard map builds are gone too - see [[project-3mda-facility-route]].
 * **Mobile (`html.vm`):** the three pills stay on one line (shrunk to 11.5 px / 8 px padding - measured 58 +
-  128 + 124 px inside a 735 px viewport), the inputs and suggestion rows are 44 px, and `.llsug` scrolls
-  inside a 182 px box (32 vh).
+  128 + 124 px inside a 735 px viewport), the inputs and suggestion rows are 44 px, `.llsug` scrolls inside a
+  182 px box (32 vh), and under 900 px all three boxes stack; in the maps box the two coordinate inputs share a
+  row and every button goes full width at 44 px.
 * **Existing behavior untouched:** `mode()` keeps `in` and `fc` exactly as before and only gained the null-
   guarded `ll` branch; the panel is injected by the block's own `init()` (`window.LL`) after `#fcp`, not in
   the HTML, so it survives the minified markup. 6 inline scripts still parse, no console errors, and the page

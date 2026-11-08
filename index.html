@@ -986,20 +986,36 @@ html.vm .hp button{padding:8px 10px;font-size:11.5px;letter-spacing:0}
 #llp .llnone{padding:10px;color:var(--mut);font-size:13px}
 #llp .llmsg{min-height:18px;font-size:13px;margin-top:8px;color:var(--mut)}
 #llp .llmsg.bad{color:#e11d2e}
+#llp .llmsg.ok{color:#0a7d3c}
 #llp .lldet h4{margin:0 0 8px;font-size:13px;letter-spacing:0.04em;text-transform:uppercase;color:var(--ink)}
 #llp .lldet .fdg{grid-template-columns:repeat(auto-fill,minmax(165px,1fr))}
-@media(max-width:900px){#llp .llgrid{grid-template-columns:1fr}}
-@media(max-width:760px){#llp .llleft input{min-height:44px;font-size:16px}#llp .llrow{min-height:44px}}
+#llp .llmap{margin-top:12px}
+#llp .llmap h4{margin:0 0 8px;font-size:13px;letter-spacing:0.04em;text-transform:uppercase;color:var(--ink)}
+#llp .lllr{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr) auto;gap:8px;align-items:end}
+#llp .lllr label{display:block;margin:0 0 2px}
+#llp .lllr input{margin:0;width:100%}
+#llp .llbtns{display:flex;flex-wrap:wrap;gap:8px;margin-top:10px}
+#llp .llbtn{border:1px solid var(--line);background:var(--alt);color:var(--ink);border-radius:10px;padding:9px 12px;font:inherit;font-size:13px;font-weight:600;cursor:pointer}
+#llp .llbtn:hover{background:#eef4ff}
+#llp .llbtn.red{border-color:#e11d2e;color:#e11d2e;background:#fff}
+#llp .llsaved{margin-top:8px;font-size:12.5px;color:var(--mut)}
+#llp .llsaved b{color:var(--ink)}
+@media(max-width:900px){#llp .llgrid{grid-template-columns:1fr}#llp .lllr{grid-template-columns:1fr 1fr}#llp .lllr .llbtn{grid-column:1/-1}}
+@media(max-width:760px){#llp .llleft input{min-height:44px;font-size:16px}#llp .llrow{min-height:44px}#llp .lllr input{min-height:44px;font-size:16px}#llp .llbtn{min-height:44px;flex:1 1 calc(50% - 4px)}#llp #lldel{flex:1 1 100%}}
 </style>
 <script id="longlat-js">
-/* ============ LONG/LAT - CAFAC: subscriber name + type-ahead CAFAC, details sa kanang box ============ */
+/* ============ LONG/LAT - CAFAC: lookup + hand-measured pins for SW Maps / Google My Maps ============ */
 window.LL=(()=>{
+ const LS='mm_cafac_ll';
  let codes=null,picked='';
+ const P=(()=>{try{return JSON.parse(localStorage.getItem(LS))||{}}catch(e){return{}}})();
  const $=id=>document.getElementById(id);
+ const wp=()=>{try{localStorage.setItem(LS,JSON.stringify(P))}catch(e){}};
  const msg=(t,cls)=>{const m=$('llmsg');if(m){m.textContent=t||'';m.className='llmsg'+(cls?' '+cls:'')}};
  const all=()=>{if(codes)return codes;codes=[];
   try{(typeof FR==='undefined'?[]:FR).forEach(r=>(r.n||[]).forEach(x=>codes.push({c:String(x[0]),x:x,r:r})))}catch(e){}
   codes.sort((a,b)=>a.c.localeCompare(b.c));return codes};
+ const nodeOf=c=>all().find(v=>v.c===c);
  const sug=()=>{
   const box=$('llsug');if(!box)return;
   const t=String($('llc').value||'').trim().toUpperCase();
@@ -1009,21 +1025,93 @@ window.LL=(()=>{
   box.innerHTML=hits.slice(0,60).map(o=>{
    const av=o.x[1],cls=o.c===picked?' on':'';
    const tag=av?av+'/'+o.x[2]+' available':'FULL';
-   return '<button class="llrow'+cls+'" data-c="'+esc(o.c)+'"><b>'+esc(o.c)+'</b><i>'+esc(o.r.b)+' · '+esc(o.r.c)+'</i><u class="'+(av?'':'full')+'">'+tag+'</u></button>';
+   const pin=P[o.c]?' ●':'';
+   return '<button class="llrow'+cls+'" data-c="'+esc(o.c)+'"><b>'+esc(o.c)+pin+'</b><i>'+esc(o.r.b)+' · '+esc(o.r.c)+'</i><u class="'+(av?'':'full')+'">'+tag+'</u></button>';
   }).join('');
   msg(hits.length>60?hits.length+' match — 60 lang ang ipinapakita, mag-type pa ng mas marami':'')};
  const det=o=>{
   const x=o.x,r=o.r;
   $('lldet').innerHTML=kv([['Status',x[1]?'AVAILABLE':'FULL'],['Available slots',x[1]],['Site / subdivision',r.s]])};
+ const saved=()=>{
+  const el=$('llpins');if(!el)return;
+  const n=Object.keys(P).length;
+  const v=picked&&P[picked];
+  let s='May <b>'+n+'</b> pin na naka-save sa <b>device na ito</b> — walang server, walang bayad.';
+  if(v)s+=' <b>'+picked+'</b> nasa <b>'+v[0]+', '+v[1]+'</b>.';
+  else if(picked)s+=' <b>'+picked+'</b> wala pang LONG/LAT.';
+  el.innerHTML=s;
+  const b=$('lldel');if(b)b.style.display=v?'':'none'};
+ const fill=()=>{
+  const v=picked&&P[picked];
+  $('llng').value=v?v[0]:'';
+  $('llat').value=v?v[1]:''};
  const pick=c=>{
-  const o=all().find(v=>v.c===c);
-  if(!o){picked='';$('lldet').innerHTML='';msg('Hindi nasa facility data ang '+c+'.','bad');return}
-  picked=c;$('llc').value=c;det(o);sug();
+  const o=nodeOf(c);
+  if(!o){picked='';$('lldet').innerHTML='';msg('Hindi nasa facility data ang '+c+'.','bad');saved();return}
+  picked=c;$('llc').value=c;det(o);fill();saved();sug();
   logEv('LONGLAT PICK','LONG/LAT - CAFAC',(String($('llnm').value||'').trim()||'-')+' -> '+c)};
- const typed=()=>{picked='';$('lldet').innerHTML='';sug()};
+ const typed=()=>{picked='';$('lldet').innerHTML='';fill();saved();sug()};
+ const num=(s)=>{const n=parseFloat(String(s).replace(',','.'));return isFinite(n)?n:null};
+ const savePin=()=>{
+  if(!picked){msg('Pumili muna ng CAFAC sa listahan bago mag-save ng pin.','bad');return}
+  const lng=num($('llng').value),lat=num($('llat').value);
+  if(lng===null||lat===null){msg('Kulang ang LONG o LAT — kopyahin ang numero mula sa SW Maps.','bad');return}
+  if(lat<3||lat>22||lng<113||lng>127){msg('Nasa labas ng Pilipinas ang numero ('+lng+', '+lat+') — balikan mo.','bad');return}
+  P[picked]=[+lng.toFixed(6),+lat.toFixed(6),Date.now(),String($('llnm').value||'').trim()];wp();fill();saved();sug();
+  msg('Na-save ang pin ng '+picked+' sa '+P[picked][0]+', '+P[picked][1]+'.','ok');
+  logEv('LONGLAT PIN','LONG/LAT - CAFAC',picked+' = '+P[picked][0]+' '+P[picked][1])};
+ const delPin=()=>{
+  if(!picked||!P[picked])return;
+  delete P[picked];wp();fill();saved();sug();
+  msg('Tinanggal ang pin ng '+picked+'.','')};
+ const X=s=>String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+ const info=c=>{const o=nodeOf(c),v=P[c]||[];
+  const p=[c];
+  if(o){const av=o.x[1];p.push(av?av+'/'+o.x[2]+' AVAILABLE':'FULL');p.push(o.r.b+', '+o.r.c);p.push('site: '+o.r.s)}
+  if(v[3])p.push('para kay: '+v[3]);
+  return{nm:c,d:X(p.join(' | '))}};
+ const keys=()=>Object.keys(P).filter(c=>Array.isArray(P[c])&&isFinite(P[c][0])&&isFinite(P[c][1])).sort();
+ const kmlText=()=>{const k=keys();
+  let s='<?xml version="1.0" encoding="UTF-8"?>\n<kml xmlns="http://www.opengis.net/kml/2.2">\n<Document>\n<name>3MDA CAFAC pins</name>\n<description>'+k.length+' node, ginawa ng dashboard '+new Date().toISOString().slice(0,10)+'</description>\n<style id="p"><IconStyle><color>ff2b2bff</color><scale>1.2</scale></IconStyle></style>\n';
+  k.forEach(c=>{const i=info(c);const v=P[c];
+   s+='<Placemark>\n<name>'+X(i.nm)+'</name>\n<description>'+i.d+'</description>\n<styleUrl>#p</styleUrl>\n<Point>\n<coordinates>'+v[0]+','+v[1]+',0</coordinates>\n</Point>\n</Placemark>\n'});
+  return s+'</Document>\n</kml>'};
+ const gpxText=()=>{const k=keys();
+  let s='<?xml version="1.0" encoding="UTF-8"?>\n<gpx version="1.1" creator="3MDA dashboard" xmlns="http://www.topografix.com/GPX/1/1">\n<metadata><name>3MDA CAFAC pins</name><time>'+new Date().toISOString()+'</time></metadata>\n';
+  k.forEach(c=>{const i=info(c);const v=P[c];
+   s+='<wpt lat="'+v[1]+'" lon="'+v[0]+'"><name>'+X(i.nm)+'</name><desc>'+i.d+'</desc></wpt>\n'});
+  return s+'</gpx>'};
+ const dl=(txt,mime,fn)=>{
+  try{const b=new Blob([txt],{type:mime});const u=URL.createObjectURL(b);
+   const a=document.createElement('a');a.href=u;a.download=fn;document.body.appendChild(a);a.click();
+   setTimeout(()=>{URL.revokeObjectURL(u);a.remove()},3000);return true}
+  catch(e){return false}};
+  const copy=t=>{try{navigator.clipboard.writeText(t);return true}catch(e){return false}};
+ const out=(kind)=>{
+  const txt=kind==='kml'?kmlText():gpxText();const n=keys().length;
+  if(!n){msg('Wala pang naka-save na pin — lagyan muna ng LONG/LAT ang CAFAC.','bad');return}
+  const fn='3mda-cafac-'+n+'-pin.'+kind;
+  if(dl(txt,kind==='kml'?'application/vnd.google-earth.kml+xml':'application/gpx+xml',fn))
+   msg('Na-download ang <'+fn+'> — buksan iyan sa SW Maps, o i-import sa Google My Maps (New map > Import). '+n+' pin.','ok');
+  else if(copy(txt)) msg('Hindi pinayagan ng browser mag-download, pero <b>nakopya</b> ang '+n+' pin — i-paste sa file editor. '+kind.toUpperCase(),'bad');
+  else msg('Hindi kaya ng browser mag-download o mag-copy sa mode na ito.','bad');
+  logEv('LONGLAT EXPORT','LONG/LAT - CAFAC',kind+' '+n+' pin')};
+ const openGm=()=>{
+  const v=picked&&P[picked];
+  let q;
+  if(v)q=v[1]+','+v[0];
+  else{const o=nodeOf(picked);q=o?(o.r.b+', '+o.r.c+', Cavite'):'Cavite, Philippines'}
+  window.open('https://www.google.com/maps/search/?api=1&query='+encodeURIComponent(q),'_blank','noopener');
+  let m;
+  if(v)m='Binuksan ang Google Maps sa pin ng '+picked+'.';
+  else if(picked)m='Walang pin ang '+picked+' — hinanap ko lang ang barangay/city.';
+  else m='Binuksan ang Google Maps sa kabuuang Cavite.';
+  msg(m,'')};
+ const openMy=()=>{window.open('https://www.google.com/maps/d/','_blank','noopener');
+  msg('Binuksan ang Google My Maps. Gumawa ng bagong map, pindot <b>Import</b>, pili ang <b>3mda-cafac-'+keys().length+'-pin.kml</b>.','')};
  const panel='<div class="fcp" id="llp" hidden>'+
   '<h2>LONG/LAT - CAFAC</h2>'+
-  '<div class="sub">I-type ang pangalan ng bagong application, tapos mag-type ng CAFAC — searchable siya habang ka nagta-type. Pindot ang CAFAC na hanap mo para makita ang <b>available</b> at <b>lokasyon</b> nito.</div>'+
+  '<div class="sub">I-type ang pangalan ng bagong application, tapos mag-type ng CAFAC — searchable siya habang ka nagta-type. Pindot ang CAFAC para makita ang <b>available</b> at <b>lokasyon</b> nito, at para mai-save ang pin niya.</div>'+
   '<div class="llgrid">'+
   '<div class="llleft">'+
   '<label class="sub">SUBSCRIBER NAME</label><input id="llnm" placeholder="Pangalan ng subscriber" autocomplete="off">'+
@@ -1033,7 +1121,23 @@ window.LL=(()=>{
   '</div>'+
   '<div class="fbox lldet"><h4>CAFAC DETAILS</h4><div id="lldet"></div></div>'+
   '</div>'+
-  '<div class="sub" style="margin-top:10px">Kung i-type mo ang buong code at wala siyang match, ibig sabihin <b>hindi nasa facility data</b> ang node na iyan — tignan mo ang spelling o ang city sa Facility Checking.</div>'+
+  '<div class="fbox llmap">'+
+  '<h4>SW MAPS + GOOGLE MY MAPS</h4>'+
+  '<div class="lllr">'+
+  '<div><label class="sub">LONG (East, hal. 120.873400)</label><input id="llng" placeholder="walang nakalagay" autocomplete="off" inputmode="decimal" spellcheck="false"></div>'+
+  '<div><label class="sub">LAT (North, hal. 14.082100)</label><input id="llat" placeholder="walang nakalagay" autocomplete="off" inputmode="decimal" spellcheck="false"></div>'+
+  '<button class="llbtn" id="llsavepin">💾 I-save ang pin</button>'+
+  '</div>'+
+  '<div class="llbtns">'+
+  '<button class="llbtn" id="llkml">⬇ KML para sa SW Maps + My Maps</button>'+
+  '<button class="llbtn" id="llgpx">⬇ GPX para sa SW Maps</button>'+
+  '<button class="llbtn" id="llgm">📍 Buksan sa Google Maps</button>'+
+  '<button class="llbtn" id="llmy">⭐ Buksan sa Google My Maps</button>'+
+  '<button class="llbtn red" id="lldel" style="display:none">✖ Tanggalin ang pin nito</button>'+
+  '</div>'+
+  '<div class="llsaved" id="llpins"></div>'+
+  '</div>'+
+  '<div class="sub" style="margin-top:10px">Kung i-type mo ang buong code at wala siyang match, ibig sabihin <b>hindi nasa facility data</b> ang node na iyan. Ang mga pin ay naka-save lang sa <b>localStorage</b> ng device na ito — kaya walang bayad, pero hindi rin makikita ng ibang agent hanggang sa i-export mo ang KML.</div>'+
   '</div>';
  const init=()=>{
   const fcp=$('fcp');if(!fcp||$('llp'))return;
@@ -1044,9 +1148,15 @@ window.LL=(()=>{
    const b=$('llsug').querySelector('.llrow');
    if(b){e.preventDefault();b.click()}});
   $('llsug').onclick=e=>{const b=e.target.closest('.llrow');if(b)pick(b.dataset.c)};
+  $('llsavepin').onclick=savePin;
+  $('llkml').onclick=()=>out('kml');
+  $('llgpx').onclick=()=>out('gpx');
+  $('llgm').onclick=openGm;
+  $('llmy').onclick=openMy;
+  $('lldel').onclick=delPin;
   const t3=$('t3');if(t3)t3.onclick=()=>{document.body.classList.add('fcv');mode('ll')}};
  init();
- const render=()=>{if(!$('llp'))init();sug()};
- return {render,pick,count:()=>all().length}})();
+ const render=()=>{if(!$('llp'))init();sug();fill();saved()};
+ return {render,pick,count:()=>all().length,kml:kmlText,gpx:gpxText,pins:()=>P,save:savePin,n:keys}})();
 </script>
 </body></html>
