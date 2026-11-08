@@ -1685,6 +1685,8 @@ html.vm .hp button{padding:8px 10px;font-size:11.5px;letter-spacing:0}
 #llp .rtrow{display:flex;flex-wrap:wrap;gap:10px;margin-top:8px;font-size:13px}
 #llp .rtrow b{font-size:15px}
 #llp .rtrow span{color:var(--mut)}
+#llp .rtp{flex:1 1 100%;font-size:12.5px;font-variant-numeric:tabular-nums;color:var(--ink)}
+#llp .rtp span{display:inline-block;font-size:11px;font-weight:700;letter-spacing:0.04em;color:var(--mut);margin-right:6px}
 #llp .llsaved{margin-top:8px;font-size:12.5px;color:var(--mut)}
 #llp .llsaved b{color:var(--ink)}
 #llp .rtmsg{min-height:18px;font-size:13px;margin-top:6px;color:var(--mut)}
@@ -1784,15 +1786,22 @@ window.LL=(()=>{
   const a=path();
   if(M&&a.length>1)line=L.polyline(a,{color:'#e11d2e',weight:4,opacity:.9}).addTo(M);
   const r=$('rtrow');if(!r)return;
+  const LLT=(a)=>'LONG '+(+a[1]).toFixed(6)+' \u00b7 LAT '+(+a[0]).toFixed(6);
+  const sp=P[picked];
+  const savedLL=(picked&&sp&&isFinite(sp[0])&&isFinite(sp[1]))?('LONG '+(+sp[0]).toFixed(6)+' \u00b7 LAT '+(+sp[1]).toFixed(6)):'';
+  let h='';
   if(pts.start&&pts.end){
    const k=roadKm(),s=straightKm();
-   let h='<div><b>'+km(k)+'</b> <span>ang daan ('+pts.ways.length+' punto sa pagitan)</span></div>'+
-    '<div><b>'+km(s)+'</b> <span>tuwiran (hindi daan)</span></div>';
-   if(k-s>0.02)h+='<div><span>Lumibot ng '+km(k-s)+'</span></div>';
-   r.innerHTML=h}
+   h+='<div><b>'+km(k)+'</b> <span>ang daan ('+pts.ways.length+' punto sa pagitan)</span></div>'+
+    '<div><b>'+km(s)+'</b> <span>layo ng CAFAC \u2192 bahay (tuwiran, hindi daan)</span></div>';
+   if(k-s>0.02)h+='<div><span>Lumibot ng '+km(k-s)+'</span></div>'}
   else if(pts.start||pts.end){
-   r.innerHTML='<div><span>Kulang ang '+(pts.start?'bahay ng client':'CAFAC')+' — tapusin ang dalawang dulo para may sukat.</span></div>'}
-  else{r.innerHTML='<div><span>Wala pang punto. Pindot ①, mag-tap sa mapa, pagkatapos ②, pagkatapos ③ hanggang sa tumama sa kalye.</span></div>'}
+   h+='<div><span>Kulang ang '+(pts.start?'bahay ng client':'CAFAC')+' — tapusin ang dalawang dulo para may sukat.</span></div>'}
+  else{h+='<div><span>Wala pang punto. Pindot ①, mag-tap sa mapa, pagkatapos ②, pagkatapos ③ hanggang sa tumama sa kalye.</span></div>'}
+  if(pts.start)h+='<div class="rtp"><span>PIN NG CAFAC</span>'+LLT(pts.start)+'</div>';
+  else if(savedLL)h+='<div class="rtp"><span>PIN NG CAFAC (naka-save)</span>'+savedLL+'</div>';
+  if(pts.end)h+='<div class="rtp"><span>PIN NG BAHAY</span>'+LLT(pts.end)+'</div>';
+  r.innerHTML=h;
   cnt()};
  const sync=()=>{
   if(!M){draw();return}
@@ -1813,7 +1822,7 @@ window.LL=(()=>{
    aW.push(m)});
   draw()};
  const icon=(cls,label)=>L.divIcon({className:'rtic '+cls,html:'<i>'+label+'</i>',iconSize:[24,24],iconAnchor:[12,12]});
- const fit=()=>{if(!M)return;const a=path();if(a.length>1){M.fitBounds(L.latLngBounds(a).pad(.2));m2('Ipinakita ang buong daan.','')}else wake(true)};
+ const fit=()=>{if(!M)return;const a=path();if(a.length>1){M.fitBounds(L.latLngBounds(a).pad(.2),{animate:false});paint();m2('Ipinakita ang buong daan (zoom '+M.getZoom()+').','')}else wake(true)};
  const shown=()=>{const p=$('llp');return !!p&&!p.hidden&&!!$('rtmap')&&$('rtmap').offsetWidth>0};
  // Leaflet's zoom-fade can leave loaded tiles stuck at inline opacity 0 (blank map); re-assert them.
  const paint=()=>{if(!M)return;const im=M.getContainer().getElementsByTagName('img');
@@ -1942,16 +1951,50 @@ window.LL=(()=>{
   if(!o){picked='';$('lldet').innerHTML='';msg('Hindi nasa facility data ang '+c+'.','bad');saved();cnt();return}
   picked=c;$('llc').value=c;det(o);fill();saved();sug();
   if(M&&R[rk()]){loadR(rk());m2('Na-load ang '+R[rk()].w.length+' punto na naka-save ('+km(R[rk()].km)+') para kay '+R[rk()].nm+'.','ok')}
-  else if(M&&P[c]){M.setView([P[c][1],P[c][0]],15);m2('Ibinaling ang mapa sa naka-save na pin ng '+c+' ('+P[c][0]+', '+P[c][1]+').','')}
+  else if(M&&P[c]){M.setView([P[c][1],P[c][0]],15);paint();m2('Ibinaling ang mapa sa naka-save na pin ng '+c+' ('+P[c][0]+', '+P[c][1]+').','')}
+  else toBgy(o);
   cnt();
   logEv('LONGLAT PICK','LONG/LAT - CAFAC',(nameOf()||'-')+' -> '+c)};
  const typed=()=>{picked='';$('lldet').innerHTML='';fill();saved();sug();cnt()};
 
  /* ---- Hanapin (Nominatim / OpenStreetMap): walang API key, walang bayad, 1 hiling bawat segundo ---- */
+ const NQ='https://nominatim.openstreetmap.org/search?format=jsonv2&limit=5&countrycodes=ph&accept-language=en&q=';
  const HIT=[];
  let seq=0,lastReq=0,lastQ='';
+ const gap=()=>Date.now()-lastReq;
  const vb=()=>{if(!M)return '';const b=M.getBounds();
   return '&viewbox='+b.getWest().toFixed(5)+','+b.getNorth().toFixed(5)+','+b.getEast().toFixed(5)+','+b.getSouth().toFixed(5)};
+ const nom=(q,cb,bias)=>{
+  if(gap()<1100)return false;
+  const my=++seq;lastReq=Date.now();lastQ=q;
+  fetch(NQ+encodeURIComponent(q)+(bias?vb():''))
+   .then(r=>{if(!r.ok)throw new Error('HTTP '+r.status);return r.json()})
+   .then(a=>{if(my===seq)cb(Array.isArray(a)?a:[],q,'')})
+   .catch(e=>{if(my===seq)cb([],q,String(e&&e.message||e))});
+  return true};
+ const zoomOf=(r)=>{const c=String(r.category||''),t=String(r.type||'');
+  if(c==='place'){if(t==='city')return 12;if(t==='municipality')return 13;return 15}
+  if(c==='boundary')return 15;
+  if(c==='highway')return 17;
+  return 16};
+ const isArea=r=>{const c=String(r.category);return c==='boundary'||c==='place'};
+ // Sunod-sunod na pag-hanap (barangay+city, barangay lang, site, ciudad) — ang BOUNDARY ang pinipili,
+ // ang POI ay last-resort lang kasi hindi iyon ang hugis ng barangay.
+ const chain=(qs,done,onQ)=>{
+  if(!qs.length){done(null);return}
+  let alt=null,i=0;
+  const step=()=>{
+   if(i>=qs.length){done(alt?{r:alt,alt:true}:null);return}
+   const q=qs[i++];
+   if(onQ)onQ(q,i);
+   const fire=()=>nom(q,(list,qq,err)=>{
+    if(err){done({err:err,q:qq});return}
+    const a=list.find(isArea);
+    if(a){done({r:a,q:qq});return}
+    if(!alt&&list.length)alt=list[0];
+    step()},false);
+   if(gap()<1160)setTimeout(fire,1170-gap());else fire()}
+  step()};
  const clrRes=()=>{HIT.length=0;const e=$('rtres');if(e)e.innerHTML='';const x=$('rtqx');if(x)x.style.display='none'};
  const listRes=(list,q)=>{
   const e=$('rtres');if(!e)return;
@@ -1963,11 +2006,9 @@ window.LL=(()=>{
    return '<button class="llr" data-i="'+i+'"><b>'+esc(head.trim())+'</b><i>'+esc(p.slice(2).join(', ').trim()||q)+'</i></button>'}).join('')};
  const goRes=(i)=>{const r=HIT[i];if(!r)return;
   if(!mkMap())return;
-  const la=+r.lat,lo=+r.lon;
-  if(!isFinite(la)||!isFinite(lo)){m2('Hindi mabasa ang coordinates ng resultang iyon.','bad');return}
-  M.setView([la,lo],r.type==='way'?17:16);
-  paint();
-  m2('Nandyan na ang mapa: <b>'+String(r.display_name||'').split(',').map(x=>x.trim()).filter(x=>x).slice(0,3).join(', ')+'</b> ('+la.toFixed(5)+', '+lo.toFixed(5)+'). I-tap na rito ang ① CAFAC, ② Bahay, o ③ Punto ng daan.','ok');
+  const p=place(r);
+  if(!p){m2('Hindi mabasa ang coordinates ng resultang iyon.','bad');return}
+  m2('Nandyan na ang mapa (zoom '+p.z+'): <b>'+String(r.display_name||'').split(',').map(x=>x.trim()).filter(x=>x).slice(0,3).join(', ')+'</b> ('+p.lat.toFixed(5)+', '+p.lng.toFixed(5)+'). I-tap na rito ang ① CAFAC, ② Bahay, o ③ Punto ng daan.','ok');
   logEv('MAP SEARCH','LONG/LAT - CAFAC',lastQ+' -> '+String(r.display_name||'').slice(0,90))};
  const search=()=>{
   const el=$('rtq');if(!el)return;
@@ -1975,17 +2016,55 @@ window.LL=(()=>{
   const x=$('rtqx');if(x)x.style.display=q?'':'none';
   if(q.length<3){m2('Mag-type ng kahit 3 letra — halimbawa <b>Anabu 1-A Imus</b> o <b>Magsinhorn Alfonso Cavite</b>.','bad');return}
   if(!mkMap()){m2('Hindi nag-load ang mapa — gamitin ang <b>Manual na LONG/LAT</b> sa baba.','bad');return}
-  if(Date.now()-lastReq<1100){m2('Hintay sandali — isang hiling bawat segundo lang ang tinatanggap ng OSM search, para hindi tayo ma-block. Pindot ulit ng <b>🔍 Hanapin</b>.','');return}
-  const my=++seq;lastReq=Date.now();lastQ=q;
+  if(gap()<1100){m2('Hintay sandali — isang hiling bawat segundo lang ang tinatanggap ng OSM search, para hindi tayo ma-block. Pindot ulit ng <b>🔍 Hanapin</b>.','');return}
   m2('Hinahanap ang '+q+' ...','');
-  fetch('https://nominatim.openstreetmap.org/search?format=jsonv2&limit=5&countrycodes=ph&accept-language=en&q='+encodeURIComponent(q)+vb())
-   .then(r=>{if(!r.ok)throw new Error('http '+r.status);return r.json()})
-   .then(list=>{if(my!==seq)return;
-    listRes(Array.isArray(list)?list:[],q);
-    if(x)x.style.display='';
-    m2(HIT.length?HIT.length+' resulta para sa <b>'+q+'</b> — pindot ang isa para ilipat doon ang mapa.':'Walang natagpuang <b>'+q+'</b> — subukan ang <b>barangay + ciudad</b> o pangalan ng kalye.',HIT.length?'ok':'bad')})
-   .catch(e=>{if(my!==seq)return;
-    m2('Hindi naabot ang search ('+(e&&e.message||'walang internet')+'). I-tap na lang mismo ang mapa o gamitin ang <b>Manual na LONG/LAT</b> sa baba — walang bayad ang pareho.','bad')})};
+  nom(q,(list,qq,err)=>{
+   if(err){m2('Hindi naabot ang search ('+err+'). I-tap na lang mismo ang mapa o gamitin ang <b>Manual na LONG/LAT</b> sa baba — walang bayad ang pareho.','bad');return}
+   listRes(list,qq);
+   if(x)x.style.display='';
+   m2(list.length?list.length+' resulta para sa <b>'+qq+'</b> — pindot ang isa para ilipat doon ang mapa.':'Walang natagpuang <b>'+qq+'</b> — subukan ang <b>barangay + ciudad</b> o pangalan ng kalye.',list.length?'ok':'bad')},true)};
+ const cleanB=s=>String(s||'').replace(/^(BARANGAY|BOBARANGAY|BRGY|BGY|BAYAN)\.?\s*/i,'').replace(/\s+/g,' ').trim();
+ const place=(r)=>{const la=+r.lat,lo=+r.lon;
+  if(!isFinite(la)||!isFinite(lo))return null;
+  let z=zoomOf(r);const bb=r.boundingbox;
+  if(bb){const s=+bb[0],n=+bb[1],w=+bb[2],e=+bb[3];
+   if(isFinite(s)&&isFinite(w)&&n-s<0.2&&e-w<0.2){M.fitBounds(L.latLngBounds([[s,w],[n,e]]),{animate:false,maxZoom:16});z=M.getZoom()}
+   else{if(z>16)z=16;M.setView([la,lo],z)}}
+  else{if(z>16)z=16;M.setView([la,lo],z)}
+  paint();return {z:z,lat:la,lng:lo}};
+ // Pag-pili ng CAFAC: izoom agad sa barangay na nakalagay sa facility data (walang pin pa).
+ const cleanC=s=>String(s||'').replace(/\s+(CITY|MUNISIPALIDAD|MUNICIPALITY|MUN)\s*$/i,'').replace(/\s+/g,' ').trim();
+ const toBgy=(o)=>{
+  if(!o||!mkMap())return;
+  const b=cleanB(o.r.b),c=cleanC(o.r.c),s=String(o.r.s||'').trim();
+  const qs=[],seen={};
+  const push=q=>{const k=q.toUpperCase();if(q.length>2&&!seen[k]&&qs.length<4){seen[k]=1;qs.push(q)}};
+  const bOk=b&&/[A-Za-z]/.test(b);
+  if(bOk&&c)push(b+', '+c);
+  if(bOk)push(b);
+  if(bOk&&c)push(b+', '+c+', Cavite');
+  if(s&&c)push(cleanB(s)+', '+c);
+  if(c)push(c+', Cavite');
+  if(!qs.length){m2('Walang nakalagay na barangay sa '+o.c+' sa facility data — hanapin sa <b>🔍 Hanapin</b> o i-type ang LONG/LAT.','bad');return}
+  chain(qs,(hit)=>{
+   if(picked!==o.c)return;
+   if(hit&&hit.err){m2('Hindi naabot ang OSM ('+hit.err+') — i-drag na lang ang mapa o gamitin ang <b>Manual na LONG/LAT</b>.','bad');return}
+   if(!hit){m2('Hindi matagpuan sa OSM ang '+cleanB(o.r.b)+', '+o.r.c+' — mag-search sa <b>🔍 Hanapin</b> o gamitin ang <b>Manual na LONG/LAT</b>.','bad');return}
+   const p=place(hit.r);
+   if(!p){m2('Hindi mabasa ang coordinates ng '+hit.q+'.','bad');return}
+   const disp=String(hit.r.display_name||'');
+   const full=disp.toUpperCase();
+   const nm=disp.split(',').map(x=>x.trim()).filter(x=>x).slice(0,3).join(', ');
+   const want=cleanB(o.r.b).toUpperCase();
+   const toks=want.split(/[^A-Z]+/).filter(x=>x.length>2);
+   let yes=toks.length>0;
+   for(let i=0;i<toks.length;i++)if(full.indexOf(toks[i])<0)yes=false;
+   const tama=!hit.alt&&yes;
+   if(tama)m2('Izoom sa barangay na <b>'+nm+'</b> (zoom '+p.z+'). I-tap na doon ang ① CAFAC, pagkatapos ② Bahay.','ok');
+   else if(hit.alt)m2('Walang barangay boundary sa OSM para sa '+cleanB(o.r.b)+' — eto ang pinakamalapit na match: <b>'+nm+'</b> (zoom '+p.z+'). Kumpirmahin bago mag-tap ng ① CAFAC.','bad');
+   else m2('Hindi makita sa OSM ang barangay na <b>'+cleanB(o.r.b)+'</b> — pinakapalapit ay <b>'+nm+'</b> (zoom '+p.z+'). Hanapin sa <b>🔍 Hanapin</b> o i-drag ang mapa.','bad');
+   logEv('MAP BARANGAY','LONG/LAT - CAFAC',o.c+' -> '+hit.q+' @ '+p.lat.toFixed(5)+','+p.lng.toFixed(5)+' z'+p.z+(hit.alt?' (POI)':(tama?'':' (LAAS)')))},
+   (q,i)=>{if(picked===o.c)m2('Izoom sa barangay ng '+o.c+' — pagsubok '+i+': <b>'+q+'</b> ...','')})};
 
  const panel='<div class="fcp" id="llp" hidden>'+
   '<h2>LONG/LAT - CAFAC</h2>'+
