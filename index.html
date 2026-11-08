@@ -1921,7 +1921,11 @@ window.LL=(()=>{
   return cv};
  // Ang tile na hindi CORS ang nagtatantag ng canvas — mas maaga naming nalalaman
  // kaysa mag-throw sa loob ng toBlob.
- const taintOf=(cv)=>{try{cv.getContext('2d').getImageData(0,0,1,1);return ''}catch(e){return String(e&&e.message||e)}};
+ let taintCache=null;
+ // Isang readback buong page — paulit-ulit na getImageData ang nagdudulot ng Canvas2D warning.
+ const taintOf=(cv)=>{if(taintCache!==null)return taintCache;
+  try{cv.getContext('2d').getImageData(0,0,1,1);taintCache=''}catch(e){taintCache=String(e&&e.message||e)}
+  return taintCache};
  const mini=()=>{
   const box=$('rtmini');if(!box)return;
   box.innerHTML='';
