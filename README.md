@@ -283,6 +283,26 @@ FACILITY CHECKING, `#t3` LONG/LAT - CAFAC): a lookup first, then a map the agent
   `✖ Burahin lahat`, `💾 I-save ang daan`, `🗑 Tanggalin ang naka-save`; below the map `🗺️ Mapa` / `🛰️ Satellite`
   and the KML/GPX/Google buttons. The distance is the **sum of his own taps** (`hav()` over start &rarr; waypoints
   &rarr; end), shown next to the straight-line value with the gap called out, so a lazy trace is visible.
+  * **Search bar (`🔍 Hanapin`) above the map** (he asked: *"lagyan ng search bar sa maps upang mas madali makita
+    ang location na hinahanap dito"*, then picked **"B: Nominatim lang"** over a local-first index). One GET to
+    `nominatim.openstreetmap.org/search?format=jsonv2&limit=5&countrycodes=ph&accept-language=en&q=` - **no key,
+    no billing**, CORS-allowed from his `github.io` origin (measured HTTP 200 there). It fires **only** on Enter
+    or the button (never per keystroke) and refuses a second request inside 1,100 ms with *"Hintay sandali - isang
+    hiling bawat segundo lang ang tinatanggap ng OSM search"*, because that is OSM's published policy. Fewer than
+    3 characters is refused. Results are tappable rows (`Anabu I-A, Imus` / `Cavite, Calabarzon, 4103, Philippines`);
+    a tap calls `M.setView([lat,lng],16)` - **17 for `type:'way'`** - and the trace tools are untouched, so the
+    measurement is still his own taps. Anything that cannot be reached says so and points at the tap flow or the
+    manual `LONG/LAT` inputs.
+    * Measured live: `Anabu 1-A Imus` &rarr; 1 hit &rarr; center `14.40291, 120.94132` z16, 8/8 tiles painted,
+      0 at opacity 0. `Imus Cavite` &rarr; 2 hits (city + `Diocese of Imus`). `Alfonso Cavite` &rarr; 1 hit &rarr;
+      `14.13805, 120.85542`. Weak exactly as the probe predicted: `madre paterno imus`, `niog imus cavite` &rarr;
+      0 hits **with and without** the bias, so the miss is OSM coverage, not my code - the empty-state text tells
+      him to try `barangay + ciudad`.
+    * **`bounded` is a trap:** `&viewbox=<w,n,e,s>&bounded=0` was measured to fail fetch outright ("Failed to
+      fetch" - the WAF answer carries no CORS header), while the same URL with `viewbox` alone returned 200/1 hit
+      and `bounded=1` returned 200 but 0 hits (it hard-clips to the visible box). So the bias is `viewbox` only.
+    * Because `msg`/`m2` write `textContent`, `<b>` in a message used to render as literal markup. Both now go
+      through `h()` = `esc()` then re-allow only `<b>`/`</b>`, so agent-typed names stay inert.
   * Leaflet 1.9.4 is **inlined** in the page (no CDN, no SRI, no key) with keyless OSM tiles + Esri World Imagery,
     and markers are `L.divIcon` text icons so no image assets ship. `scrollWheelZoom:false`; `invalidateSize()`
     on open/resize; **no auto-fit on tap** (his old complaint *"bigla bigla syang nag zoom out"*) - fit only via
