@@ -1679,13 +1679,19 @@ html.vm .hp button{padding:8px 10px;font-size:11.5px;letter-spacing:0}
 #llp .xh j{left:-1px;top:-14px;width:2px;height:28px}
 #llp .leaflet-control-zoom a{width:38px;height:38px;line-height:34px;font-size:21px}
 #llp .rtlay{display:flex;flex-wrap:wrap;gap:6px;margin-top:6px;align-items:center}
-#llp .rtrow{display:flex;flex-wrap:wrap;gap:10px;margin-top:8px;font-size:13px}
-#llp .rtrow b{font-size:15px}
-#llp .rtrow span{color:var(--mut)}
-#llp .rtp{flex:1 1 100%;font-size:12.5px;font-variant-numeric:tabular-nums;color:var(--ink)}
-#llp .rtp span{display:inline-block;font-size:11px;font-weight:700;letter-spacing:0.04em;color:var(--mut);margin-right:6px}
-#llp .rtlg{flex:1 1 100%;margin-top:6px;padding-top:6px;border-top:1px solid var(--line);font-size:11px;font-weight:700;letter-spacing:0.05em;color:var(--mut)}
-#llp .rtp b{font-size:12.5px;color:var(--ink)}
+#llp .rtrow{display:block;margin-top:8px}
+#llp .rtcap{font-size:10.5px;font-weight:800;letter-spacing:0.07em;color:var(--mut);margin:9px 0 6px}
+#llp .rtcard{display:flex;align-items:center;gap:10px;background:#fff;border:1px solid var(--line);border-left:3px solid transparent;border-radius:14px;padding:10px 11px;margin-bottom:7px}
+#llp .rtcard.sum{border-left-color:var(--red)}
+#llp .rtic{width:26px;height:26px;flex:0 0 26px;border-radius:50%;background:#eef4ff;display:flex;align-items:center;justify-content:center;font-size:13px}
+#llp .rttx{flex:1;min-width:0}
+#llp .rttx b{display:block;font-size:12.5px;font-weight:700;color:var(--ink)}
+#llp .rttx i{display:block;font-style:normal;font-size:10.5px;color:var(--mut);margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+#llp .rtval{font-size:12.5px;font-weight:800;white-space:nowrap;font-variant-numeric:tabular-nums;text-align:right;color:var(--ink)}
+#llp .rtval small{display:block;font-weight:600;font-size:9.5px;color:var(--mut)}
+#llp .rtmini{width:104px;height:78px;flex:0 0 104px;border-radius:10px;border:1px solid var(--line);background:#e8eef6;overflow:hidden}
+#llp .rtmini canvas{display:block;width:104px;height:78px}
+#llp .rtsend{display:block;width:100%;margin-top:4px;padding:13px 0;min-height:44px;border:0;border-radius:14px;background:var(--red);color:#fff;font:inherit;font-size:14.5px;font-weight:800;letter-spacing:0.06em;cursor:pointer}
 #llp .llsaved{margin-top:8px;font-size:12.5px;color:var(--mut)}
 #llp .llsaved b{color:var(--ink)}
 #llp .rtmsg{min-height:18px;font-size:13px;margin-top:6px;color:var(--mut)}
@@ -1828,29 +1834,118 @@ window.LL=(()=>{
   if(M&&g.length>1)line=L.polyline(g,{color:'#e11d2e',weight:4,opacity:.9}).addTo(M);
   const r=$('rtrow');if(!r)return;
   const LLT=(a)=>'LONG '+(+a[1]).toFixed(6)+' \u00b7 LAT '+(+a[0]).toFixed(6);
+  const LON=(a)=>(+a[1]).toFixed(6),LAT=(a)=>(+a[0]).toFixed(6);
+  const card=(ic,t,s,v,v2)=>'<div class="rtcard"><div class="rtic">'+ic+'</div><div class="rttx"><b>'+t+'</b><i>'+s+'</i></div><div class="rtval">'+v+(v2?'<small>'+v2+'</small>':'')+'</div></div>';
   const sp=P[picked];
   const savedLL=(picked&&sp&&isFinite(sp[0])&&isFinite(sp[1]))?('LONG '+(+sp[0]).toFixed(6)+' \u00b7 LAT '+(+sp[1]).toFixed(6)):'';
+  const oo=picked?all().find(o=>o.c===picked):null;
+  const nodeSub=oo?(cleanB(oo.r.b)+' \u00b7 '+cleanC(oo.r.c)):'walang napiling CAFAC';
   let h='';
   if(pts.start&&pts.end){
    const k=totKm(),s=straightKm();
-   h+='<div><b>'+km(k)+'</b> <span>ang daan';
-   if(RD>0)h+=' (sunod sa totoong kalye, '+pts.ways.length+' punto sa pagitan)';
-   else h+=' (hop mula sa mga tap mo, '+pts.ways.length+' punto)';
-   h+='</span></div>'+
-    '<div><b>'+km(s)+'</b> <span>layo ng CAFAC \u2192 bahay (tuwiran, hindi daan)</span></div>';
-   if(k-s>0.02)h+='<div><span>Lumibot ng '+km(k-s)+'</span></div>'}
+   let sub='';
+   if(RD>0)sub='sunod sa totoong kalye \u00b7 '+pts.ways.length+' likuan \u00b7 tuwiran '+km(s);
+   else sub='hop mula sa mga tap mo \u00b7 '+pts.ways.length+' likuan \u00b7 tuwiran '+km(s);
+   if(k-s>0.02)sub+=' \u00b7 lumibot ng '+km(k-s);
+   h+='<div class="rtcard sum"><div class="rtmini" id="rtmini"></div><div class="rttx"><b>CAFAC \u2192 BAHAY</b><i>'+sub+'</i></div><div class="rtval">'+km(k)+'<small>ang daan</small></div></div>'}
   else if(pts.start||pts.end){
-   h+='<div><span>Kulang ang '+(pts.start?'bahay ng client':'CAFAC')+' — tapusin ang dalawang dulo para may sukat.</span></div>'}
-  else{h+='<div><span>Wala pang punto. I-tap lang: ① CAFAC, ② bahay — ang app ang susunod sa totoong kalye (2 tap lang kumpleto ang daan).</span></div>'}
-  if(a.length>1){
-   h+='<div class="rtlg">ANG DAAN PIN BY PIN &mdash; sukat ng bawat likuan at LONG/LAT ng pin sa dulo nito</div>';
+   let kulang='bahay ng client';
+   if(pts.end)kulang='CAFAC';
+   h+='<div class="rtcard sum"><div class="rtmini" id="rtmini"></div><div class="rttx"><b>Kulang ang '+kulang+'</b><i>tapusin ang dalawang dulo para may sukat ng daan</i></div><div class="rtval">\u2014</div></div>'}
+  else{
+   h+='<div class="rtcard"><div class="rtic">\u2139\ufe0f</div><div class="rttx"><b>Wala pang punto</b><i>i-tap lang: \u2460 CAFAC, \u2461 bahay \u2014 ang app ang susunod sa totoong kalye</i></div><div class="rtval">\u2014</div></div>'}
+  h+=card('\ud83c\udfea','NODE \u2014 CAFAC na gamit',esc(nodeSub),esc(picked||'\u2014'));
+  if(pts.start)h+=card('\ud83d\udd35','PIN NG CAFAC',(picked?'naka-save na rin ang '+esc(picked):'i-tap o i-drag kung mali'),LON(pts.start),'LAT '+LAT(pts.start));
+  else if(savedLL)h+=card('\ud83d\udd35','PIN NG CAFAC (naka-save)','hindi pa naka-tap sa mapa \u2014 pindot \ud83d\udccc para mailagay','LONG '+(+sp[0]).toFixed(6),'LAT '+(+sp[1]).toFixed(6));
+  else h+=card('\ud83d\udd35','PIN NG CAFAC','wala pang naka-tap at wala pang naka-save','\u2014');
+  if(pts.end)h+=card('\ud83c\udfe0','PIN NG BAHAY',esc(nameOf()||'walang pangalan ng client'),LON(pts.end),'LAT '+LAT(pts.end));
+  else h+=card('\ud83c\udfe0','PIN NG BAHAY','ikalawang tap lang sa mapa','\u2014');
+  if(a.length>2){
+   h+='<div class="rtcap">ANG DAAN PIN BY PIN &mdash; SUKAT NG BAWAT LIKUAN</div>';
    for(let i=1;i<a.length;i++)
-    h+='<div class="rtp"><span>'+lbl(a,i-1)+' \u2192 '+lbl(a,i)+'</span><b>'+km(legKm(a,i))+'</b> \u00b7 '+legSrc(a,i)+' \u00b7 '+LLT(a[i])+'</div>'}
-  if(pts.start)h+='<div class="rtp"><span>PIN NG CAFAC</span>'+LLT(pts.start)+'</div>';
-  else if(savedLL)h+='<div class="rtp"><span>PIN NG CAFAC (naka-save)</span>'+savedLL+'</div>';
-  if(pts.end)h+='<div class="rtp"><span>PIN NG BAHAY</span>'+LLT(pts.end)+'</div>';
+    h+=card('\ud83d\udccd',lbl(a,i-1)+' \u2192 '+lbl(a,i),legSrc(a,i)+' \u00b7 '+LLT(a[i]),km(legKm(a,i)))}
   r.innerHTML=h;
+  mini();
   cnt()};
+ // Ang mini-map sa gilid ng summary card at ang PNG para sa SEND: iisang renderer,
+ // kinopya ang mga tile na naka-load na (walang bagong request) + ang linya at ang mga pin.
+ const shot=(w,hh)=>{
+  const a=path();
+  if(!M||!a.length)return null;
+  const dpr=Math.min(2,window.devicePixelRatio||1);
+  const cv=document.createElement('canvas');
+  cv.width=Math.round(w*dpr);cv.height=Math.round(hh*dpr);
+  const x=cv.getContext('2d');
+  x.scale(dpr,dpr);
+  x.fillStyle='#e8eef6';x.fillRect(0,0,w,hh);
+  let b=L.latLngBounds(a);
+  if(a.length<2)b=L.latLngBounds([[a[0][0]-0.0015,a[0][1]-0.0015],[a[0][0]+0.0015,a[0][1]+0.0015]]);
+  b=b.pad(a.length<2?0.4:0.14);
+  const z=M.getZoom();
+  const nw=M.project(b.getNorthWest(),z),se=M.project(b.getSouthEast(),z);
+  const pw=Math.max(1,se.x-nw.x),ph=Math.max(1,se.y-nw.y);
+  const k=Math.min(w/pw,hh/ph);
+  const ox=(w-pw*k)/2,oy=(hh-ph*k)/2;
+  const el=M.getContainer(),mr=el.getBoundingClientRect();
+  const tiles=[].slice.call(el.querySelectorAll('img.leaflet-tile'));
+  tiles.forEach(i=>{
+   if(!i.classList.contains('leaflet-tile-loaded')||!i.naturalWidth)return;
+   const t=i.getBoundingClientRect();
+   try{x.drawImage(i,(t.left-mr.left-nw.x)*k+ox,(t.top-mr.top-nw.y)*k+oy,t.width*k,t.height*k)}catch(e){}});
+  const px=(ll)=>{const q=M.project(ll,z);return [(q.x-nw.x)*k+ox,(q.y-nw.y)*k+oy]};
+  const g=(RG&&RG.length>1)?RG:a;
+  if(g.length>1){
+   x.lineJoin='round';x.lineCap='round';
+   x.strokeStyle='rgba(255,255,255,.85)';x.lineWidth=6;x.beginPath();
+   g.forEach((ll,i)=>{const q=px(ll);if(i)x.lineTo(q[0],q[1]);else x.moveTo(q[0],q[1])});x.stroke();
+   x.strokeStyle='#e11d2e';x.lineWidth=3.2;x.beginPath();
+   g.forEach((ll,i)=>{const q=px(ll);if(i)x.lineTo(q[0],q[1]);else x.moveTo(q[0],q[1])});x.stroke()}
+  const dot=(ll,txt,col)=>{const q=px(ll);
+   x.beginPath();x.arc(q[0],q[1],7,0,6.2832);x.fillStyle=col;x.fill();
+   x.lineWidth=2;x.strokeStyle='#fff';x.stroke();
+   x.fillStyle='#fff';x.font='bold 9px sans-serif';x.textAlign='center';x.textBaseline='middle';
+   x.fillText(txt,q[0],q[1]+0.5)};
+  if(pts.start)dot(pts.start,'1','#1d4ed8');
+  pts.ways.forEach((p,i)=>dot(p,String(i+1),'#0a7d3c'));
+  if(pts.end)dot(pts.end,'2','#e11d2e');
+  const cap=(picked||'MAPA')+'  \u00b7  z'+z+'  \u00b7  '+km(totKm());
+  x.font='bold 9px sans-serif';x.textAlign='left';x.textBaseline='middle';
+  const cw=x.measureText(cap).width+10;
+  x.fillStyle='rgba(255,255,255,.88)';x.fillRect(5,5,cw,15);
+  x.fillStyle='#111';x.fillText(cap,10,12.5);
+  return cv};
+ const mini=()=>{
+  const box=$('rtmini');if(!box)return;
+  box.innerHTML='';
+  const a=path();
+  if(!a.length||!M)return;
+  let cv=null;
+  try{cv=shot(104,78)}catch(e){cv=null}
+  if(cv)box.appendChild(cv)};
+ const sendShot=()=>{
+  const a=path();
+  if(a.length<2){m2('Kulang pa ang daan \u2014 i-tap muna ang \u2460 CAFAC at \u2461 bahay bago mag-SEND.','bad');return}
+  if(!M){m2('Hindi nag-load ang mapa \u2014 walang makuha na screenshot.','bad');return}
+  let cv=null,er='';
+  try{cv=shot(640,420)}catch(e){er=String(e&&e.message||e)}
+  if(!cv){m2('Hindi makuha ang screenshot'+(er?' ('+er+')':'')+' \u2014 pindot muna ang <b>\u2922 I-fit</b>, pagkatapos SEND.','bad');return}
+  const nm='daan-'+(picked||'mapa')+'.png';
+  const dl=()=>{
+   try{const l=document.createElement('a');l.href=cv.toDataURL('image/png');l.download=nm;
+    document.body.appendChild(l);l.click();l.remove();
+    m2('Na-download ang <b>'+esc(nm)+'</b> \u2014 i-attach ito sa email ng admin.','ok')}
+   catch(e){m2('Hindi i-save ang PNG ('+String(e&&e.message||e)+') \u2014 screenshot mismo ng screen ang gamitin.','bad')}};
+  if(!cv.toBlob){dl();return}
+  cv.toBlob(bl=>{
+   if(!bl){dl();return}
+   let f=null;
+   try{f=new File([bl],nm,{type:'image/png'})}catch(e){f=null}
+   if(f&&navigator.canShare&&navigator.canShare({files:[f]})){
+    navigator.share({title:'Daan '+((picked||'-')+' \u2192 '+(nameOf()||'client')),files:[f]})
+     .then(()=>{m2('Naipasa ang screenshot ng daan \u2014 sa app na pinili mo (Gmail) isulat ang email ng admin.','ok')},
+      (e)=>{if(!e||e.name!=='AbortError')dl()});
+    return}
+   dl()},'image/png')};
  const sync=()=>{
   if(!M){draw();return}
   if(mS){M.removeLayer(mS);mS=null}
@@ -2178,6 +2273,7 @@ window.LL=(()=>{
   '<div class="rtlay"><button class="llbtn on" id="bmap">🗺️ Mapa</button><button class="llbtn" id="bsat">🛰️ Satellite</button>'+
   '<span class="llsaved" style="margin-top:0">Kailangan ng internet para sa tiles at para sa <b>totoong kalye</b> (OpenStreetMap routing, libre, walang API key). Kapag walang internet, ang mga tap mo na lang ang susukatin — at sasabihin namin iyan.</span></div>'+
   '<div class="rtrow" id="rtrow"></div>'+
+  '<button class="rtsend" id="rtsend">\ud83d\udce4 SEND</button>'+
   '<div class="llbtns">'+
   '<button class="llbtn" id="llkml">⬇ KML (SW Maps + My Maps)</button>'+
   '<button class="llbtn" id="llgpx">⬇ GPX (SW Maps)</button>'+
@@ -2231,6 +2327,7 @@ window.LL=(()=>{
   $('rtclear').onclick=()=>{clearAll();m2('Binura ang mga punto sa mapa — hindi ang naka-save.','')};
   $('rtsave').onclick=saveR;
   $('rtdel').onclick=delR;
+  $('rtsend').onclick=sendShot;
   $('bmap').onclick=()=>baseWhich('osm');
   $('bsat').onclick=()=>baseWhich('sat');
   const t3=$('t3');if(t3)t3.onclick=()=>{document.body.classList.add('fcv');mode('ll')};
@@ -2243,6 +2340,7 @@ window.LL=(()=>{
  return {render,pick,count:()=>all().length,kml:kmlText,gpx:gpxText,pins:()=>P,routes:()=>R,save:savePin,saveRoute:saveR,n:keys,
   tool:(t)=>setTool(t),
   tap:(lng,lat)=>{if(!mkMap())return null;putPin([lat,lng],'tap');return [lat,lng]},
-  km:()=>+totKm().toFixed(3),straight:()=>+straightKm().toFixed(3),clear:clearAll,map:()=>M}})();
+  km:()=>+totKm().toFixed(3),straight:()=>+straightKm().toFixed(3),clear:clearAll,map:()=>M,
+  shot:(w,h)=>{const c=shot(w||640,h||420);return c?{w:c.width,h:c.height,b:c.toDataURL('image/png').length}:null}};})();
 </script>
 </body></html>
