@@ -2057,16 +2057,16 @@ window.LL=(()=>{
    const p=place(hit.r);
    if(!p){m2('Hindi mabasa ang coordinates ng '+hit.q+'.','bad');return}
    const disp=String(hit.r.display_name||'');
-   const full=disp.toUpperCase();
+   const lead=disp.split(',')[0].toUpperCase();
    const nm=disp.split(',').map(x=>x.trim()).filter(x=>x).slice(0,3).join(', ');
    const want=cleanB(o.r.b).toUpperCase();
    const toks=want.split(/[^A-Z]+/).filter(x=>x.length>2);
    let yes=toks.length>0;
-   for(let i=0;i<toks.length;i++)if(full.indexOf(toks[i])<0)yes=false;
+   for(let i=0;i<toks.length;i++)if(lead.indexOf(toks[i])<0)yes=false;
    const tama=!hit.alt&&yes;
    if(tama)m2('Izoom sa barangay na <b>'+nm+'</b> (zoom '+p.z+'). I-tap na doon ang ① CAFAC, pagkatapos ② Bahay.','ok');
    else if(hit.alt)m2('Walang barangay boundary sa OSM para sa '+cleanB(o.r.b)+' — eto ang pinakamalapit na match: <b>'+nm+'</b> (zoom '+p.z+'). Kumpirmahin bago mag-tap ng ① CAFAC.','bad');
-   else m2('Hindi makita sa OSM ang barangay na <b>'+cleanB(o.r.b)+'</b> — pinakapalapit ay <b>'+nm+'</b> (zoom '+p.z+'). Hanapin sa <b>🔍 Hanapin</b> o i-drag ang mapa.','bad');
+   else m2('Hindi eksakto ang pangalan ng barangay na <b>'+cleanB(o.r.b)+'</b> sa nakita — pinakamalapit ay <b>'+nm+'</b> (zoom '+p.z+'). Kumpirmahin bago mag-tap ng ① CAFAC, o hanapin sa <b>🔍 Hanapin</b>.','bad');
    logEv('MAP BARANGAY','LONG/LAT - CAFAC',o.c+' -> '+hit.q+' @ '+p.lat.toFixed(5)+','+p.lng.toFixed(5)+' z'+p.z+(hit.alt?' (POI)':(tama?'':' (LAAS)')))},
    (q,i)=>{if(picked===o.c)m2('Izoom sa barangay ng '+o.c+' — pagsubok '+i+': <b>'+q+'</b> ...','')})};
 
