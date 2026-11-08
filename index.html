@@ -1960,15 +1960,17 @@ window.LL=(()=>{
  /* ---- Hanapin (Nominatim / OpenStreetMap): walang API key, walang bayad, 1 hiling bawat segundo ---- */
  const NQ='https://nominatim.openstreetmap.org/search?format=jsonv2&limit=5&countrycodes=ph&accept-language=en&q=';
  const HIT=[];
- let seq=0,lastReq=0,lastQ='';
+ let seq=0,lastReq=0,lastQ='',blockT=0;
  const gap=()=>Date.now()-lastReq;
  const vb=()=>{if(!M)return '';const b=M.getBounds();
   return '&viewbox='+b.getWest().toFixed(5)+','+b.getNorth().toFixed(5)+','+b.getEast().toFixed(5)+','+b.getSouth().toFixed(5)};
  const nom=(q,cb,bias)=>{
+  if(blockT&&Date.now()-blockT<65000){cb([],'','403');return false}
   if(gap()<1100)return false;
   const my=++seq;lastReq=Date.now();lastQ=q;
-  fetch(NQ+encodeURIComponent(q)+(bias?vb():''))
-   .then(r=>{if(!r.ok)throw new Error('HTTP '+r.status);return r.json()})
+  // cache:'no-store' — isang naka-cache na 403 ay paulit-ulit na ibabalik ng browser kahit walang CORS header.
+  fetch(NQ+encodeURIComponent(q)+(bias?vb():''),{cache:'no-store'})
+   .then(r=>{if(r.status===403){blockT=Date.now()}if(!r.ok)throw new Error('HTTP '+r.status);return r.json()})
    .then(a=>{if(my===seq)cb(Array.isArray(a)?a:[],q,'')})
    .catch(e=>{if(my===seq)cb([],q,String(e&&e.message||e))});
   return true};
@@ -2019,7 +2021,7 @@ window.LL=(()=>{
   if(gap()<1100){m2('Hintay sandali — isang hiling bawat segundo lang ang tinatanggap ng OSM search, para hindi tayo ma-block. Pindot ulit ng <b>🔍 Hanapin</b>.','');return}
   m2('Hinahanap ang '+q+' ...','');
   nom(q,(list,qq,err)=>{
-   if(err){m2('Hindi naabot ang search ('+err+'). I-tap na lang mismo ang mapa o gamitin ang <b>Manual na LONG/LAT</b> sa baba — walang bayad ang pareho.','bad');return}
+   if(err){m2('Hindi naabot ang search ('+err+') — hintayin ng isang minuto bago ulitin, bina-bawalan ng OSM ang mabilis-mabilis na hiling. Samantala: i-tap na lang mismo ang mapa o gamitin ang <b>Manual na LONG/LAT</b> sa baba — walang bayad ang pareho.','bad');return}
    listRes(list,qq);
    if(x)x.style.display='';
    m2(list.length?list.length+' resulta para sa <b>'+qq+'</b> — pindot ang isa para ilipat doon ang mapa.':'Walang natagpuang <b>'+qq+'</b> — subukan ang <b>barangay + ciudad</b> o pangalan ng kalye.',list.length?'ok':'bad')},true)};
@@ -2048,7 +2050,7 @@ window.LL=(()=>{
   if(!qs.length){m2('Walang nakalagay na barangay sa '+o.c+' sa facility data — hanapin sa <b>🔍 Hanapin</b> o i-type ang LONG/LAT.','bad');return}
   chain(qs,(hit)=>{
    if(picked!==o.c)return;
-   if(hit&&hit.err){m2('Hindi naabot ang OSM ('+hit.err+') — i-drag na lang ang mapa o gamitin ang <b>Manual na LONG/LAT</b>.','bad');return}
+   if(hit&&hit.err){m2('Hindi naabot ang OSM search ('+hit.err+') — hintayin ng isang minuto, pagkatapos pindot ulit ang CAFAC. Samantala: i-drag na lang ang mapa o gamitin ang <b>Manual na LONG/LAT</b>.','bad');return}
    if(!hit){m2('Hindi matagpuan sa OSM ang '+cleanB(o.r.b)+', '+o.r.c+' — mag-search sa <b>🔍 Hanapin</b> o gamitin ang <b>Manual na LONG/LAT</b>.','bad');return}
    const p=place(hit.r);
    if(!p){m2('Hindi mabasa ang coordinates ng '+hit.q+'.','bad');return}
