@@ -1951,7 +1951,7 @@ window.LL=(()=>{
  const HIT=[];
  let seq=0,lastReq=0,lastQ='';
  const vb=()=>{if(!M)return '';const b=M.getBounds();
-  return '&viewbox='+b.getWest().toFixed(5)+','+b.getNorth().toFixed(5)+','+b.getEast().toFixed(5)+','+b.getSouth().toFixed(5)+'&bounded=0'};
+  return '&viewbox='+b.getWest().toFixed(5)+','+b.getNorth().toFixed(5)+','+b.getEast().toFixed(5)+','+b.getSouth().toFixed(5)};
  const clrRes=()=>{HIT.length=0;const e=$('rtres');if(e)e.innerHTML='';const x=$('rtqx');if(x)x.style.display='none'};
  const listRes=(list,q)=>{
   const e=$('rtres');if(!e)return;
