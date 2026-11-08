@@ -1681,12 +1681,20 @@ html.vm .hp button{padding:8px 10px;font-size:11.5px;letter-spacing:0}
 #llp .llr:hover{background:#eef4ff}
 #llp .llr i{display:block;font-style:normal;color:var(--mut);font-size:11.5px;margin-top:1px}
 #llp .rtmap{height:min(46vh,380px);min-height:280px;border:1px solid var(--line);border-radius:12px;background:#e8eef6}
+#llp .rtwrap{position:relative}
+#llp .xh{position:absolute;left:50%;top:50%;width:0;height:0;z-index:600;pointer-events:none}
+#llp .xh i,#llp .xh j{display:block;position:absolute;background:#e11d2e;box-shadow:0 0 0 1px rgba(255,255,255,.85)}
+#llp .xh i{left:-14px;top:-1px;width:28px;height:2px}
+#llp .xh j{left:-1px;top:-14px;width:2px;height:28px}
+#llp .leaflet-control-zoom a{width:38px;height:38px;line-height:34px;font-size:21px}
 #llp .rtlay{display:flex;flex-wrap:wrap;gap:6px;margin-top:6px;align-items:center}
 #llp .rtrow{display:flex;flex-wrap:wrap;gap:10px;margin-top:8px;font-size:13px}
 #llp .rtrow b{font-size:15px}
 #llp .rtrow span{color:var(--mut)}
 #llp .rtp{flex:1 1 100%;font-size:12.5px;font-variant-numeric:tabular-nums;color:var(--ink)}
 #llp .rtp span{display:inline-block;font-size:11px;font-weight:700;letter-spacing:0.04em;color:var(--mut);margin-right:6px}
+#llp .rtlg{flex:1 1 100%;margin-top:6px;padding-top:6px;border-top:1px solid var(--line);font-size:11px;font-weight:700;letter-spacing:0.05em;color:var(--mut)}
+#llp .rtp b{font-size:12.5px;color:var(--ink)}
 #llp .llsaved{margin-top:8px;font-size:12.5px;color:var(--mut)}
 #llp .llsaved b{color:var(--ink)}
 #llp .rtmsg{min-height:18px;font-size:13px;margin-top:6px;color:var(--mut)}
@@ -1770,7 +1778,7 @@ window.LL=(()=>{
   return{nm:c,d:X(p.join(' | '))}};
  const keys=()=>Object.keys(P).filter(c=>Array.isArray(P[c])&&isFinite(P[c][0])&&isFinite(P[c][1])).sort();
 
- /* ---------------- MAPA NG DAAN: mano-manong tap, walang auto-routing ---------------- */
+ /* ---------------- MAPA NG DAAN: pindot-lang, ang kalye mismo ang susundin ---------------- */
  const T={rtstart:'start',rtend:'end',rtroad:'road'};
  const RT={osm:null,sat:null};
  let M=null,tool='',pts={start:null,end:null,ways:[]},mS=null,mE=null,aW=[],line=null;
@@ -1781,23 +1789,72 @@ window.LL=(()=>{
  const roadKm=()=>{const a=path();let k=0;for(let i=1;i<a.length;i++)k+=hav(a[i-1],a[i]);return k};
  const straightKm=()=>pts.start&&pts.end?hav(pts.start,pts.end):-1;
  const setTool=(t)=>{tool=t;for(const id in T){const b=$(id);if(b)b.classList.toggle('on',T[id]===t)}};
+ // "Auto-sunod": pagkatapos ng bawat tap, ang susunod na hakbang na ang active — hindi na kailangang
+ // pindutin ang ③ sa bawat likuan. start > end > road ang pagkakasunod.
+ const nextTool=()=>!pts.start?'start':!pts.end?'end':'road';
+ const autoTool=()=>setTool(nextTool());
+ const lbl=(a,i)=>{if(pts.start&&i===0)return 'CAFAC';
+  if(pts.end&&i===a.length-1)return 'BAHAY';
+  return String(i-(pts.start?1:0)+1)};
+ /* ---- AUTO-KALYE: OSRM public server — walang API key, walang bayad, 1 hiling bawat segundo ----
+    Isang request bawat pag-bago ng daan: ang geometry ay ang totoong kalye, ang legs ay ang
+    sukat kada pin. Kung hindi naabot ang server, straight hops na lang at sinasabi natin yun. */
+ const OQ='https://router.project-osrm.org/route/v1/driving/';
+ let RG=null,RL=null,RD=0,oSig='',oLast=0,oSeq=0,oBlock=0,oErr='',oT=null;
+ // OSRM ay nangangailangan ng lng,lat — ang internal na points natin ay [lat,lng]. Iisa ang sig at ang URL.
+ const sigOf=()=>path().map(p=>p[1].toFixed(6)+','+p[0].toFixed(6)).join(';');
+ const drop=()=>{RG=null;RL=null;RD=0};
+ const osrm=()=>{
+  const a=path();
+  if(a.length<2){drop();draw();return}
+  const k=sigOf();
+  if(k===oSig&&(RG||oErr))return;
+  oSig=k;
+  if(Date.now()<oBlock){draw();return}
+  const w=Math.max(0,1150-(Date.now()-oLast));
+  clearTimeout(oT);
+  oT=setTimeout(()=>{
+   oLast=Date.now();const my=++oSeq;
+   fetch(OQ+k+'?overview=full&geometries=geojson',{cache:'no-store'})
+    .then(r=>{if(r.status===403||r.status===429){oBlock=Date.now()+60000}
+     if(!r.ok)throw new Error('HTTP '+r.status);return r.json()})
+    .then(j=>{if(my!==oSeq)return;const rt=j.routes&&j.routes[0];
+     if(!rt||!rt.geometry)throw new Error(String(j.code||'walang route'));
+     RG=rt.geometry.coordinates.map(c=>[c[1],c[0]]);
+     RD=rt.distance/1000;RL=(rt.legs||[]).map(l=>l.distance/1000);oErr='';
+     m2('Nasunod ang <b>totoong kalye</b>: '+km(RD)+' ang daan, '+RL.length+' leg sukat.','ok');
+     draw();logEv('ROAD SNAP','LONG/LAT - CAFAC',(picked||'-')+' = '+a.length+' punto, '+RD.toFixed(3)+' km, '+RL.length+' leg')})
+    .catch(e=>{if(my!==oSeq)return;oErr=String(e&&e.message||e);drop();oSig='';
+     m2('Hindi naabot ang kalye server ('+oErr+') — <b>hop</b> muna ang sukat. Pag may internet na, pindot <b>⤢ I-fit</b> para subukang ulit.','bad');draw()})
+  },w)};
+ const totKm=()=>RD>0?RD:roadKm();
+ const legKm=(a,i)=>RL&&RL[i-1]!==undefined?RL[i-1]:hav(a[i-1],a[i]);
+ const legSrc=(a,i)=>RL&&RL[i-1]!==undefined?'kalye':'hop';
  const draw=()=>{
   if(M&&line){M.removeLayer(line);line=null}
   const a=path();
-  if(M&&a.length>1)line=L.polyline(a,{color:'#e11d2e',weight:4,opacity:.9}).addTo(M);
+  const g=(RG&&RG.length>1)?RG:a;
+  if(M&&g.length>1)line=L.polyline(g,{color:'#e11d2e',weight:4,opacity:.9}).addTo(M);
   const r=$('rtrow');if(!r)return;
   const LLT=(a)=>'LONG '+(+a[1]).toFixed(6)+' \u00b7 LAT '+(+a[0]).toFixed(6);
   const sp=P[picked];
   const savedLL=(picked&&sp&&isFinite(sp[0])&&isFinite(sp[1]))?('LONG '+(+sp[0]).toFixed(6)+' \u00b7 LAT '+(+sp[1]).toFixed(6)):'';
   let h='';
   if(pts.start&&pts.end){
-   const k=roadKm(),s=straightKm();
-   h+='<div><b>'+km(k)+'</b> <span>ang daan ('+pts.ways.length+' punto sa pagitan)</span></div>'+
+   const k=totKm(),s=straightKm();
+   h+='<div><b>'+km(k)+'</b> <span>ang daan';
+   if(RD>0)h+=' (sunod sa totoong kalye, '+pts.ways.length+' punto sa pagitan)';
+   else h+=' (hop mula sa mga tap mo, '+pts.ways.length+' punto)';
+   h+='</span></div>'+
     '<div><b>'+km(s)+'</b> <span>layo ng CAFAC \u2192 bahay (tuwiran, hindi daan)</span></div>';
    if(k-s>0.02)h+='<div><span>Lumibot ng '+km(k-s)+'</span></div>'}
   else if(pts.start||pts.end){
    h+='<div><span>Kulang ang '+(pts.start?'bahay ng client':'CAFAC')+' — tapusin ang dalawang dulo para may sukat.</span></div>'}
-  else{h+='<div><span>Wala pang punto. Pindot ①, mag-tap sa mapa, pagkatapos ②, pagkatapos ③ hanggang sa tumama sa kalye.</span></div>'}
+  else{h+='<div><span>Wala pang punto. I-tap lang: ① CAFAC, ② bahay — ang app ang susunod sa totoong kalye (2 tap lang kumpleto ang daan).</span></div>'}
+  if(a.length>1){
+   h+='<div class="rtlg">ANG DAAN PIN BY PIN &mdash; sukat ng bawat likuan at LONG/LAT ng pin sa dulo nito</div>';
+   for(let i=1;i<a.length;i++)
+    h+='<div class="rtp"><span>'+lbl(a,i-1)+' \u2192 '+lbl(a,i)+'</span><b>'+km(legKm(a,i))+'</b> \u00b7 '+legSrc(a,i)+' \u00b7 '+LLT(a[i])+'</div>'}
   if(pts.start)h+='<div class="rtp"><span>PIN NG CAFAC</span>'+LLT(pts.start)+'</div>';
   else if(savedLL)h+='<div class="rtp"><span>PIN NG CAFAC (naka-save)</span>'+savedLL+'</div>';
   if(pts.end)h+='<div class="rtp"><span>PIN NG BAHAY</span>'+LLT(pts.end)+'</div>';
@@ -1820,9 +1877,10 @@ window.LL=(()=>{
    m.on('dragend',()=>{pts.ways[i]=[m.getLatLng().lat,m.getLatLng().lng];sync()});
    m.on('click',()=>{pts.ways.splice(i,1);m2('Tinanggal ang punto '+(i+1)+'.','');sync()});
    aW.push(m)});
-  draw()};
+  draw();
+  osrm()};
  const icon=(cls,label)=>L.divIcon({className:'rtic '+cls,html:'<i>'+label+'</i>',iconSize:[24,24],iconAnchor:[12,12]});
- const fit=()=>{if(!M)return;const a=path();if(a.length>1){M.fitBounds(L.latLngBounds(a).pad(.2),{animate:false});paint();m2('Ipinakita ang buong daan (zoom '+M.getZoom()+').','')}else wake(true)};
+ const fit=()=>{if(!M)return;const a=path();osrm();if(a.length>1){M.fitBounds(L.latLngBounds(a).pad(.2),{animate:false});paint();m2('Ipinakita ang buong daan (zoom '+M.getZoom()+').','')}else wake(true)};
  const shown=()=>{const p=$('llp');return !!p&&!p.hidden&&!!$('rtmap')&&$('rtmap').offsetWidth>0};
  // Leaflet's zoom-fade can leave loaded tiles stuck at inline opacity 0 (blank map); re-assert them.
  const paint=()=>{if(!M)return;const im=M.getContainer().getElementsByTagName('img');
@@ -1836,6 +1894,31 @@ window.LL=(()=>{
  const home=()=>{const v=picked&&P[picked];
   if(v&&isFinite(v[1])&&isFinite(v[0]))return {c:[v[1],v[0]],z:15};
   return {c:[14.25,120.80],z:11}};
+ // Isang code path para sa tap at para sa 🎯 (putPin — hindi ang place() ng geocode) (gitna ng mapa) — mas tumpak ang isentro kaysa maliit na tap.
+ const putPin=(p,how)=>{
+  const tl=tool||nextTool();
+  let at='';
+  if(how==='center')at='(sa gitna ng mapa)';
+  if(how==='saved')at='(mula sa naka-save na pin)';
+  if(tl==='start'){pts.start=p;
+   // Ang ① tap ay agad nagsasave ng pin ng CAFAC — hindi na kailangang pindot ang 💾 para mawala ito.
+   if(picked){P[picked]=[+p[1].toFixed(6),+p[0].toFixed(6),Date.now(),nameOf()];wp();fill();saved();sug();
+    logEv('LONGLAT PIN','LONG/LAT - CAFAC',picked+' = '+P[picked][0]+' '+P[picked][1])}
+   m2('Naitag ang CAFAC '+at+(picked?' at na-save ang pin ng '+picked:'')+'. Awtomatiko nang ② bahay ng client — i-tap o isentro ulit. Kung mali, i-drag ang asul na marker.','ok')}
+  else if(tl==='end'){pts.end=p;
+   let s2='Naitag ang bahay ng client '+at+'. ';
+   if(pts.start)s2+='I-tap na lang ang bawat likuan ng daan — ang app ang susunod sa totoong kalye.';
+   else s2+='I-drag kung mali.';
+   m2(s2,'ok')}
+  else{pts.ways.push(p);
+   const a=path(),i=a.length-1;
+   let s='Punto '+pts.ways.length+' nadagdag '+at+'.';
+   if(i>0)s+=' '+km(hav(a[i-1],a[i]))+' ang hop mula '+lbl(a,i-1)+' — humihingi ng totoong kalye ...';
+   m2(s,'')}
+  setTool(tl==='road'?'road':nextTool());
+  sync()};
+ const xhOn=(v)=>{const e=$('xh'),b=$('rtxh');if(!e||!b)return;
+  e.style.display=v?'':'none';b.classList.toggle('on',v);b.setAttribute('aria-pressed',v?'true':'false')};
  const mkMap=()=>{
   if(M)return true;
   if(typeof L==='undefined'){m2('Hindi nag-load ang map library (Leaflet).','bad');return false}
@@ -1847,35 +1930,37 @@ window.LL=(()=>{
   RT.osm.on('tileerror',tileErr);RT.sat.on('tileerror',tileErr);
   RT.osm.on('tileload',paint);RT.sat.on('tileload',paint);
   M.on('load zoomend moveend viewreset',paint);
-  M.on('click',e=>{
-   const p=[e.latlng.lat,e.latlng.lng];
-   if(tool==='start'){pts.start=p;m2('Naitag ang CAFAC. Kung mali, i-drag ang asul na marker.','ok')}
-   else if(tool==='end'){pts.end=p;m2('Naitag ang bahay ng client. I-drag kung mali.','ok')}
-   else if(tool==='road'){pts.ways.push(p);m2('Nadagdag ang punto '+pts.ways.length+'. I-tap ulit sa sunod na likuan ng kalye.','')}
-   else{m2('Pumili muna ng ① CAFAC, ② Bahay, o ③ Punto ng daan bago mag-tap sa mapa.','bad');return}
-   sync()});
+  M.on('click',e=>putPin([e.latlng.lat,e.latlng.lng],'tap'));
   setTimeout(()=>{wake(true)},90);
+  autoTool();xhOn(true);
   return true};
  const rk=()=>(picked||'NOWHERE')+'|'+(nameOf().toUpperCase()||'-');
- const clearAll=()=>{pts={start:null,end:null,ways:[]};sync()};
+ const clearAll=()=>{pts={start:null,end:null,ways:[]};drop();oSig='';autoTool();sync()};
  const undo=()=>{if(!pts.ways.length){m2('Wala pang punto ng daan ang babawiin.','bad');return}
   pts.ways.pop();m2('Bawi — '+pts.ways.length+' punto na lang.','');sync()};
  const loadR=(k)=>{const r=R[k];if(!r)return false;
   pts.start=[r.s[1],r.s[0]];pts.end=[r.e[1],r.e[0]];
   pts.ways=(r.w||[]).map(ll2);
-  sync();fit();return true};
+  if(r.g&&r.g.length>1){RG=r.g.map(ll2);RD=r.rd||0;RL=(r.L&&r.L.length)?r.L.slice():null;oSig=sigOf()}else drop();
+  autoTool();sync();fit();return true};
+ const thin=(g,max)=>{if(!g||g.length<=max)return g;const st=Math.ceil(g.length/max),o=[];
+  for(let i=0;i<g.length;i+=st)o.push(g[i]);
+  if(o[o.length-1]!==g[g.length-1])o.push(g[g.length-1]);return o};
  const saveR=()=>{
   if(!picked){m2('Pumili muna ng CAFAC sa listahan — doon ise-save ang daan.','bad');return}
   if(!nameOf()){m2('Ilagay muna ang SUBSCRIBER NAME — ang daan ay para sa isang application.','bad');return}
-  if(!pts.start||!pts.end){m2('Kulang pa ang dalawang dulo (① CAFAC at ② Bahay).','bad');return}
-  const k=roadKm();
+  if(!pts.start||!pts.end){m2('Kulang pa ang dalawang dulo (① CAFAC at ② bahay).','bad');return}
+  const k=totKm();
   R[rk()]={c:picked,nm:nameOf(),s:[+pts.start[1].toFixed(6),+pts.start[0].toFixed(6)],
    e:[+pts.end[1].toFixed(6),+pts.end[0].toFixed(6)],
-   w:pts.ways.map(a=>[+a[1].toFixed(6),+a[0].toFixed(6)]),km:+k.toFixed(3),ts:Date.now()};
+   w:pts.ways.map(a=>[+a[1].toFixed(6),+a[0].toFixed(6)]),km:+k.toFixed(3),ts:Date.now(),
+   rd:RD>0?+RD.toFixed(3):0,L:(RL||[]).map(x=>+x.toFixed(3)),g:thin(RG.map(ll2),400)};
   if(!P[picked]){P[picked]=[+pts.start[1].toFixed(6),+pts.start[0].toFixed(6),Date.now(),nameOf()];wp();fill();saved();sug()}
   wr();cnt();
-  m2('Na-save ang '+km(k)+' na daan para kay '+nameOf()+' ('+picked+'), '+pts.ways.length+' punto.','ok');
-  logEv('ROUTE SAVE','LONG/LAT - CAFAC',rk()+' = '+pts.ways.length+' punto, '+k.toFixed(3)+' km')};
+  let s='Na-save ang '+km(k)+' na daan para kay '+nameOf()+' ('+picked+'), '+pts.ways.length+' punto.';
+  if(RD>0)s+=' Kasama ang totoong linya ng kalye.';
+  m2(s,'ok');
+  logEv('ROUTE SAVE','LONG/LAT - CAFAC',rk()+' = '+pts.ways.length+' punto, '+k.toFixed(3)+' km, '+(RD>0?'kalye':'hop'))};
  const delR=()=>{
   if(!picked){m2('Pumili muna ng CAFAC sa listahan bago mag-bura.','bad');return}
   const k=rk();if(!R[k]){m2('Walang naka-save na daan ang '+picked+' para kay '+nameOf()+'.','bad');return}
@@ -1885,8 +1970,8 @@ window.LL=(()=>{
   const n=Object.keys(R).length;const me=R[rk()];
   let s='May '+n+' daan na naka-save sa device na ito';
   if(!picked)s+=' — pumili muna ng CAFAC.';
-  else if(me)s+=' — kay '+picked+'/'+me.nm+': '+me.w.length+' punto, '+km(me.km)+'.';
-  else if(pts.start&&pts.end)s+=' — kasalukuyan ('+picked+'/'+nameOf()+'): '+pts.ways.length+' punto, '+km(roadKm())+'.';
+  else if(me)s+=' — kay '+picked+'/'+me.nm+': '+me.w.length+' punto, '+km(me.km)+' '+(me.rd>0?'(totoong kalye)':'(mga tap)')+'.';
+  else if(pts.start&&pts.end)s+=' — kasalukuyan ('+picked+'/'+nameOf()+'): '+pts.ways.length+' punto, '+km(totKm())+'.';
   el.innerHTML=s};
  const baseWhich=(w)=>{
   if(!mkMap())return;
@@ -1901,18 +1986,23 @@ window.LL=(()=>{
   k.forEach(c=>{const i=info(c);const v=P[c];
    s+='<Placemark>\n<name>'+X(i.nm)+'</name>\n<description>'+i.d+'</description>\n<styleUrl>#p</styleUrl>\n<Point>\n<coordinates>'+v[0]+','+v[1]+',0</coordinates>\n</Point>\n</Placemark>\n'});
   rk2.forEach(x=>{const r=R[x],a=[];
-   if(r.s)a.push(r.s[0]+','+r.s[1]+',0');
-   (r.w||[]).forEach(w=>a.push(w[0]+','+w[1]+',0'));
-   if(r.e)a.push(r.e[0]+','+r.e[1]+',0');
+   if(r.g&&r.g.length>1)r.g.forEach(q=>a.push(q[0]+','+q[1]+',0'));
+   else{if(r.s)a.push(r.s[0]+','+r.s[1]+',0');
+    (r.w||[]).forEach(w=>a.push(w[0]+','+w[1]+',0'));
+    if(r.e)a.push(r.e[0]+','+r.e[1]+',0')}
    if(a.length<2)return;
-   s+='<Placemark>\n<name>DAAN '+X(r.c)+' · '+X(r.nm||'')+'</name>\n<description>'+X(r.w.length+' punto · '+r.km.toFixed(2)+' km · '+x)+'</description>\n<styleUrl>#r</styleUrl>\n<LineString>\n<tessellate>1</tessellate>\n<coordinates>'+a.join(' ')+'\n</coordinates>\n</LineString>\n</Placemark>\n'});
+   s+='<Placemark>\n<name>DAAN '+X(r.c)+' · '+X(r.nm||'')+'</name>\n<description>'+X(r.w.length+' punto · '+r.km.toFixed(2)+' km · '+((r.rd>0)?'totoong kalye (OSRM)':'mga tap')+' · '+x)+'</description>\n<styleUrl>#r</styleUrl>\n<LineString>\n<tessellate>1</tessellate>\n<coordinates>'+a.join(' ')+'\n</coordinates>\n</LineString>\n</Placemark>\n'});
   return s+'</Document>\n</kml>'};
  const gpxText=()=>{const k=keys(),rk2=Object.keys(R).sort();
   let s='<?xml version="1.0" encoding="UTF-8"?>\n<gpx version="1.1" creator="3MDA dashboard" xmlns="http://www.topografix.com/GPX/1/1">\n<metadata><name>3MDA CAFAC pins at daan</name><time>'+new Date().toISOString()+'</time></metadata>\n';
   k.forEach(c=>{const i=info(c);const v=P[c];
    s+='<wpt lat="'+v[1]+'" lon="'+v[0]+'"><name>'+X(i.nm)+'</name><desc>'+i.d+'</desc></wpt>\n'});
   rk2.forEach(x=>{const r=R[x];
-   s+='<rte><name>DAAN '+X(r.c)+' · '+X(r.nm||'')+'</name><desc>'+r.w.length+' punto · '+r.km.toFixed(2)+' km</desc>\n';
+   s+='<rte><name>DAAN '+X(r.c)+' · '+X(r.nm||'')+'</name><desc>'+r.w.length+' punto · '+r.km.toFixed(2)+' km · '+((r.rd>0)?'totoong kalye (OSRM)':'mga tap')+'</desc>\n';
+   const g=(r.g&&r.g.length>1)?r.g:null;
+   if(g){s+='<rtept lat="'+r.s[1]+'" lon="'+r.s[0]+'"><name>CAFAC '+X(r.c)+'</name></rtept>\n';
+    g.forEach((q,i)=>{s+='<rtept lat="'+q[1]+'" lon="'+q[0]+'"><name>K'+(i+1)+'</name></rtept>\n'});
+    s+='<rtept lat="'+r.e[1]+'" lon="'+r.e[0]+'"><name>BAHAY</name></rtept>\n</rte>\n';return}
    s+='<rtept lat="'+r.s[1]+'" lon="'+r.s[0]+'"><name>CAFAC '+X(r.c)+'</name></rtept>\n';
    r.w.forEach((w,i)=>{s+='<rtept lat="'+w[1]+'" lon="'+w[0]+'"><name>'+(i+1)+'</name></rtept>\n'});
    s+='<rtept lat="'+r.e[1]+'" lon="'+r.e[0]+'"><name>BAHAY</name></rtept>\n</rte>\n'});
@@ -1951,7 +2041,7 @@ window.LL=(()=>{
   if(!o){picked='';$('lldet').innerHTML='';msg('Hindi nasa facility data ang '+c+'.','bad');saved();cnt();return}
   picked=c;$('llc').value=c;det(o);fill();saved();sug();
   if(M&&R[rk()]){loadR(rk());m2('Na-load ang '+R[rk()].w.length+' punto na naka-save ('+km(R[rk()].km)+') para kay '+R[rk()].nm+'.','ok')}
-  else if(M&&P[c]){M.setView([P[c][1],P[c][0]],15);paint();m2('Ibinaling ang mapa sa naka-save na pin ng '+c+' ('+P[c][0]+', '+P[c][1]+').','')}
+  else if(M&&P[c]){M.setView([P[c][1],P[c][0]],15,{animate:false});paint();m2('Ibinaling ang mapa sa naka-save na pin ng '+c+' ('+P[c][0]+', '+P[c][1]+').','')}
   else toBgy(o);
   cnt();
   logEv('LONGLAT PICK','LONG/LAT - CAFAC',(nameOf()||'-')+' -> '+c)};
@@ -2021,7 +2111,7 @@ window.LL=(()=>{
   if(!mkMap())return;
   const p=place(r);
   if(!p){m2('Hindi mabasa ang coordinates ng resultang iyon.','bad');return}
-  m2('Nandyan na ang mapa (zoom '+p.z+'): <b>'+String(r.display_name||'').split(',').map(x=>x.trim()).filter(x=>x).slice(0,3).join(', ')+'</b> ('+p.lat.toFixed(5)+', '+p.lng.toFixed(5)+'). I-tap na rito ang ① CAFAC, ② Bahay, o ③ Punto ng daan.','ok');
+  m2('Nandyan na ang mapa (zoom '+p.z+'): <b>'+String(r.display_name||'').split(',').map(x=>x.trim()).filter(x=>x).slice(0,3).join(', ')+'</b> ('+p.lat.toFixed(5)+', '+p.lng.toFixed(5)+'). I-tap na rito ang susunod na pin — awtomatiko ang ① CAFAC, ② Bahay, ③ kada likuan.','ok');
   logEv('MAP SEARCH','LONG/LAT - CAFAC',lastQ+' -> '+String(r.display_name||'').slice(0,90))};
  const search=()=>{
   const el=$('rtq');if(!el)return;
@@ -2042,8 +2132,8 @@ window.LL=(()=>{
   let z=zoomOf(r);const bb=r.boundingbox;
   if(bb){const s=+bb[0],n=+bb[1],w=+bb[2],e=+bb[3];
    if(isFinite(s)&&isFinite(w)&&n-s<0.2&&e-w<0.2){M.fitBounds(L.latLngBounds([[s,w],[n,e]]),{animate:false,maxZoom:16});z=M.getZoom()}
-   else{if(z>16)z=16;M.setView([la,lo],z)}}
-  else{if(z>16)z=16;M.setView([la,lo],z)}
+   else{if(z>16)z=16;M.setView([la,lo],z,{animate:false})}}
+  else{if(z>16)z=16;M.setView([la,lo],z,{animate:false})}
   paint();return {z:z,lat:la,lng:lo}};
  // Pag-pili ng CAFAC: izoom agad sa barangay na nakalagay sa facility data (walang pin pa).
  const cleanC=s=>String(s||'').replace(/\s+(CITY|MUNISIPALIDAD|MUNICIPALITY|MUN)\s*$/i,'').replace(/\s+/g,' ').trim();
@@ -2079,7 +2169,7 @@ window.LL=(()=>{
    let yes=toks.length>0;
    for(let i=0;i<toks.length;i++)if(lead.indexOf(toks[i])<0)yes=false;
    const tama=!hit.alt&&yes;
-   if(tama)m2('Izoom sa barangay na <b>'+nm+'</b> (zoom '+p.z+'). I-tap na doon ang ① CAFAC, pagkatapos ② Bahay.','ok');
+   if(tama)m2('Izoom sa barangay na <b>'+nm+'</b> (zoom '+p.z+'). I-tap na doon ang ① CAFAC — pagkatapos niyan ay awtomatiko na ang ② bahay at ③ kada likuan.','ok');
    else if(hit.alt)m2('Walang barangay boundary sa OSM para sa '+cleanB(o.r.b)+' — eto ang pinakamalapit na match: <b>'+nm+'</b> (zoom '+p.z+'). Kumpirmahin bago mag-tap ng ① CAFAC.','bad');
    else m2('Hindi eksakto ang pangalan ng barangay na <b>'+cleanB(o.r.b)+'</b> sa nakita — pinakamalapit ay <b>'+nm+'</b> (zoom '+p.z+'). Kumpirmahin bago mag-tap ng ① CAFAC, o hanapin sa <b>🔍 Hanapin</b>.','bad');
    let sfx=' (BND)';
@@ -2091,7 +2181,7 @@ window.LL=(()=>{
 
  const panel='<div class="fcp" id="llp" hidden>'+
   '<h2>LONG/LAT - CAFAC</h2>'+
-  '<div class="sub">I-type ang pangalan ng bagong application, tapos mag-type ng CAFAC — searchable siya habang ka nagta-type. Pagkatapos, i-tap sa mapa ang <b>CAFAC</b>, ang <b>bahay</b>, at ang <b>kalye</b> na dadalhan para eksakto ang sukat.</div>'+
+  '<div class="sub">I-type ang pangalan ng bagong application, tapos mag-type ng CAFAC — searchable siya habang ka nagta-type. Pagkatapos: <b>2 tap lang</b> (CAFAC at bahay) at ang <b>totoong kalye</b> na ang susundin ng linya at ng sukat; mag-tap pa ng likuan kung ibang kalye ang dawak.</div>'+
   '<div class="llgrid">'+
   '<div class="llleft">'+
   '<label class="sub">SUBSCRIBER NAME</label><input id="llnm" placeholder="Pangalan ng subscriber" autocomplete="off">'+
@@ -2117,9 +2207,17 @@ window.LL=(()=>{
   '<button class="llbtn" id="rtgo">&#128269; Hanapin</button>'+
   '<button class="llbtn red" id="rtqx" style="display:none">&#10006;</button></div>'+
   '<div class="llres" id="rtres"></div>'+
-  '<div class="rtmap" id="rtmap"></div>'+
+  '<div class="rtwrap"><div class="rtmap" id="rtmap"></div>'+
+  '<div class="xh" id="xh" style="display:none"><i></i><j></j></div></div>'+
+  '<div class="lltools lltools2">'+
+  '<button class="llbtn" id="rtzin">➕ Zoom in</button>'+
+  '<button class="llbtn" id="rtzout">➖ Zoom out</button>'+
+  '<button class="llbtn" id="rtctr">🎯 Sa gitna ng mapa</button>'+
+  '<button class="llbtn" id="rtxh" aria-pressed="false">✛ Ipakita ang gitna</button>'+
+  '<button class="llbtn" id="rtcpin">📌 ① mula sa naka-save</button>'+
+  '</div>'+
   '<div class="rtlay"><button class="llbtn on" id="bmap">🗺️ Mapa</button><button class="llbtn" id="bsat">🛰️ Satellite</button>'+
-  '<span class="llsaved" style="margin-top:0">Kailangan ng internet para sa tiles. Ang sukat ay mula sa mga tap <b>mo</b> — walang auto-routing.</span></div>'+
+  '<span class="llsaved" style="margin-top:0">Kailangan ng internet para sa tiles at para sa <b>totoong kalye</b> (OpenStreetMap routing, libre, walang API key). Kapag walang internet, ang mga tap mo na lang ang susukatin — at sasabihin namin iyan.</span></div>'+
   '<div class="rtrow" id="rtrow"></div>'+
   '<div class="llbtns">'+
   '<button class="llbtn" id="llkml">⬇ KML (SW Maps + My Maps)</button>'+
@@ -2153,9 +2251,22 @@ window.LL=(()=>{
   $('llgm').onclick=openGm;
   $('llmy').onclick=openMy;
   $('lldel').onclick=delPin;
-  $('rtstart').onclick=()=>{setTool('start');m2('I-tap na ang mapa kung saan ang CAFAC.','')};
-  $('rtend').onclick=()=>{setTool('end');m2('I-tap sa mapa ang bahay ng client.','')};
-  $('rtroad').onclick=()=>{setTool('road');m2('I-tap ang kalye, punto-punto, mula CAFAC hanggang sa pintuan.','')};
+  $('rtstart').onclick=()=>{setTool('start');m2('I-tap sa mapa kung saan ang CAFAC — o gamitin ang 🎯 Sa gitna ng mapa. Pagkatapos niyan ay awtomatiko na ang ② at ③.','')};
+  $('rtend').onclick=()=>{setTool('end');m2('I-tap sa mapa ang bahay ng client — o 🎯 Sa gitna ng mapa. Pagkatapos niyan, bawat tap ay susunod na punto ng daan na.','')};
+  $('rtroad').onclick=()=>{setTool('road');m2('I-tap ang mga likuan ng daan, punto-punto. Kailangan mo itong pindutin lang kung may pin-bura ka — auto na ang ③ sa bawat tap at ang app ang sumusunod sa totoong kalye.','')};
+  // {animate:false}: ang Leaflet zoom transition ay hindi tumatapos sa ilang device (at sa
+  // headless browser), kaya nananatili ang zoom kung may animation. Direkta = sigurado.
+  $('rtzin').onclick=()=>{if(!mkMap())return;M.zoomIn(1,{animate:false});paint();m2('Zoom in → '+M.getZoom()+'. Mas malapit ang bawat detalye ng kalye.','')};
+  $('rtzout').onclick=()=>{if(!mkMap())return;M.zoomOut(1,{animate:false});paint();m2('Zoom out → '+M.getZoom()+'.','')};
+  $('rtxh').onclick=()=>{mkMap();const e=$('xh');xhOn(!e||e.style.display==='none');if($('rtctr'))$('rtctr').style.display='';
+   m2($('xh')&&$('xh').style.display!=='none'?'Nakikita na ang gitna: i-drag ang mapa para nasa crosshair ang tamang lugar, pagkatapos pindot 🎯.':'Nakago ang crosshair.','')};
+  $('rtctr').onclick=()=>{if(!mkMap())return;xhOn(true);const c=M.getCenter();putPin([c.lat,c.lng],'center')};
+  $('rtcpin').onclick=()=>{const v=picked&&P[picked];
+   if(!v||!isFinite(v[0])||!isFinite(v[1])){m2('Walang naka-save na pin ang '+((picked||'CAFAC')+'')+' — i-tap muna ang ① sa mapa.','bad');return}
+   if(!mkMap())return;
+   setTool('start');putPin([v[1],v[0]],'saved');
+   M.setView([v[1],v[0]],16,{animate:false});paint();
+   m2('Naitag ang ① CAFAC mula sa naka-save na pin ng '+picked+' ('+v[0]+', '+v[1]+'). I-tap na lang ang ② bahay.','ok')}
   $('rtundo').onclick=undo;
   $('rtfit').onclick=fit;
   $('rtclear').onclick=()=>{clearAll();m2('Binura ang mga punto sa mapa — hindi ang naka-save.','')};
@@ -2177,10 +2288,8 @@ window.LL=(()=>{
   sync();cnt()};
  return {render,pick,count:()=>all().length,kml:kmlText,gpx:gpxText,pins:()=>P,routes:()=>R,save:savePin,saveRoute:saveR,n:keys,
   tool:(t)=>setTool(t),
-  tap:(lng,lat)=>{if(!mkMap())return null;const p=[lat,lng];
-   if(tool==='start')pts.start=p;else if(tool==='end')pts.end=p;else if(tool==='road')pts.ways.push(p);else return null;
-   sync();return p},
-  km:()=>+roadKm().toFixed(3),straight:()=>+straightKm().toFixed(3),clear:clearAll,map:()=>M,
+  tap:(lng,lat)=>{if(!mkMap())return null;putPin([lat,lng],'tap');return [lat,lng]},
+  km:()=>+totKm().toFixed(3),straight:()=>+straightKm().toFixed(3),clear:clearAll,map:()=>M,
   search:(s)=>{const e=$('rtq');if(e&&typeof s==='string')e.value=s;search()},
   hits:()=>HIT.length,names:()=>HIT.map(r=>r.display_name),go:goRes,clr:clrRes}})();
 </script>
