@@ -307,31 +307,26 @@ FACILITY CHECKING, `#t3` LONG/LAT - CAFAC): a lookup first, then a map the agent
     failure message tells him to keep tapping and press `⤢ I-fit` to retry, because `fit()` calls `osrm()` and the
     failure path clears `oSig` (without that reset, re-tapping looked dead). Verified with a rejecting `fetch` stub:
     hop message &rarr; `⤢ I-fit` &rarr; 1.43 km kalye.
-  * **Search bar (`🔍 Hanapin`) above the map** (he asked: *"lagyan ng search bar sa maps upang mas madali makita
-    ang location na hinahanap dito"*, then picked **"B: Nominatim lang"** over a local-first index). One GET to
-    `nominatim.openstreetmap.org/search?format=jsonv2&limit=3&countrycodes=ph&accept-language=en&q=` - **no key,
-    no billing**, CORS-allowed from his `github.io` origin (measured HTTP 200 there). It fires **only** on Enter
-    or the button (never per keystroke) and refuses a second request inside 1,100 ms with *"Hintay sandali - isang
-    hiling bawat segundo lang ang tinatanggap ng OSM search"*, because that is OSM's published policy. Fewer than
-    3 characters is refused. Results are tappable rows (`Anabu I-A, Imus` / `Cavite, Calabarzon, 4103, Philippines`);
-    a tap hands it to `place()` (fit the polygon when OSM returns one, else `setView` at `zoomOf` - **17 for a way**)
-    and the trace tools are untouched, so searching to look around never loses his pins. Anything that cannot be
-    reached says so and points at the tap flow or the manual `LONG/LAT` inputs.
+  * **The `🔍 Hanapin` search box is GONE (2026-11-08, `bf29952`), on his word: *"alisin na ang hanapin"*.** It had
+    been what he asked for first (*"lagyan ng search bar sa maps upang mas madali makita ang location na hinahanap
+    dito"*, then **"B: Nominatim lang"** over a local-first index), but with the barangay auto-zoom on pick plus the
+    `➕ ➖ 🎯 ✛` buttons there was nothing left for a free-text geocoder to make faster, and it was one more thing to
+    explain to an agent. Removed: `#rtq`, `#rtgo`, `#rtqx`, `#rtres`, `listRes()`, `goRes()`, `search()`, `HIT`,
+    `lastQ`, the `.llsrch`/`.llres`/`.llr` CSS and the `LL.search/hits/names/go/clr` test API. **Kept: `NQ`, `nom()`,
+    `place()`, `zoomOf()`, `chain()`** - the barangay auto-zoom is a Nominatim user and still needs them. The three
+    messages that used to send the agent to `🔍 Hanapin` now send him to *drag the map* or the manual `LONG/LAT` box.
+    Measured after the cut (file:// build, same 2 taps as before): pick &rarr; **z15**, `2.95 km ang daan (kalye)` vs
+    `411 m tuwiran`, and **exactly 2 requests** - 1 Nominatim + 1 OSRM - i.e. the auto-zoom did not lose anything.
+    Panel is now **21 buttons** (was 24), min height 44 px, `scrollWidth == clientWidth == 735 px`, no console
+    errors. The traps below still belong to `nom()` and are why it is shaped the way it is:
     * **`limit=3`, not `limit=5`.** On his `github.io` origin, at the same second and the same query,
       `q=ANABU%202-A%20IMUS&limit=3` answered **HTTP 200 / boundary `Anabu II-A, Imus, Cavite, 4103`** while
       `...&limit=5` died with **`TypeError: Failed to fetch` in 10 ms** - the refusal is the *bigger* answer, and a
-      browser cannot read a refused answer at all. Three rows is enough for everything this feature does, so 5 was
-      only ever a liability. This is the same class of bug as `bounded=0` further down: **the parameter, not the
-      search, is what gets refused.**
-    * Measured live: `Anabu 1-A Imus` &rarr; 1 hit &rarr; center `14.40291, 120.94132` z16, 8/8 tiles painted,
-      0 at opacity 0. `Imus Cavite` &rarr; 2 hits (city + `Diocese of Imus`). `Alfonso Cavite` &rarr; 1 hit &rarr;
-      `14.13805, 120.85542`. Weak exactly as the probe predicted: `madre paterno imus`, `niog imus cavite` &rarr;
-      0 hits **with and without** the bias, so the miss is OSM coverage, not my code - the empty-state text tells
-      him to try `barangay + ciudad`.
-    * **`bounded` is a trap:** `&viewbox=<w,n,e,s>&bounded=0` was measured to fail fetch outright ("Failed to
-      fetch" - the WAF answer carries no CORS header), while the same URL with `viewbox` alone returned 200/1 hit
-      and `bounded=1` returned 200 but 0 hits (it hard-clips to the visible box). So the bias is `viewbox` only.
-    * Because `msg`/`m2` write `textContent`, `<b>` in a message used to render as literal markup. Both now go
+      browser cannot read a refused answer at all. **The parameter, not the search, is what gets refused.**
+    * **`bounded` is a trap:** `&viewbox=<w,n,e,s>&bounded=0` fails the fetch outright (the WAF answer carries no
+      CORS header), `viewbox` alone returns 200/1 hit, `bounded=1` returns 200 but 0 hits because it clips to the
+      visible box - so `vb()` stays bias-only.
+    * Because `msg`/`m2` wrote `textContent`, `<b>` in a message used to render as literal markup. Both go
       through `h()` = `esc()` then re-allow only `<b>`/`</b>`, so agent-typed names stay inert.
   * **Picking a CAFAC now zooms to the barangay written in the facility data** (he asked: *"gamit ang cafac zoom in
     agad ito sa barangay na naka lagay tapos hayaan na ang agent mag Pin... lagyan ng measurement kung gaano kalayo
@@ -468,8 +463,8 @@ FACILITY CHECKING, `#t3` LONG/LAT - CAFAC): a lookup first, then a map the agent
   + 157 px inside a 417 px row at a 735 px viewport), the inputs and suggestion rows are 44 px, `.llsug` scrolls
   inside a 182 px box (32 vh), and under 900 px all three boxes stack. In the maps box the tool buttons wrap
   2-per-row at 44 px+ (measured 133x56 px for `① CAFAC` at 735 px). With the `➕ / ➖ / 🎯 / ✛ / 📌` row the panel now
-  holds **24 buttons** - 23 visible at 735 px (the search-clear `✖` only appears once there is a query) and the
-  measured **minimum height is 44 px**, none under it, `scrollWidth` == `clientWidth` == 735 px. The map is
+  holds **21 buttons** since the search box was removed (was 24), every one at the measured **minimum height of
+  44 px**, `scrollWidth` == `clientWidth` == 735 px. The map is
   634 x 296 px, and
   `documentElement.scrollWidth` stays at the viewport width - no horizontal overflow.
 * **Existing behavior untouched:** `mode()` keeps `in` and `fc` exactly as before and only gained the null-
