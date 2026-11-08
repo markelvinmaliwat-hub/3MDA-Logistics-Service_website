@@ -1691,6 +1691,7 @@ html.vm .hp button{padding:8px 10px;font-size:11.5px;letter-spacing:0}
 #llp .rtval small{display:block;font-weight:600;font-size:9.5px;color:var(--mut)}
 #llp .rtmini{width:104px;height:78px;flex:0 0 104px;border-radius:10px;border:1px solid var(--line);background:#e8eef6;overflow:hidden}
 #llp .rtmini canvas{display:block;width:104px;height:78px}
+#llp .llmini{font-size:9px;color:var(--mut);text-align:center;padding-top:30px}
 #llp .rtsend{display:block;width:100%;margin-top:4px;padding:13px 0;min-height:44px;border:0;border-radius:14px;background:var(--red);color:#fff;font:inherit;font-size:14.5px;font-weight:800;letter-spacing:0.06em;cursor:pointer}
 #llp .llsaved{margin-top:8px;font-size:12.5px;color:var(--mut)}
 #llp .llsaved b{color:var(--ink)}
@@ -1914,6 +1915,9 @@ window.LL=(()=>{
   x.fillStyle='rgba(255,255,255,.88)';x.fillRect(5,5,cw,15);
   x.fillStyle='#111';x.fillText(cap,10,12.5);
   return cv};
+ // Ang tile na hindi CORS ang nagtatantag ng canvas — mas maaga naming nalalaman
+ // kaysa mag-throw sa loob ng toBlob.
+ const taintOf=(cv)=>{try{cv.getContext('2d').getImageData(0,0,1,1);return ''}catch(e){return String(e&&e.message||e)}};
  const mini=()=>{
   const box=$('rtmini');if(!box)return;
   box.innerHTML='';
@@ -1921,6 +1925,7 @@ window.LL=(()=>{
   if(!a.length||!M)return;
   let cv=null;
   try{cv=shot(104,78)}catch(e){cv=null}
+  if(cv&&taintOf(cv)){box.innerHTML='<div class="llmini">walang screenshot</div>';return}
   if(cv)box.appendChild(cv)};
  const sendShot=()=>{
   const a=path();
@@ -1929,6 +1934,8 @@ window.LL=(()=>{
   let cv=null,er='';
   try{cv=shot(640,420)}catch(e){er=String(e&&e.message||e)}
   if(!cv){m2('Hindi makuha ang screenshot'+(er?' ('+er+')':'')+' \u2014 pindot muna ang <b>\u2922 I-fit</b>, pagkatapos SEND.','bad');return}
+  const tt=taintOf(cv);
+  if(tt){m2('Hindi makuha ang screenshot ('+esc(tt)+') \u2014 i-reload muna ang page, pagkatapos SEND.','bad');return}
   const nm='daan-'+(picked||'mapa')+'.png';
   const dl=()=>{
    try{const l=document.createElement('a');l.href=cv.toDataURL('image/png');l.download=nm;
@@ -2011,8 +2018,8 @@ window.LL=(()=>{
   const el=$('rtmap');if(!el)return false;
   const h=home();
   M=L.map(el,{zoomControl:true,scrollWheelZoom:false}).setView(h.c,h.z);
-  RT.osm=L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:19,attribution:'&copy; OpenStreetMap'}).addTo(M);
-  RT.sat=L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',{maxZoom:19,attribution:'&copy; Esri'});
+  RT.osm=L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:19,crossOrigin:true,attribution:'&copy; OpenStreetMap'}).addTo(M);
+  RT.sat=L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',{maxZoom:19,crossOrigin:true,attribution:'&copy; Esri'});
   RT.osm.on('tileerror',tileErr);RT.sat.on('tileerror',tileErr);
   RT.osm.on('tileload',paint);RT.sat.on('tileload',paint);
   M.on('load zoomend moveend viewreset',paint);
