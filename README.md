@@ -255,8 +255,9 @@ at CAFAC tapos sa pag type ng cafac gawin ito na searchable lang ang CAFAC haban
 cafac na hinahanap saka ilagay ang detalye kung available at ilan ang ports at kung saan ang location nito wag
 na mag lagay ng kagaya ng nasa litrato"*, then on two screenshots of the intended layout: **"GANYAN LANG ANG
 ITSURA"** and **"Status, Available slots, Site / subdivision LANG ANG ILALAGAY SA DETAILS"**, then on 2026-11-08:
-**"NGAYON MAG LAGAY NG SW MAPS + GOOGLE MY MAPS"**. So it is the third pill in `.hp` (`#t1` LOG IN, `#t2` FACILITY
-CHECKING, `#t3` LONG/LAT - CAFAC): a lookup first, and now a pin collector whose output goes to his mapping apps.
+**"NGAYON MAG LAGAY NG SW MAPS + GOOGLE MY MAPS"**, and on that first maps build **"mali ang map"** - he wants the
+*road* pinned, point by point, so the measurement is exact. So it is the third pill in `.hp` (`#t1` LOG IN, `#t2`
+FACILITY CHECKING, `#t3` LONG/LAT - CAFAC): a lookup first, then a map the agent traces the route on.
 
 * **Layout (his drawing):** a two-column grid (`#llp .llgrid`). Left column, stacked: `SUBSCRIBER NAME`
   (free text - he said the name is not in the database *"kasi ito lang ay bago lang collected application"*),
@@ -273,32 +274,52 @@ CHECKING, `#t3` LONG/LAT - CAFAC): a lookup first, and now a pin collector whose
   nothing else (no summary line, no LCP/Exchange/Utilization/Equipped slots/Site address/Barangay/City/Type/FA
   date). The coordinates are deliberately **outside** it, in their own third box below the grid, so that rule
   still holds.
-* **SW MAPS + GOOGLE MY MAPS (2026-11-08):** a third bordered box `.llmap` under the grid. `LONG (East)` and
-  `LAT (North)` inputs + `💾 I-save ang pin`, then `⬇ KML para sa SW Maps + My Maps`, `⬇ GPX para sa SW Maps`,
-  `📍 Buksan sa Google Maps` and `⭐ Buksan sa Google My Maps`, plus `✖ Tanggalin ang pin nito` (only shown when
-  the picked CAFAC has one). This exists because the facility data has **zero coordinates** - 56,685 nodes, no
-  lat/lng anywhere - so the pin is his measurement from SW Maps in the field, not something the page can guess.
-  * Pins live in `localStorage.mm_cafac_ll` as `<CODE>: [lng, lat, ts, subscriberName]`. Device-only, so no
-    server, no cost, and **the agents do not see each other's pins** until he exports the KML.
-  * Validation: empty/non-numeric and anything outside `lat 3-22 / lng 113-127` is refused in red. Measured:
-    `999 / 14` → *"Nasa labas ng Pilipinas ang numero (999, 14) — balikan mo."*; `14,080000` (comma) is accepted
-    and stored as `14.08`; values round to 6 decimals.
-  * KML order is `lng,lat,0` (correct for KML/GPX), and `api=1&query=` gets `lat,lng` - **the two orders are not
-    the same** and the first build had them swapped. A 2-pin file measured 822 bytes / 2 `<Placemark>` and 572
-    bytes / 2 `<wpt>`, both well-formed when re-parsed with `DOMParser`.
-  * Each pin's `<description>` carries `<code> | <avail>/<equipped> AVAILABLE or FULL | barangay, city |
-    site: <subdivision> | para kay: <name the agent typed when saving>`.
-* **What it is NOT:** no table, no saved list UI, no Leaflet/tile layer, no geocoder, no routing, no API key, no
-  bill. The earlier registry shape (`mm_ll` + table) was removed on his word `wag na mag lagay ng kagaya ng
-  nasa litrato`, and the in-dashboard map builds are gone too - see [[project-3mda-facility-route]].
-* **Mobile (`html.vm`):** the three pills stay on one line (shrunk to 11.5 px / 8 px padding - measured 58 +
-  128 + 124 px inside a 735 px viewport), the inputs and suggestion rows are 44 px, `.llsug` scrolls inside a
-  182 px box (32 vh), and under 900 px all three boxes stack; in the maps box the two coordinate inputs share a
-  row and every button goes full width at 44 px.
+* **MAPA NG DAAN · CAFAC &rarr; BAHAY (2026-11-08, replacing the first SW Maps box):** the third bordered box
+  `.llmap` is now an in-dashboard Leaflet map he can trace on. He rejected the pin-only version - *"mali ang map
+  nais ko gawin ay mag lagay ng mapa kung saan puwede mag PIN si agent simula sa cafac papunta sa bahay ni client
+  pero hindi lang basta pin kundi ipipin nila yung pinaka daan papunta doon para eksakto ang sukat"* - and chose
+  **"A puro manual, B dalawang hakbang"**: no auto-routing now, sharing with the agents in step 2 after he
+  approves the look. Tool row: `① CAFAC`, `② Bahay ng client`, `③ Punto ng daan`, `↺ Bawi`, `⤢ I-fit`,
+  `✖ Burahin lahat`, `💾 I-save ang daan`, `🗑 Tanggalin ang naka-save`; below the map `🗺️ Mapa` / `🛰️ Satellite`
+  and the KML/GPX/Google buttons. The distance is the **sum of his own taps** (`hav()` over start &rarr; waypoints
+  &rarr; end), shown next to the straight-line value with the gap called out, so a lazy trace is visible.
+  * Leaflet 1.9.4 is **inlined** in the page (no CDN, no SRI, no key) with keyless OSM tiles + Esri World Imagery,
+    and markers are `L.divIcon` text icons so no image assets ship. `scrollWheelZoom:false`; `invalidateSize()`
+    on open/resize; **no auto-fit on tap** (his old complaint *"bigla bigla syang nag zoom out"*) - fit only via
+    `⤢ I-fit` or when a saved route loads.
+  * Routes live in `localStorage.mm_routes` keyed `"<CAFAC>|<SUBSCRIBER NAME UPPERCASE>"` as
+    `{c,nm,s:[lng,lat],e:[lng,lat],w:[[lng,lat]...],km,ts}`. `💾 I-save` requires a picked CAFAC + a name + both
+    ends, and auto-writes the CAFAC pin into `mm_cafac_ll` if it has none. Re-picking that CAFAC reloads and fits
+    the trace (measured: zoom 16, center 14.082/120.9835).
+  * A waypoint marker tap deletes that point (*"Tinanggal ang punto 1."*); `↺ Bawi` refuses when empty
+    (*"Wala pang punto ng daan ang babawiin."*); `✖ Burahin lahat` clears the map but not the saved route.
+  * Measured on a 3-waypoint trace: **892 m road vs 876 m straight**, save &rarr; 1 key in `mm_routes`, export
+    &rarr; KML 1,000 B with 2 `<Placemark>` (pin + one `<LineString><tessellate>1</tessellate>`) and GPX 805 B with
+    1 `<wpt>` + 1 `<rte>` of 5 `<rtept>` (`CAFAC &rarr; 1..3 &rarr; BAHAY`); both re-parse clean with `DOMParser`.
+  * Empty-state guards all answer on screen: no CAFAC + `🗑` &rarr; *"Pumili muna ng CAFAC sa listahan bago
+    mag-bura."*, no points + export &rarr; *"Wala pang naka-save na pin o daan — mag-tap muna sa mapa at pindot
+    ang I-save."*
+  * Coordinate orders are still two different things: KML/GPX want `lng,lat`, the free Maps URL `api=1&query=`
+    wants **`lat,lng`** (measured: `query=14.08,120.98`). The first maps build had them swapped.
+  * The manual `LONG (East)` / `LAT (North)` inputs are kept inside a collapsed `&lt;details&gt;` for the case
+    where the tiles do not load offline. Validation: empty/non-numeric and anything outside `lat 3-22 / lng
+    113-127` is refused in red - measured `999 / 14` &rarr; *"Nasa labas ng Pilipinas ang numero (999, 14) —
+    balikan mo."*, and `14,080000` (comma) is accepted and stored as `14.08`; values round to 6 decimals.
+  * Still device-only: no server, no cost, and **agents do not see each other's pins or roads** until he exports
+    the KML. Step 2 (only after he approves the look) is a `ROUTES` tab in his Sheet + an Apps Script endpoint.
+* **What it is NOT:** no table, no saved-list UI of its own, no geocoder, **no auto-routing / road API**, no
+  offline tile cache, no API key, no bill. The earlier registry shape (`mm_ll` + table) was removed on his word
+  `wag na mag lagay ng kagaya ng nasa litrato`, and the two routing builds are gone too - see
+  [[project-3mda-facility-route]].
+* **Mobile (`html.vm`):** the three pills stay on one line (shrunk to 11.5 px / 8 px padding - measured 79 + 163
+  + 157 px inside a 417 px row at a 735 px viewport), the inputs and suggestion rows are 44 px, `.llsug` scrolls
+  inside a 182 px box (32 vh), and under 900 px all three boxes stack. In the maps box the tool buttons wrap
+  2-per-row at 44 px+ (measured 133x56 px for `① CAFAC` at 735 px), the map is 634 x 296 px, and
+  `documentElement.scrollWidth` stays at the viewport width - no horizontal overflow.
 * **Existing behavior untouched:** `mode()` keeps `in` and `fc` exactly as before and only gained the null-
   guarded `ll` branch; the panel is injected by the block's own `init()` (`window.LL`) after `#fcp`, not in
-  the HTML, so it survives the minified markup. 6 inline scripts still parse, no console errors, and the page
-  still auto-syncs (`LIVE V9 OK: 2454 records`).
+  the HTML, so it survives the minified markup. 7 inline scripts parse (`new Function` clean), no console
+  errors, and the page still auto-syncs (`LIVE V9 OK: 2457 records`).
 
 ## Endorsement reports to PLDT — SFS VALIDATION, CREDIT VALIDATION and AFD RESCHEDULE
 
