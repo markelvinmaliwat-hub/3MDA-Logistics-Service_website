@@ -309,8 +309,12 @@ FACILITY CHECKING, `#t3` LONG/LAT - CAFAC): a lookup first, then a map the agent
     at lagay ang longlat ng PIN ng cafac at longlat ng pin na bahay"*). `pick()` calls `toBgy()` only when that CAFAC
     has **no** saved pin; `toBgy` builds at most 4 queries from `b`/`c`/`s` (`"ANABU 2-A IMUS"` &rarr; `"ANABU 2-A"`
     &rarr; subdivision+city &rarr; `"IMUS Cavite"` - `BGY `/trailing ` CITY` stripped by `cleanB`/`cleanC`, and a
-    bare-number barangay like `3` is not queried at all) and walks them at OSM's 1 req/s until one returns a
-    **`boundary`/`place`** result (`isArea`) - POIs are kept only as a last resort and say so. `place()`
+    bare-number barangay like `3` is not queried at all) and walks them at OSM's 1 req/s. It stops **only** on a
+    `category:'boundary'` result; a `category:'place'` (suburb/neighbourhood) answer is remembered but the remaining
+    queries still run, because `ANABU 2-A` answers with `Plaza Homes, Anabu II-A, Imus` - a subdivision *inside* the
+    barangay, not its polygon. Only when every query is spent does it fall back to the place, then to a POI, and the
+    wording changes with each tier (`(BND)` / `(PLACE)` / `(POI)` / `(LAAS)` in the `MAP BARANGAY` log event).
+    `place()`
     fits the polygon with `M.fitBounds(L.latLngBounds(...),{animate:false,maxZoom:16})` when the box is under 0.2 deg,
     otherwise `setView` at `zoomOf()` (city 12 / municipality 13 / boundary 15 / way 17).
     * **No commas in the query - measured, not guessed.** From his `github.io` origin,
@@ -335,7 +339,7 @@ FACILITY CHECKING, `#t3` LONG/LAT - CAFAC): a lookup first, then a map the agent
       `IMULP012NP1` &rarr; *"Izoom sa barangay na **Anabu II-A, Imus, Cavite** (zoom 15)"* green, center
       `14.38449, 120.93688`, 8/8 tiles at opacity 1. `ALFLP213NP1` &rarr; `Kaytitinga III, Alfonso` z13.
       `ALFLP03NP1` (`BGY 3` - no name to search) &rarr; red, so the agent is never told a town-wide view is his CAFAC.
-      `logEv('MAP BARANGAY',...)` records the query that landed plus `(POI)`/`(LAAS)`.
+      `logEv('MAP BARANGAY',...)` records the query that landed plus the tier marker above.
     * **Why this matters for his data (measured over all 15,999 CAFAC rows):** 15,164 (94.8%) name a barangay that can
       be searched, 835 (5.2%) hold only a bare number (`BGY 2`, `BGY 3`) and 0 are blank; the distinct
       `BRGY|CITY` pairs total **917**. The numbered ones get the honest warning above, not a wrong zoom.
