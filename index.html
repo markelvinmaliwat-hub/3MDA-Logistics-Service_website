@@ -1803,14 +1803,31 @@ window.LL=(()=>{
    aW.push(m)});
   draw()};
  const icon=(cls,label)=>L.divIcon({className:'rtic '+cls,html:'<i>'+label+'</i>',iconSize:[24,24],iconAnchor:[12,12]});
- const fit=()=>{if(!M)return;const a=path();if(a.length>1){M.fitBounds(L.latLngBounds(a).pad(.2));m2('Ipinakita ang buong daan.','')}};
+ const fit=()=>{if(!M)return;const a=path();if(a.length>1){M.fitBounds(L.latLngBounds(a).pad(.2));m2('Ipinakita ang buong daan.','')}else wake(true)};
+ const shown=()=>{const p=$('llp');return !!p&&!p.hidden&&!!$('rtmap')&&$('rtmap').offsetWidth>0};
+ // Leaflet's zoom-fade can leave loaded tiles stuck at inline opacity 0 (blank map); re-assert them.
+ const paint=()=>{if(!M)return;const im=M.getContainer().getElementsByTagName('img');
+  for(let i=0;i<im.length;i++){const t=im[i];
+   if(t.classList.contains('leaflet-tile-loaded')&&t.style.opacity==='0')t.style.opacity='1'}};
+ const wake=(hard)=>{if(!M)return;M.invalidateSize({animate:false});
+  if(hard){const l=RT.sat&&RT.sat._map===M?RT.sat:RT.osm;if(l&&l.redraw)l.redraw()}
+  paint();setTimeout(paint,150);setTimeout(paint,600)};
+ let terr=0;
+ const tileErr=()=>{terr++;m2('Hindi ma-load ang tile ng mapa ('+terr+') — kung mahina ang internet, gamitin ang <b>Manual na LONG/LAT</b> sa baba ng box.','bad')};
+ const home=()=>{const v=picked&&P[picked];
+  if(v&&isFinite(v[1])&&isFinite(v[0]))return {c:[v[1],v[0]],z:15};
+  return {c:[14.25,120.80],z:11}};
  const mkMap=()=>{
   if(M)return true;
   if(typeof L==='undefined'){m2('Hindi nag-load ang map library (Leaflet).','bad');return false}
   const el=$('rtmap');if(!el)return false;
-  M=L.map(el,{zoomControl:true,scrollWheelZoom:false}).setView([14.1,-120.85],11);
+  const h=home();
+  M=L.map(el,{zoomControl:true,scrollWheelZoom:false}).setView(h.c,h.z);
   RT.osm=L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:19,attribution:'&copy; OpenStreetMap'}).addTo(M);
   RT.sat=L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',{maxZoom:19,attribution:'&copy; Esri'});
+  RT.osm.on('tileerror',tileErr);RT.sat.on('tileerror',tileErr);
+  RT.osm.on('tileload',paint);RT.sat.on('tileload',paint);
+  M.on('load zoomend moveend viewreset',paint);
   M.on('click',e=>{
    const p=[e.latlng.lat,e.latlng.lng];
    if(tool==='start'){pts.start=p;m2('Naitag ang CAFAC. Kung mali, i-drag ang asul na marker.','ok')}
@@ -1818,7 +1835,7 @@ window.LL=(()=>{
    else if(tool==='road'){pts.ways.push(p);m2('Nadagdag ang punto '+pts.ways.length+'. I-tap ulit sa sunod na likuan ng kalye.','')}
    else{m2('Pumili muna ng ① CAFAC, ② Bahay, o ③ Punto ng daan bago mag-tap sa mapa.','bad');return}
    sync()});
-  setTimeout(()=>{M.invalidateSize()},90);
+  setTimeout(()=>{wake(true)},90);
   return true};
  const rk=()=>(picked||'NOWHERE')+'|'+(nameOf().toUpperCase()||'-');
  const clearAll=()=>{pts={start:null,end:null,ways:[]};sync()};
@@ -1856,7 +1873,8 @@ window.LL=(()=>{
   if(!mkMap())return;
   if(w==='sat'){M.removeLayer(RT.osm);RT.sat.addTo(M)}
   else{M.removeLayer(RT.sat);RT.osm.addTo(M)}
-  $('bmap').classList.toggle('on',w!=='sat');$('bsat').classList.toggle('on',w==='sat')};
+  $('bmap').classList.toggle('on',w!=='sat');$('bsat').classList.toggle('on',w==='sat');
+  setTimeout(()=>{wake(false)},60)};
 
  /* ---------------- export: pins + mga daan ---------------- */
  const kmlText=()=>{const k=keys(),rk2=Object.keys(R).sort();
@@ -1914,6 +1932,7 @@ window.LL=(()=>{
   if(!o){picked='';$('lldet').innerHTML='';msg('Hindi nasa facility data ang '+c+'.','bad');saved();cnt();return}
   picked=c;$('llc').value=c;det(o);fill();saved();sug();
   if(M&&R[rk()]){loadR(rk());m2('Na-load ang '+R[rk()].w.length+' punto na naka-save ('+km(R[rk()].km)+') para kay '+R[rk()].nm+'.','ok')}
+  else if(M&&P[c]){M.setView([P[c][1],P[c][0]],15);m2('Ibinaling ang mapa sa naka-save na pin ng '+c+' ('+P[c][0]+', '+P[c][1]+').','')}
   cnt();
   logEv('LONGLAT PICK','LONG/LAT - CAFAC',(nameOf()||'-')+' -> '+c)};
  const typed=()=>{picked='';$('lldet').innerHTML='';fill();saved();sug();cnt()};
@@ -1989,11 +2008,11 @@ window.LL=(()=>{
   $('bmap').onclick=()=>baseWhich('osm');
   $('bsat').onclick=()=>baseWhich('sat');
   const t3=$('t3');if(t3)t3.onclick=()=>{document.body.classList.add('fcv');mode('ll')};
-  window.addEventListener('resize',()=>{if(M)setTimeout(()=>{M.invalidateSize()},90)});
+  window.addEventListener('resize',()=>{if(M)setTimeout(()=>{wake(false)},90)});
  };
  init();
  const render=()=>{if(!$('llp'))init();sug();fill();saved();
-  if(!M){if(mkMap())baseWhich('osm')}else setTimeout(()=>{M.invalidateSize()},90);
+  if(!M){if(shown()&&mkMap())baseWhich('osm')}else if(shown()){wake(true)}
   sync();cnt()};
  return {render,pick,count:()=>all().length,kml:kmlText,gpx:gpxText,pins:()=>P,routes:()=>R,save:savePin,saveRoute:saveR,n:keys,
   tool:(t)=>setTool(t),

@@ -287,6 +287,14 @@ FACILITY CHECKING, `#t3` LONG/LAT - CAFAC): a lookup first, then a map the agent
     and markers are `L.divIcon` text icons so no image assets ship. `scrollWheelZoom:false`; `invalidateSize()`
     on open/resize; **no auto-fit on tap** (his old complaint *"bigla bigla syang nag zoom out"*) - fit only via
     `⤢ I-fit` or when a saved route loads.
+  * **Why his first look was a black box** (he screenshotted it: *"ganito lumalabas"*), two causes, fixed the same
+    day: (1) the default view was written `setView([14.1,-120.85],11)` - a **negative longitude**, the Pacific
+    Ocean, not Cavite - so the tiles that loaded were open water. `home()` now opens at `[14.25,120.80]` z11
+    (tile `11/1710/941`) and jumps to z15 on the picked CAFAC's saved pin. (2) Leaflet's zoom-fade left every
+    loaded tile with inline `style.opacity:"0"` after `invalidateSize()`, so nothing painted even over land;
+    `wake()` forces `leaflet-tile-loaded` images back to `opacity:1` on `tileload`/`load`/`zoomend`/`moveend` and
+    150/600 ms after open, and `⤢ I-fit` doubles as the manual repair when there is no trace yet. Measured after
+    the fix: **8/8 tiles loaded, 0 at opacity 0**, on the OSM and the Esri layer alike.
   * Routes live in `localStorage.mm_routes` keyed `"<CAFAC>|<SUBSCRIBER NAME UPPERCASE>"` as
     `{c,nm,s:[lng,lat],e:[lng,lat],w:[[lng,lat]...],km,ts}`. `💾 I-save` requires a picked CAFAC + a name + both
     ends, and auto-writes the CAFAC pin into `mm_cafac_ll` if it has none. Re-picking that CAFAC reloads and fits
