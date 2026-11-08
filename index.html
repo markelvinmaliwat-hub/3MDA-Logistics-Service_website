@@ -1960,19 +1960,22 @@ window.LL=(()=>{
  /* ---- Hanapin (Nominatim / OpenStreetMap): walang API key, walang bayad, 1 hiling bawat segundo ---- */
  const NQ='https://nominatim.openstreetmap.org/search?format=jsonv2&limit=5&countrycodes=ph&accept-language=en&q=';
  const HIT=[];
- let seq=0,lastReq=0,lastQ='',blockT=0;
+ let seq=0,lastReq=0,lastQ='',blockT=0,blockFor=60000;
  const gap=()=>Date.now()-lastReq;
  const vb=()=>{if(!M)return '';const b=M.getBounds();
   return '&viewbox='+b.getWest().toFixed(5)+','+b.getNorth().toFixed(5)+','+b.getEast().toFixed(5)+','+b.getSouth().toFixed(5)};
  const nom=(q,cb,bias)=>{
-  if(blockT&&Date.now()-blockT<65000){cb([],'','403');return false}
+  // Ang tanggi ng OSM kapag mabilis ang sunod-sunod ay pumapasok sa browser bilang "Failed to fetch",
+  // hindi bilang 403 — kaya ang cooldown ay dinidilan sa kahit anong nabigong hiling, hindi lang sa 403.
+  if(blockT&&Date.now()-blockT<blockFor){cb([],'','paulit-ulit na hiling');return false}
   if(gap()<1100)return false;
   const my=++seq;lastReq=Date.now();lastQ=q;
   // cache:'no-store' — isang naka-cache na 403 ay paulit-ulit na ibabalik ng browser kahit walang CORS header.
   fetch(NQ+encodeURIComponent(q).replace(/%2C/g,'%20')+(bias?vb():''),{cache:'no-store'})
-   .then(r=>{if(r.status===403){blockT=Date.now()}if(!r.ok)throw new Error('HTTP '+r.status);return r.json()})
+   .then(r=>{if(r.status===403){blockT=Date.now();blockFor=65000}if(!r.ok)throw new Error('HTTP '+r.status);return r.json()})
    .then(a=>{if(my===seq)cb(Array.isArray(a)?a:[],q,'')})
-   .catch(e=>{if(my===seq)cb([],q,String(e&&e.message||e))});
+   .catch(e=>{if(navigator.onLine!==false){blockT=Date.now();blockFor=30000}
+    if(my===seq)cb([],q,String(e&&e.message||e))});
   return true};
  const zoomOf=(r)=>{const c=String(r.category||''),t=String(r.type||'');
   if(c==='place'){if(t==='city')return 12;if(t==='municipality')return 13;return 15}
