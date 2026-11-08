@@ -290,7 +290,8 @@ FACILITY CHECKING, `#t3` LONG/LAT - CAFAC): a lookup first, then a map the agent
     or the button (never per keystroke) and refuses a second request inside 1,100 ms with *"Hintay sandali - isang
     hiling bawat segundo lang ang tinatanggap ng OSM search"*, because that is OSM's published policy. Fewer than
     3 characters is refused. Results are tappable rows (`Anabu I-A, Imus` / `Cavite, Calabarzon, 4103, Philippines`);
-    a tap calls `M.setView([lat,lng],16)` - **17 for `type:'way'`** - and the trace tools are untouched, so the
+    a tap hands it to `place()` (fit the polygon when OSM returns one, else `setView` at `zoomOf` - **17 for a way**)
+    and the trace tools are untouched, so the
     measurement is still his own taps. Anything that cannot be reached says so and points at the tap flow or the
     manual `LONG/LAT` inputs.
     * Measured live: `Anabu 1-A Imus` &rarr; 1 hit &rarr; center `14.40291, 120.94132` z16, 8/8 tiles painted,
@@ -303,6 +304,33 @@ FACILITY CHECKING, `#t3` LONG/LAT - CAFAC): a lookup first, then a map the agent
       and `bounded=1` returned 200 but 0 hits (it hard-clips to the visible box). So the bias is `viewbox` only.
     * Because `msg`/`m2` write `textContent`, `<b>` in a message used to render as literal markup. Both now go
       through `h()` = `esc()` then re-allow only `<b>`/`</b>`, so agent-typed names stay inert.
+  * **Picking a CAFAC now zooms to the barangay written in the facility data** (he asked: *"gamit ang cafac zoom in
+    agad ito sa barangay na naka lagay tapos hayaan na ang agent mag Pin... lagyan ng measurement kung gaano kalayo
+    at lagay ang longlat ng PIN ng cafac at longlat ng pin na bahay"*). `pick()` calls `toBgy()` only when that CAFAC
+    has **no** saved pin; `toBgy` builds at most 4 queries from `b`/`c`/`s` (`"ANABU 2-A, IMUS"` &rarr; `"ANABU 2-A"`
+    &rarr; `"... , Cavite"` &rarr; subdivision+city &rarr; `"IMUS, Cavite"`, `BGY `/trailing ` CITY` stripped by
+    `cleanB`/`cleanC`, a bare-number barangay like `3` is not queried at all) and walks them at OSM's 1 req/s until
+    one returns a **`boundary`/`place`** result (`isArea`) - POIs are kept only as a last resort and say so. `place()`
+    fits the polygon with `M.fitBounds(L.latLngBounds(...),{animate:false,maxZoom:16})` when the box is under 0.2 deg,
+    otherwise `setView` at `zoomOf()` (city 12 / municipality 13 / boundary 15 / way 17).
+    * **The message only claims a barangay when the match really is it.** `tama` = not a POI fallback **and** every
+      alphabetic token of the stored barangay appears in OSM's `display_name`. His own data needs this: `ANABU 2-A`
+      is written `Anabu II-A` in OSM, so a literal string compare would have cried wolf on the best case. Measured:
+      `IMULP012NP1` &rarr; *"Izoom sa barangay na **Anabu II-A, Imus, Cavite** (zoom 15)"* green, center
+      `14.38451, 120.93687`, 8/8 tiles at opacity 1. `ALFLP213NP1` &rarr; `Kaytitinga III, Alfonso` z13.
+      `ALFLP03NP1` (`BGY 3` - no name to search) &rarr; red *"Hindi makita sa OSM ang barangay na **3** - pinakapalapit
+      ay Alfonso, Cavite, Calabarzon (zoom 11). Hanapin sa 🔍 Hanapin o i-drag ang mapa."*, so the agent is never told
+      a town-wide view is his CAFAC. `logEv('MAP BARANGAY',...)` records the query that landed plus `(POI)`/`(LAAS)`.
+    * **Why this matters for his data (measured over all 15,999 CAFAC rows):** 15,164 (94.8%) name a barangay that can
+      be searched, 835 (5.2%) hold only a bare number (`BGY 2`, `BGY 3`) and 0 are blank; the distinct
+      `BRGY|CITY` pairs total **917**. The numbered ones get the honest warning above, not a wrong zoom.
+  * **The readout row under the map now carries the measurement and both pins' coordinates** - `#rtrow`:
+    `<X> m ang daan (N punto sa pagitan)`, `<Y> m layo ng CAFAC &rarr; bahay (tuwiran, hindi daan)`, `Lumibot ng &hellip;`
+    when the trace wanders more than 20 m off the straight line, then one `.rtp` line per end:
+    `PIN NG CAFAC LONG 120.936500 &middot; LAT 14.384200` and `PIN NG BAHAY LONG 120.939000 &middot; LAT 14.387000`
+    (6 decimals, `LONG` first - the order his SW Maps export uses). If the CAFAC end is not tapped yet but that CAFAC
+    already has a saved pin, the line reads `PIN NG CAFAC (naka-save)`. Measured with 2 waypoints: **413 m road vs
+    412 m straight**; with 0 waypoints after `💾 I-save ang daan` the row reloads at zoom 16 and both lines print.
   * Leaflet 1.9.4 is **inlined** in the page (no CDN, no SRI, no key) with keyless OSM tiles + Esri World Imagery,
     and markers are `L.divIcon` text icons so no image assets ship. `scrollWheelZoom:false`; `invalidateSize()`
     on open/resize; **no auto-fit on tap** (his old complaint *"bigla bigla syang nag zoom out"*) - fit only via
