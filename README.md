@@ -377,23 +377,59 @@ FACILITY CHECKING, `#t3` LONG/LAT - CAFAC): a lookup first, then a map the agent
     * **Why this matters for his data (measured over all 15,999 CAFAC rows):** 15,164 (94.8%) name a barangay that can
       be searched, 835 (5.2%) hold only a bare number (`BGY 2`, `BGY 3`) and 0 are blank; the distinct
       `BRGY|CITY` pairs total **917**. The numbered ones get the honest warning above, not a wrong zoom.
-  * **The readout row under the map (`#rtrow`) is now the measurement, the pins, and the road section by section:**
-    `<X> m ang daan (sunod sa totoong kalye, N punto sa pagitan)` or the `hop` wording above,
-    `<Y> m layo ng CAFAC &rarr; bahay (tuwiran, hindi daan)`, `Lumibot ng &hellip;` when the trace wanders more than
-    20 m off the straight line, then a headed block **ANG DAAN PIN BY PIN** with one `.rtp` row per leg -
-    `CAFAC &rarr; BAHAY · 660 m · kalye · LONG 120.940700 · LAT 14.401200` - where `lbl()` names leg 0 `CAFAC`, the last
-    point `BAHAY` and everything between is numbered from 1, so each likuan's distance and coordinates are readable
-    without opening the map. Below it, one `.rtp` line per end:
-    `PIN NG CAFAC LONG 120.936500 &middot; LAT 14.384200` and `PIN NG BAHAY LONG 120.939000 &middot; LAT 14.387000`
-    (6 decimals, `LONG` first - the order his SW Maps export uses). If the CAFAC end is not tapped yet but that CAFAC
-    already has a saved pin, the line reads `PIN NG CAFAC (naka-save)`.
-    Measured live on his `github.io` origin, `DASLPE73NP1` + two real map taps and **0 waypoints**:
-    **660 m ang daan (kalye) vs 382 m tuwiran, lumibot ng 278 m** - the road is *longer* than the straight line by
-    design, which is the whole point of routing; the old tap-sum build reported 413 m vs 412 m for the same job.
-    A second pair 411 m apart answered **2.95 km kalye / lumibot ng 2.54 km**, and `curl` on the identical URL
-    confirmed the server really said that (HTTP 200 in 0.82 s, 87 points, `legs=[2950.1]`, start snapped 75 m to the
-    nearest mapped road) - so a big *Lumibot ng* number is **OSM's drivable network**, not my arithmetic, and it is
-    exactly the signal that tells the agent to tap the likuan himself with `③`.
+  * **What is under the map is now a stack of cards, not a list of sentences** (2026-11-08, `0089d61`..`4c4d5e1`).
+    He pointed at a GCash screen - icon in a circle, label, bold value on the right, and a button that is not
+    `Book` - and said *"gawin na ganyan itsura ng ibaba kaso ang nakapaloob ay itong mga ito na detalye dagdagan ng
+    NODE na gamit na cafac tapos imbis na book gawin na send dahil balak ko gawin na isesend ang screenshot ng mapa
+    na dadaanan papunta sa email ng admin"*, then, on where to put a second map, chose **V1 - the mini-map inside
+    the summary card** (*"piliin ang V1"*). So `#rtrow` is `.rtcard` rows (`card(ic,t,s,v,v2)` builds them):
+    **`CAFAC → BAHAY`** (`.rtcard.sum`, red left border, 104x78 mini-map at its left, sub-line
+    `sunod sa totoong kalye · N likuan · tuwiran X m · lumibot ng Y m`, value = the road distance),
+    **`🏪 NODE — CAFAC na gamit`** (value = the picked code, sub = `ANABU 2-A · IMUS` from
+    `all().find(o=>o.c===picked)` - `cleanB(o.r.b)` + `cleanC(o.r.c)`; **not** `FR[].n`, which is an array of
+    `[code,…]` pairs), then `🔵 PIN NG CAFAC`, `🏠 PIN NG BAHAY` (value = `LONG` to 6 decimals, `LAT …` as the small
+    second line - still his SW Maps order), and under the caption `ANG DAAN PIN BY PIN — SUKAT NG BAWAT LIKUAN` one
+    card per leg (`📍 CAFAC → 1 / kalye · LONG … · LAT … / 3.24 km`). The three states that used to be sentences are
+    now cards too: `Kulang ang bahay ng client` / `Kulang ang CAFAC`, and `Wala pang punto` when nothing is tapped.
+    If the CAFAC end is not tapped but that CAFAC has a saved pin, the card reads
+    `PIN NG CAFAC (naka-save)` with the saved `LONG`/`LAT` in it.
+    Measured live on his `github.io` origin (`IMULP012NP1`, 2 taps, 1 likuan): **6 cards**, `3.50 km ang daan`,
+    `tuwiran 412 m · lumibot ng 3.09 km`, `NODE … ANABU 2-A · IMUS`, legs `CAFAC → 1 = 3.24 km` and
+    `1 → BAHAY = 263 m`.
+  * **`📤 SEND` (`#rtsend`) makes a real PNG of the map, free, with no library** - this is the answer to his
+    *"balak ko gawin na isesend ang screenshot ng mapa na dadaanan"*. `shot(w,h)` draws onto an offscreen canvas:
+    the tiles **already loaded in the visible map** (so 0 extra requests), the OSRM line `RG` when there is one,
+    numbered dots (1 = CAFAC blue, waypoints green, 2 = bahay red) and a caption `IMULP012NP1 · z16 · 2.97 km`.
+    `sendShot()` renders 640x420 CSS px (800x525 device px at dpr 1.25) and then: `navigator.share({files:[File]})`
+    when the phone can share a file - which is the path that reaches Gmail - else `<a download>` of
+    `daan-<CAFAC>.png`. **The page sends no mail itself**: the admin address and the wording are his, so the message
+    after a download is *"Na-download ang daan-IMULP012NP1.png — i-attach ito sa email ng admin."*
+    Measured: `LL.shot()` &rarr; **619,874-char PNG**, and the downloaded file 464,889 bytes that really shows
+    Imus streets, the red routed line and both pins.
+  * **Two traps, both invisible to every check I had, both found by looking at the PNG itself:**
+    (1) **`crossOrigin:true` is required on BOTH tile layers** (`517dce1`/`533eefa`). Without it the tile `<img>`
+    taints the canvas and `toDataURL`/`toBlob` throw `SecurityError: Tainted canvases may not be exported`.
+    Measured before the fix: the download was 28,571 bytes and the map was a flat grey field. After it, the same
+    shot is 464,889 bytes of real streets - and Esri answers the CORS request too (4/4 tiles loaded, 0 errors,
+    `crossOrigin="anonymous"` on both layers), so `🛰️ Satellite` did not regress.
+    (2) **A tile's screen offset is not a world pixel.** `nw` is the route bounds in world pixels at the current
+    zoom - about a million - so `(t.left-mr.left-nw.x)*k` put every tile a million pixels off the canvas and the
+    picture came out with the line and the pins on empty grey **without throwing anything**. The fix is to anchor on
+    the container itself: `o0=M.project(M.containerPointToLatLng([0,0]),z)` then
+    `dx=o0.x+(t.left-mr.left)-nw.x`. Nothing in the console said so; only the image did.
+    * So `shot()` is now guarded by `taintOf(cv)` - one cached `getImageData(0,0,1,1)` per page (`taintCache`),
+      because repeated readbacks earn a `Canvas2D: Multiple readback operations … willReadFrequently` warn. On a
+      tainted canvas the mini box shows `walang screenshot` and SEND tells him to reload the page.
+  * **Test trap for the next round:** `LL.tool()` takes `start` / `end` / `road`. Passing `cafac` or `bahay` does not
+    error - `putPin()` falls through to the waypoint branch, so the trace silently fills `pts.ways` and the readout
+    shows `Wala pang punto` / `PIN NG CAFAC (naka-save)`. Also `LL.tap()` inherits the tool from the last
+    auto-advance, so a test that reuses one page load inherits the previous test's state: reload per case.
+  * **The distances themselves (kept from the first card-free measurements, because they are what the cards print):**
+    the road is *longer* than the straight line by design - measured `DASLPE73NP1`, two real taps and 0 waypoints:
+    **660 m kalye vs 382 m tuwiran, lumibot ng 278 m**; a pair 411 m apart answered **2.95 km kalye / lumibot ng
+    2.54 km**, and `curl` on the identical URL confirmed the server really said that (HTTP 200 in 0.82 s, 87 points,
+    `legs=[2950.1]`, start snapped 75 m to the nearest mapped road). A big *lumibot* number is **OSM's drivable
+    network**, not my arithmetic, and it is the signal that tells the agent to tap the likuan himself with `③`.
   * **Zoom is now a button, not a gesture** (`➕ Zoom in` / `➖ Zoom out`, +1 step each, and the Leaflet `+`/`-`
     controls were enlarged to 38 px for thumbs). `🎯 Sa gitna ng mapa` drops the next pin at the exact center, which
     is how an agent aims a pin he cannot see under his thumb, and `✛ Ipakita ang gitna` turns on `#xh` - a red
@@ -462,11 +498,13 @@ FACILITY CHECKING, `#t3` LONG/LAT - CAFAC): a lookup first, then a map the agent
 * **Mobile (`html.vm`):** the three pills stay on one line (shrunk to 11.5 px / 8 px padding - measured 79 + 163
   + 157 px inside a 417 px row at a 735 px viewport), the inputs and suggestion rows are 44 px, `.llsug` scrolls
   inside a 182 px box (32 vh), and under 900 px all three boxes stack. In the maps box the tool buttons wrap
-  2-per-row at 44 px+ (measured 133x56 px for `① CAFAC` at 735 px). With the `➕ / ➖ / 🎯 / ✛ / 📌` row the panel now
-  holds **21 buttons** since the search box was removed (was 24), every one at the measured **minimum height of
-  44 px**, `scrollWidth` == `clientWidth` == 735 px. The map is
+  2-per-row at 44 px+ (measured 133x56 px for `① CAFAC` at 735 px). With `📤 SEND` the panel holds **22 buttons**
+  (was 21), every visible one at the measured **minimum height of 44 px** - `SEND` itself is 634 x 46 px and
+  `🗑 Tanggalin ang naka-save` is the one that stays hidden until a route exists for the current CAFAC + name;
+  with a CAFAC typed and a saved route loaded the measurement is 23 visible buttons (the extra one is a suggestion
+  row, which is a `button` too). The summary card is 634 x 100 px with its 104 x 78 mini-map canvas inside, the map is
   634 x 296 px, and
-  `documentElement.scrollWidth` stays at the viewport width - no horizontal overflow.
+  `documentElement.scrollWidth` stays at the viewport width - no horizontal overflow (735 / 735).
 * **Existing behavior untouched:** `mode()` keeps `in` and `fc` exactly as before and only gained the null-
   guarded `ll` branch; the panel is injected by the block's own `init()` (`window.LL`) after `#fcp`, not in
   the HTML, so it survives the minified markup. 7 inline scripts parse (`new Function` clean), no console
