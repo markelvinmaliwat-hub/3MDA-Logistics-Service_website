@@ -1984,10 +1984,11 @@ window.LL=(()=>{
   return 16};
  const isBnd=r=>String(r.category)==='boundary';
  const isPlc=r=>String(r.category)==='place';
- // Sunod-sunod na pag-hanap (barangay+ciudad, barangay lang, site, ciudad). Ang BOUNDARY polygon ang
- // hinahanap; ang place/suburb ay hintayin hanggang sa maubos ang mga query bago gamitin, kasi ang
- // "ANABU 2-A" nagbabalik ng PLAZA HOMES (isang subdivision sa loob ng barangay) bilang place.
- const chain=(qs,done,onQ)=>{
+ // Sunod-sunod na pag-hanap (barangay+ciudad, barangay lang, site, ciudad). Tumutigil agad kapag may
+ // BOUNDARY polygon, o kapag ang UNANG pangalan sa display_name ng resultang 'place' ay ang barangay
+ // mismo; ang place na hindi ang pangalan (hal. PLAZA HOMES, na nasa LOOB ng Anabu II-A) ay hintayin
+ // hanggang sa maubos ang mga query — para hindi mangyari ang 4 hiling sa OSM sa bawat pag-pili.
+ const chain=(qs,done,onQ,good)=>{
   if(!qs.length){done(null);return}
   let plc=null,alt=null,i=0,err1='';
   const step=()=>{
@@ -1998,6 +1999,8 @@ window.LL=(()=>{
     if(err){if(!err1)err1=err;step();return}
     const bnd=list.find(isBnd);
     if(bnd){done({r:bnd,q:qq});return}
+    const gd=good?list.find(good):null;
+    if(gd){done({r:gd,q:qq,soft:true});return}
     if(!plc){const pl=list.find(isPlc);if(pl)plc={r:pl,q:qq}}
     if(!alt&&list.length)alt=list[0];
     step()},false);
@@ -2056,6 +2059,12 @@ window.LL=(()=>{
   if(s)push(cleanB(s)+' '+c);
   if(c)push(c+' Cavite');
   if(!qs.length){m2('Walang nakalagay na barangay sa '+o.c+' sa facility data — hanapin sa <b>🔍 Hanapin</b> o i-type ang LONG/LAT.','bad');return}
+  const want=cleanB(o.r.b).toUpperCase();
+  const toks=want.split(/[^A-Z]+/).filter(x=>x.length>2);
+  // Place result whose NAME leads the display string ay tama na — maraming barangay sa OSM ang
+  // place:suburb lang, hindi boundary, at mas mababa ang bayad sa OSM kandaug-agad kay tumama.
+  const leadOK=(r)=>{if(!toks.length)return false;const ld=String(r.display_name||'').split(',')[0].toUpperCase();
+   for(let i=0;i<toks.length;i++)if(ld.indexOf(toks[i])<0)return false;return true};
   chain(qs,(hit)=>{
    if(picked!==o.c)return;
    if(hit&&hit.err){m2('Hindi naabot ang OSM search ('+hit.err+') — hintayin ng isang minuto, pagkatapos pindot ulit ang CAFAC. Samantala: i-drag na lang ang mapa o gamitin ang <b>Manual na LONG/LAT</b>.','bad');return}
@@ -2065,8 +2074,6 @@ window.LL=(()=>{
    const disp=String(hit.r.display_name||'');
    const lead=disp.split(',')[0].toUpperCase();
    const nm=disp.split(',').map(x=>x.trim()).filter(x=>x).slice(0,3).join(', ');
-   const want=cleanB(o.r.b).toUpperCase();
-   const toks=want.split(/[^A-Z]+/).filter(x=>x.length>2);
    let yes=toks.length>0;
    for(let i=0;i<toks.length;i++)if(lead.indexOf(toks[i])<0)yes=false;
    const tama=!hit.alt&&yes;
@@ -2074,11 +2081,11 @@ window.LL=(()=>{
    else if(hit.alt)m2('Walang barangay boundary sa OSM para sa '+cleanB(o.r.b)+' — eto ang pinakamalapit na match: <b>'+nm+'</b> (zoom '+p.z+'). Kumpirmahin bago mag-tap ng ① CAFAC.','bad');
    else m2('Hindi eksakto ang pangalan ng barangay na <b>'+cleanB(o.r.b)+'</b> sa nakita — pinakamalapit ay <b>'+nm+'</b> (zoom '+p.z+'). Kumpirmahin bago mag-tap ng ① CAFAC, o hanapin sa <b>🔍 Hanapin</b>.','bad');
    let sfx=' (BND)';
-   if(hit.alt)sfx=' (POI)';
-   else if(hit.soft)sfx=' (PLACE)';
-   else if(!tama)sfx=' (LAAS)';
+   if(hit.alt){sfx=' (POI)'}
+   else if(hit.soft){sfx=' (PLACE)'}
+   else if(!tama){if(String(hit.r.category)==='place')sfx=' (PLACE)';else sfx=' (LAAS)'}
    logEv('MAP BARANGAY','LONG/LAT - CAFAC',o.c+' -> '+hit.q+' @ '+p.lat.toFixed(5)+','+p.lng.toFixed(5)+' z'+p.z+sfx)},
-   (q,i)=>{if(picked===o.c)m2('Izoom sa barangay ng '+o.c+' — pagsubok '+i+': <b>'+q+'</b> ...','')})};
+   (q,i)=>{if(picked===o.c)m2('Izoom sa barangay ng '+o.c+' — pagsubok '+i+': <b>'+q+'</b> ...','')},leadOK)};
 
  const panel='<div class="fcp" id="llp" hidden>'+
   '<h2>LONG/LAT - CAFAC</h2>'+
