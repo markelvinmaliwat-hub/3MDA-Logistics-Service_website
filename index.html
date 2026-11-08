@@ -1958,7 +1958,9 @@ window.LL=(()=>{
  const typed=()=>{picked='';$('lldet').innerHTML='';fill();saved();sug();cnt()};
 
  /* ---- Hanapin (Nominatim / OpenStreetMap): walang API key, walang bayad, 1 hiling bawat segundo ---- */
- const NQ='https://nominatim.openstreetmap.org/search?format=jsonv2&limit=5&countrycodes=ph&accept-language=en&q=';
+ // limit=3, hindi 5: sukat ng sagot ang bangingang binabawi ng WAF. Sa parehong hiling mula sa kanyang
+ // github.io origin — limit=3 = 200 / boundary:Anabu II-A (10 ms), limit=5 = "Failed to fetch" (10 ms).
+ const NQ='https://nominatim.openstreetmap.org/search?format=jsonv2&limit=3&countrycodes=ph&accept-language=en&q=';
  const HIT=[];
  let seq=0,lastReq=0,lastQ='',blockT=0,blockFor=60000;
  const gap=()=>Date.now()-lastReq;
