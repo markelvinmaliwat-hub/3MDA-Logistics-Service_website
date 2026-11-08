@@ -285,7 +285,7 @@ FACILITY CHECKING, `#t3` LONG/LAT - CAFAC): a lookup first, then a map the agent
   &rarr; end), shown next to the straight-line value with the gap called out, so a lazy trace is visible.
   * **Search bar (`🔍 Hanapin`) above the map** (he asked: *"lagyan ng search bar sa maps upang mas madali makita
     ang location na hinahanap dito"*, then picked **"B: Nominatim lang"** over a local-first index). One GET to
-    `nominatim.openstreetmap.org/search?format=jsonv2&limit=5&countrycodes=ph&accept-language=en&q=` - **no key,
+    `nominatim.openstreetmap.org/search?format=jsonv2&limit=3&countrycodes=ph&accept-language=en&q=` - **no key,
     no billing**, CORS-allowed from his `github.io` origin (measured HTTP 200 there). It fires **only** on Enter
     or the button (never per keystroke) and refuses a second request inside 1,100 ms with *"Hintay sandali - isang
     hiling bawat segundo lang ang tinatanggap ng OSM search"*, because that is OSM's published policy. Fewer than
@@ -294,6 +294,12 @@ FACILITY CHECKING, `#t3` LONG/LAT - CAFAC): a lookup first, then a map the agent
     and the trace tools are untouched, so the
     measurement is still his own taps. Anything that cannot be reached says so and points at the tap flow or the
     manual `LONG/LAT` inputs.
+    * **`limit=3`, not `limit=5`.** On his `github.io` origin, at the same second and the same query,
+      `q=ANABU%202-A%20IMUS&limit=3` answered **HTTP 200 / boundary `Anabu II-A, Imus, Cavite, 4103`** while
+      `...&limit=5` died with **`TypeError: Failed to fetch` in 10 ms** - the refusal is the *bigger* answer, and a
+      browser cannot read a refused answer at all. Three rows is enough for everything this feature does, so 5 was
+      only ever a liability. This is the same class of bug as `bounded=0` further down: **the parameter, not the
+      search, is what gets refused.**
     * Measured live: `Anabu 1-A Imus` &rarr; 1 hit &rarr; center `14.40291, 120.94132` z16, 8/8 tiles painted,
       0 at opacity 0. `Imus Cavite` &rarr; 2 hits (city + `Diocese of Imus`). `Alfonso Cavite` &rarr; 1 hit &rarr;
       `14.13805, 120.85542`. Weak exactly as the probe predicted: `madre paterno imus`, `niog imus cavite` &rarr;
@@ -309,27 +315,37 @@ FACILITY CHECKING, `#t3` LONG/LAT - CAFAC): a lookup first, then a map the agent
     at lagay ang longlat ng PIN ng cafac at longlat ng pin na bahay"*). `pick()` calls `toBgy()` only when that CAFAC
     has **no** saved pin; `toBgy` builds at most 4 queries from `b`/`c`/`s` (`"ANABU 2-A IMUS"` &rarr; `"ANABU 2-A"`
     &rarr; subdivision+city &rarr; `"IMUS Cavite"` - `BGY `/trailing ` CITY` stripped by `cleanB`/`cleanC`, and a
-    bare-number barangay like `3` is not queried at all) and walks them at OSM's 1 req/s. It stops **only** on a
-    `category:'boundary'` result; a `category:'place'` (suburb/neighbourhood) answer is remembered but the remaining
-    queries still run, because `ANABU 2-A` answers with `Plaza Homes, Anabu II-A, Imus` - a subdivision *inside* the
-    barangay, not its polygon. Only when every query is spent does it fall back to the place, then to a POI, and the
-    wording changes with each tier (`(BND)` / `(PLACE)` / `(POI)` / `(LAAS)` in the `MAP BARANGAY` log event).
-    `place()`
+    bare-number barangay like `3` is not queried at all) and walks them at OSM's 1 req/s. It stops at the **first**
+    answer that is either a `category:'boundary'` polygon or a `category:'place'` whose **leading** name is the
+    barangay; a place that is merely *inside* the barangay (`ANABU 2-A` answers with `Plaza Homes, Anabu II-A, Imus` -
+    a subdivision, not the polygon) is remembered but the remaining queries still run, so the polygon wins if it
+    exists. Only when every query is spent does it fall back to the place, then to a POI, and the wording changes
+    with each tier (`(BND)` / `(PLACE)` / `(POI)` / `(LAAS)` in the `MAP BARANGAY` log event). `place()`
     fits the polygon with `M.fitBounds(L.latLngBounds(...),{animate:false,maxZoom:16})` when the box is under 0.2 deg,
     otherwise `setView` at `zoomOf()` (city 12 / municipality 13 / boundary 15 / way 17).
+    * Measured with a counting wrapper around `fetch`: **1 OSM request per pick** in the good case, live on his
+      `github.io` origin - `IMULP012NP1` &rarr; *"Izoom sa barangay na Anabu II-A, Imus, Cavite (zoom 15)"*,
+      center `14.38449, 120.93688`, 8/8 tiles painted and **0 stuck at opacity 0**, no console errors,
+      `LIVE V9 OK: 2459 records`.
     * **No commas in the query - measured, not guessed.** From his `github.io` origin,
       `q=ANABU%202-A%2C%20IMUS` died with `TypeError: Failed to fetch` in **18 ms** while
-      `q=ANABU%202-A%20IMUS` on the same page returned **HTTP 200 / 1 hit in 755 ms** (`IMUS Cavite` &rarr; 200/1 too).
+      `q=ANABU%202-A%20IMUS` on the same page returned **HTTP 200 / 1 hit in 755 ms** (`IMUS Cavite` &rarr; 200/1 too;
+      both measured at `limit=5`, before the row-count finding above made 3 the setting).
       `curl` gets 200 for *both*, so the search is not the problem - only the **CORS answer** to the comma form is
       usable by a browser. `nom()` therefore rewrites `%2C` &rarr; `%20` before the request, which also protects an
       agent who types `Anabu 2-A, Imus` into `🔍 Hanapin`.
-    * **A burst gets us 403, so the code backs off instead of retrying harder.** After ~10 geocode requests inside a
-      minute the endpoint answered `403 Forbidden` (`Server: Varnish`, `Retry-After: 0`) even to curl, and it lifted
-      again under a minute later. Three defences: `fetch(...,{cache:'no-store'})` (a cached headerless 403 used to be
-      replayed to every later attempt, which looked like a permanent break), a **65-second cool-down** armed the
-      moment any answer is a 403 (`blockT`, with its own on-screen text telling the agent to wait a minute and tap
-      the CAFAC again), and `chain()` now **continues to the next query** after a refused one - it only reports the
-      error if every attempt failed.
+    * **A refusal must cost ONE request, not four.** Testing this feature is itself a burst: after ~10 geocode
+      requests inside a minute the endpoint answered `403 Forbidden` (`Server: Varnish`, `Retry-After: 0`) even to
+      curl, and it lifted again under a minute later. In a browser that same refusal arrives as
+      `TypeError: Failed to fetch` - **not** as a 403 - so status-code-only back-off never engaged. Three defences
+      now: `fetch(...,{cache:'no-store'})`, because a cached headerless 403 used to be replayed to every later
+      attempt and looked like a permanent break; a cool-down armed by **any** failed request (`blockT` - 30 s for a
+      refused/fetch error, 65 s for a real 403, and it is skipped when `navigator.onLine === false` so an offline
+      phone is told the truth); and `chain()` continues to the next query after a refusal but only while the
+      cool-down is cold, so the worst case is 1 request. Verified by replacing `window.fetch` with a rejecting stub:
+      first pick &rarr; `tries=1` &rarr; *"Hindi naabot ang OSM search (Failed to fetch) - hintayin ng isang minuto,
+      pagkatapos pindot ulit ang CAFAC."*; second pick inside the window &rarr; `tries=0` &rarr; the same line with
+      *"(paulit-ulit na hiling)"*, i.e. it never touches the network while blocked.
     * **The message only claims a barangay when the match really is it.** `tama` = not a POI fallback **and** every
       alphabetic token of the stored barangay appears in the **leading** component of OSM's `display_name` (before the
       first comma). Both halves are earned: `ANABU 2-A` is written `Anabu II-A` in OSM (a literal compare would cry
