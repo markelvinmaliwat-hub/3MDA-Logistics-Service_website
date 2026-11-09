@@ -1683,6 +1683,12 @@ html.vm .hp button{padding:8px 10px;font-size:11.5px;letter-spacing:0}
 #llp .rtcap{font-size:10.5px;font-weight:800;letter-spacing:0.07em;color:var(--mut);margin:9px 0 6px}
 #llp .rtcard{display:flex;align-items:center;gap:10px;background:#fff;border:1px solid var(--line);border-left:3px solid transparent;border-radius:14px;padding:10px 11px;margin-bottom:7px}
 #llp .rtcard.sum{border-left-color:var(--red)}
+#llp .rtcard.span{border-left-color:#0a7d3c}
+#llp .rtcard.span .rtval{color:#0a7d3c}
+#llp .rtcard.over{border-left-color:var(--red)}
+#llp .rtcard.over .rtval,#llp .rtcard.over .rtval small{color:var(--red)}
+#llp .rtcard.chk{border-left-color:#f79009}
+#llp .rtcard.chk .rtval,#llp .rtcard.chk .rtval small{color:#b45309}
 #llp .rtic{width:26px;height:26px;flex:0 0 26px;border-radius:50%;background:#eef4ff;display:flex;align-items:center;justify-content:center;font-size:13px}
 #llp .rttx{flex:1;min-width:0}
 #llp .rttx b{display:block;font-size:12.5px;font-weight:700;color:var(--ink)}
@@ -1859,6 +1865,9 @@ window.LL=(()=>{
  const G_PIN=25;    // metro ang taya na tatanggapin bago ilagay ang pin mula sa GPS
  const G_SKIP=45;   // mas malabo pa rito ay hindi na binibilang sa lakad
  const G_CAP=1500;  // katuparan ng track (mahigit 10 km na paglalakad)
+ // ANG SPAN RULE ni Markelvin (2026-11-09, kanyang mga salita): 1 span = 50 m,
+ // maximum 600 m = 12 span, lumagpas = OVERSPAN = kailangan ng dagdag na poste.
+ const SPM=50; const SPMAX=600;
  let gID=null,gOn=false,gTrack=[],gAcc=null,gAccMin=999,gAccMax=0,gSeen=0,gSkip=0,gFull=0,
      gT0=0,gEnd=0,gSrc={},gKey='',gPoly=null,gMark=null,gRing=null,gDrawAt=0,gDT=null,gNotice='';
  let W=null;try{W=JSON.parse(localStorage.getItem(WK))||null}catch(e){W=null}
@@ -2113,6 +2122,17 @@ window.LL=(()=>{
    h+='<div class="rtcard sum"><div class="rtmini" id="rtmini"></div><div class="rttx"><b>Kulang ang '+kulang+'</b><i>tapusin ang dalawang dulo para may sukat ng daan</i></div><div class="rtval">\u2014</div></div>'}
   else{
    h+='<div class="rtcard"><div class="rtic">\u2139\ufe0f</div><div class="rttx"><b>'+(gTrack.length>1?'Nabawi ang lakad mo':'Wala pang punto')+'</b><i>'+(gTrack.length>1?('<b>'+gTrack.length+' punto, '+km(walkKm())+'</b> ang lakad \u2014 kulang pa ang \u2460 CAFAC at \u2461 bahay: pindot <b>\ud83d\udccd Dito ako (GPS)</b> sa harap ng CAFAC'):'i-tap lang: \u2460 CAFAC, \u2461 bahay \u2014 ang app ang susunod sa totoong kalye')+'</i></div><div class="rtval">\u2014</div></div>'}
+  if(pts.start&&pts.end){
+   const dmr=Math.round(totKm()*1000),dms=Math.round(straightKm()*1000);
+   // Ang 600 m ay para sa LISYA ng wire mula sa poste, kaya ang tuwiran ang walang-usang batayan. Kung
+   // ang tuwiran ay nasa loob pa ng 600 m pero ang KALYE na binigay ng server ay lampas, hindi ito
+   // awtomatikong overspan — binigay ng server ang daan ng kotsse, hindi ang linya ng poste. SURIIN.
+   const hard=dms>SPMAX, over=hard||(!RD&&dmr>SPMAX), chk=!hard&&!over&&dmr>SPMAX;
+   const ns=Math.ceil(dms/SPM),nr=Math.ceil(dmr/SPM);
+   let ds='daan/sukat <b>'+nr+' span ('+dmr+' m)</b> \u00b7 tuwiran '+dms+' m ('+ns+' span) \u00b7 1 span = '+SPM+' m';
+   if(over)ds+=' \u00b7 lampas sa '+SPMAX+' m hangganan ng '+(dms-SPMAX)+' m';
+   else if(chk)ds+=' \u00b7 iba ang dalawa — kailangan tingnan ang totoong linya ng poste';
+   h+='<div class="rtcard '+(over?'over':chk?'chk':'span')+'"><div class="rtic">\ud83d\udccf</div><div class="rttx"><b>SUKAT NG DROP (span)</b><i>'+ds+'</i></div><div class="rtval">'+nr+' span<small>'+(over?'OVERSPAN \u2014 dagdag na poste':chk?'SURIIN \u2014 iba ang tuwiran':'OK sa '+SPMAX+' m')+'</small></div></div>'}
   h+=card('\ud83c\udfea','NODE \u2014 CAFAC na gamit',esc(nodeSub),esc(picked||'\u2014'));
   if(gTrack.length>1){
    const sp=walkSpan(),wk=walkKm();
@@ -2470,7 +2490,7 @@ window.LL=(()=>{
   if(RD>0)s+=' Kasama ang totoong linya ng kalye.';
   if(gTrack.length>1)s+=' At ang <b>lakad mo</b>: '+km(walkKm())+' sa '+gTrack.length+' punto.';
   m2(s,'ok');
-  logEv('ROUTE SAVE','LONG/LAT - CAFAC',rk()+' = '+pts.ways.length+' punto, '+k.toFixed(3)+' km, '+(RD>0?'kalye':'hop')+', lakad '+walkKm().toFixed(3)+' km / '+gTrack.length+'p')};
+  logEv('ROUTE SAVE','LONG/LAT - CAFAC',rk()+' = '+pts.ways.length+' punto, '+k.toFixed(3)+' km, '+(RD>0?'kalye':'hop')+', lakad '+walkKm().toFixed(3)+' km / '+gTrack.length+'p, drop '+Math.round(totKm()*1000)+' m = '+Math.ceil(totKm()*1000/SPM)+' span'+(straightKm()*1000>SPMAX?' OVERSPAN':RD>0&&totKm()*1000>SPMAX?' SURIIN':' OK'))};
  const delR=()=>{
   if(!picked){m2('Pumili muna ng CAFAC sa listahan bago mag-bura.','bad');return}
   const k=rk();if(!R[k]){m2('Walang naka-save na daan ang '+picked+' para kay '+nameOf()+'.','bad');return}
@@ -2690,7 +2710,7 @@ window.LL=(()=>{
 
  const panel='<div class="fcp" id="llp" hidden>'+
   '<h2>LONG/LAT - CAFAC</h2>'+
-  '<div class="sub">I-type ang pangalan ng bagong application, tapos mag-type ng CAFAC — searchable siya habang ka nagta-type. Pagkatapos: <b>2 tap lang</b> (CAFAC at bahay) <b>o 2 pindot ng 📍 Dito ako (GPS)</b> kapag nasa place ka na — at ang <b>totoong kalye</b> pa rin ang susundin ng linya at ng sukat. Nasa place ka at may balak maglakad? Pindot <b>🚶 I-track ang lakad</b> para may sariling sukat ang paglalakad mo — o iwanang <b>🛰️ Auto: ON</b>: hanapin ko ang phone mo pag-pili ng CAFAC, at kung nasa harap mo talaga ng node, awtomatiko nang ① at awtomatiko nang simula ng lakad.</div>'+
+  '<div class="sub">I-type ang pangalan ng bagong application, tapos mag-type ng CAFAC — searchable siya habang ka nagta-type. Pagkatapos: <b>2 tap lang</b> (CAFAC at bahay) <b>o 2 pindot ng 📍 Dito ako (GPS)</b> kapag nasa place ka na — at ang <b>totoong kalye</b> pa rin ang susundin ng linya at ng sukat. Nasa place ka at may balak maglakad? Pindot <b>🚶 I-track ang lakad</b> para may sariling sukat ang paglalakad mo — o iwanang <b>🛰️ Auto: ON</b>: hanapin ko ang phone mo pag-pili ng CAFAC, at kung nasa harap mo talaga ng node, awtomatiko nang ① at awtomatiko nang simula ng lakad. May <b>📏 SUKAT NG DROP</b> na card: <b>1 span = 50 m</b> at <b>600 m (12 span) ang maximum</b> — lampas yun ay <b>OVERSPAN</b> at kailangan ng dagdag na poste.</div>'+
   '<div class="llgrid">'+
   '<div class="llleft">'+
   '<label class="sub">SUBSCRIBER NAME</label><input id="llnm" placeholder="Pangalan ng subscriber" autocomplete="off">'+
@@ -2832,6 +2852,12 @@ window.LL=(()=>{
   afix:(lat,lng,acc)=>aWatch({coords:{latitude:lat,longitude:lng,accuracy:acc}}),
   adone:()=>aDone('test'),
   abgy:(c,lat,lng,nm)=>{BGY={c:String(c),p:[+lat,+lng],nm:String(nm||''),tama:true};return aRefOf()},
-  ack:()=>ackProbe(daanUrl())};})();
+  ack:()=>ackProbe(daanUrl()),
+  span:()=>{const dmr=Math.round(totKm()*1000),dms=Math.round(straightKm()*1000);
+   const hard=dms>SPMAX,over=hard||(!RD&&dmr>SPMAX),chk=!hard&&!over&&dmr>SPMAX;
+   const c=[...(($('rtrow')||{}).children||[])].find(x=>/SUKAT NG DROP/.test(x.textContent||''));
+   return{road:dmr,stra:dms,nr:Math.ceil(dmr/SPM),ns:Math.ceil(dms/SPM),over:over,hard:hard,chk:chk,
+    base:RD>0?'kalye':'hop',rule:[SPM,SPMAX],
+    card:c?(c.className+' :: '+c.textContent.replace(/\s+/g,' ').trim()):null}}};})();
 </script>
 </body></html>
