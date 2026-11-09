@@ -561,7 +561,9 @@ FACILITY CHECKING, `#t3` LONG/LAT - CAFAC): a lookup first, then a map the agent
     barangay zoom both overwrite `#llmsg`/`#rtmsg` in the same tick. The subscriber *name* does not trigger it:
     only the CAFAC code is compared, so typing the name after the walk keeps the walk.
   * The whole session (track + both pins + `gSrc` + the OSRM geometry) autosaves to `localStorage.mm_walk` every
-    5 points and on `pagehide`/`visibilitychange`, because Android kills the tab while the agent walks with a
+    5 points, **on every GPS pin** (`onFix` calls `ww()` the moment the ①/② fix lands — before that, a phone that
+    died right after the ② press lost only that one pin, `e:null` in the backup), and on
+    `pagehide`/`visibilitychange`, because Android kills the tab while the agent walks with a
     locked screen; `askWalk()` restores it (0 network requests, the geometry came from the backup) when the same
     CAFAC + name is reopened within 6 h, and `💾 I-save` carries it into `mm_routes` as `T/tk/tn/a/gs`.
   * Costs nothing and leaks nothing: `navigator.geolocation` only — no key, no service, no request — and the

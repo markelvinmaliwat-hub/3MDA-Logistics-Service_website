@@ -1933,6 +1933,7 @@ window.LL=(()=>{
    logEv('GPS MALABO','LONG/LAT - CAFAC',(picked||'-')+' \u00b1'+acc+'m \u2014 tinanggihan ang '+tl);return null}
   if(tl==='start'&&!picked){m2('Nakuha na ang punto mo pero <b>wala pang napiling CAFAC</b> sa listahan \u2014 pumili muna bago mag-tag.','bad');return null}
   setTool(tl);putPin([la,lo],'gps',acc);
+  ww();
   logEv('GPS PIN','LONG/LAT - CAFAC',(picked||'-')+' '+tl+' = '+lo.toFixed(6)+' '+la.toFixed(6)+' \u00b1'+acc+'m');
   return{lat:la,lng:lo,acc:acc}};
  const gpsNow=()=>{
