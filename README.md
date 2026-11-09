@@ -538,6 +538,40 @@ FACILITY CHECKING, `#t3` LONG/LAT - CAFAC): a lookup first, then a map the agent
   `https://www.google.com/maps/@?api=1&map_action=pano&viewpoint=lat,lng` (measured
   `viewpoint=14.392100,120.940200`) at the house pin, else the CAFAC pin, else the centre of the map - the
   *Street View Image API* was rejected because it needs a key and a billing account.
+* **GPS LIVE (asked: *"kaya mo ba gawin na ipin ng live ang cafac at bahay… nasa tapat ako ng cafac on site at nag
+  lakad ako papunta ng bahay ni subs kaya mo ba estimahin ng live ito"*, and he answered **"A at B"** to the mockup):**
+  two new buttons in the second tool row — `📍 Dito ako (GPS)` (`gpsNow()` → one-shot `getCurrentPosition` with
+  `enableHighAccuracy:true, timeout:14000, maximumAge:3000`) and `🚶 I-track ang lakad` (`gpsTrack()` →
+  `watchPosition`, label flips to `🛑 Itigil ang track` while running). **A:** each GPS fix feeds the same
+  `putPin(p,'gps',acc)` the taps use, so the auto-advance ①→② is unchanged and the **road line and the per-leg
+  measurement still come from OSRM**; `gSrc.start/gSrc.end` remember the accuracy and the cards read
+  `mula sa GPS mo ±6 m`. A fix worse than **±25 m is refused** (that is wider than a lane) with an instruction to
+  stand under open sky and press again — the accuracy code is also logged (`GPS MALABO`). **B:** while tracking,
+  `onWatch()` adds a likuan only when it moved `max(8 m, 2×accuracy)` from the last stored point and skips any read
+  worse than **±45 m**, both counted out loud in the readout (`7 pagbasa ng GPS · 1 malabo na punto hindi binilang`);
+  the walked line is drawn as its own **green dashed** polyline under the red road line with a blue you-are-here
+  dot and an accuracy ring, and the new `🚶 LAKAD MO (GPS)` card prints it beside the `CAFAC → BAHAY` card so the
+  two numbers can be compared. **The 4-second heartbeat promised in the mockup was dropped on purpose** — a timed
+  point inflates the walked distance with jitter while the agent is simply standing still; the distance rule is
+  the honest replacement.
+  * A dark live strip (`#rtgps`, only 12 px text) updates every read without touching `#rtmsg`, and `pushG()`
+    redraws the cards at most every 2 s with a trailing timeout so the last step is never left unmeasured.
+  * `✖ Burahin lahat` also stops and clears the track. **Switching to a different CAFAC mid-walk** (`guardKey()`)
+    drops it and leaves a `⚠️ BINURA ANG NAUNANG LAKAD` card — a card, not a message, because `sug()` and the
+    barangay zoom both overwrite `#llmsg`/`#rtmsg` in the same tick. The subscriber *name* does not trigger it:
+    only the CAFAC code is compared, so typing the name after the walk keeps the walk.
+  * The whole session (track + both pins + `gSrc` + the OSRM geometry) autosaves to `localStorage.mm_walk` every
+    5 points and on `pagehide`/`visibilitychange`, because Android kills the tab while the agent walks with a
+    locked screen; `askWalk()` restores it (0 network requests, the geometry came from the backup) when the same
+    CAFAC + name is reopened within 6 h, and `💾 I-save` carries it into `mm_routes` as `T/tk/tn/a/gs`.
+  * Costs nothing and leaks nothing: `navigator.geolocation` only — no key, no service, no request — and the
+    position never leaves the device except inside the numbers/picture the agent presses `📤 SEND` on. Measured on
+    the `file://` build: pick + 2 GPS fixes + 6 tracked reads → `133 m` road (OSRM) vs `101 m` walked, `±8 m`,
+    cards `LAKAD MO (GPS) = 101 m`, `PIN NG CAFAC = 120.936500 · mula sa GPS mo ±6 m`; a refused `±60 m` and a
+    refused `±120 m` fix placed nothing; the `denied` permission path printed the ALLOW instruction and auto-
+    stopped the watch; `mm_walk` after `🛑` held all 13 keys incl. `g` (5 geometry points) and `rd:0.133`.
+    **Honest gap: no real satellite was ever read here** — the automation surface refuses `geolocation`, so every
+    position was fed through the production `onFix`/`onWatch` entry points, not through a phone's GPS.
 * **Existing behavior untouched:** `mode()` keeps `in` and `fc` exactly as before and only gained the null-
   guarded `ll` branch; the panel is injected by the block's own `init()` (`window.LL`) after `#fcp`, not in
   the HTML, so it survives the minified markup. 7 inline scripts parse (`new Function` clean), no console
