@@ -607,6 +607,30 @@ FACILITY CHECKING, `#t3` LONG/LAT - CAFAC): a lookup first, then a map the agent
     errors, `LIVE V9 OK: 2495 records`. Test API: `LL.auto(v)`, `LL.asense()`, `LL.afix(lat,lng,acc)`, `LL.adone()`,
     `LL.abgy(code,lat,lng,name)` — `aWatch` ignores any read with no live `aRef`, which is what a late
     `watchPosition` error looks like in this surface.
+* **SPAN — `📏 SUKAT NG DROP (span)` card (`5957032`, block 79,392 chars, live 4,832,483 bytes):** the owner stated
+  the installation rule in his own words — **"1 span = 50 m … PWEDE LANG AY 600 METERS, KAPAG LUMAGPAS DITO
+  OVERSPAN NA SYA"** — so the card prints whole spans (`Math.ceil(m/50)`, because a part-span is still a span of
+  wire) against `SPM=50` / `SPMAX=600`, and the ceiling is **inclusive**: 600 m = 12 span is `OK sa 600 m`.
+  Three verdicts, and the middle one is the honest part: `dms = straight CAFAC→bahay` and `dmr = measured run`
+  (OSRM `kalye` when the server answered, otherwise the agent's own `hop` taps).
+  * `⛔ OVERSPAN — dagdag na poste` when the **straight line alone** passes 600 m (`hard`), or when there is no
+    street geometry and the traced hops do. `SUKAT` never rests on the rounded span, only on metres.
+  * `⚠️ SURIIN — iba ang tuwiran` when the straight line is inside 600 m but the **road** is not. OSRM returns a
+    *drivable* route, which is not the pole line: measured on his own street, **387 m straight answered 2,959 m
+    by road (60 span)** — declaring that OVERSPAN would be a fabrication, so the card shows both and asks for a
+    look. The sub-line always carries `daan/sukat N span (M m) · tuwiran X m (Y span) · 1 span = 50 m`.
+  * Measured on the production path: 300 m → `6 span` OK; **600 m exactly → `12 span` OK**; 606 m → `13 span`
+    OVERSPAN (`lumagpas … ng 6 m`); 650 m → `13 span` OVERSPAN; 387/2,959 m pair → `chk:true`, `60 span`,
+    `SURIIN`. `ROUTE SAVE` logs now end in `drop 650 m = 13 span OVERSPAN|SURIIN|OK`; `LL.span()` exposes
+    `{road,stra,nr,ns,over,hard,chk,base,rule}` and the rendered card text. 25 visible buttons, min 44 px,
+    `scrollWidth == clientWidth == 688`, no console errors, `LIVE V9 OK: 2499 records`.
+  * **Why the rule was not derived from data:** of the 2,495 sales rows, only 21 remarks carry a span number and
+    **none** of them is a `POSTED`/`PAID` row — there is no positive sample, so the ceiling had to come from him.
+    His own wording validates the 50 m: `…DUE TO OVERSPAN NEAREST CAFAC ALFLP213NP2 19SPAN` = 950 m. Parsing note
+    for anyone re-deriving this: crews glue the code to the span (`AMALP76NP313SPAN` = `AMALP76NP3` + `13SPAN`).
+    OSM/Overpass was probed and rejected as a pole source: across his six busiest barangays `power=pole` counts
+    were 51/27/12/9/0/0 — **three of six effectively empty, including Capipisa·Tanza, his #1 barangay** — and the
+    endpoint answered 502 in 932 ms in-page, 35–41 s per query with 3 of 6 failing server-side.
 * **Existing behavior untouched:** `mode()` keeps `in` and `fc` exactly as before and only gained the null-
   guarded `ll` branch; the panel is injected by the block's own `init()` (`window.LL`) after `#fcp`, not in
   the HTML, so it survives the minified markup. 7 inline scripts parse (`new Function` clean), no console
