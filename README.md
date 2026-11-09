@@ -574,6 +574,39 @@ FACILITY CHECKING, `#t3` LONG/LAT - CAFAC): a lookup first, then a map the agent
     stopped the watch; `mm_walk` after `🛑` held all 13 keys incl. `g` (5 geometry points) and `rd:0.133`.
     **Honest gap: no real satellite was ever read here** — the automation surface refuses `geolocation`, so every
     position was fed through the production `onFix`/`onWatch` entry points, not through a phone's GPS.
+* **AUTO-DETECT (asked: *"maari mo bang gawin na auto detect mo agad kung nasaan located ang device sa mapa para
+  mag start ng paglalakad"* — mockup shown, he answered **"A"**, 2026-11-09):** `🛰️ Auto: ON` (`#rtauto`, teal,
+  `mm_auto`, default ON) beside the two GPS buttons. On picking a CAFAC (and on opening the map), `sense()` starts a
+  short watch — **3 reads / 12 000 ms window**, best accuracy wins, early exit the moment a read already satisfies the
+  gate — and the readout prints `🛰️ Hanapin ko muna kung nasaan ka …`. What it may then do is where option A differs
+  from B:
+  * **The gate.** `aRefOf()` picks ONE reference: the saved CAFAC pin in `mm_cafac_ll` (`kind:'pin'`) or, only if that
+    CAFAC has never been pinned, the barangay point the auto-zoom cached in `BGY` (`kind:'bgy'`). Auto-tag + auto-`gpsStart()`
+    happen **only** when `kind:'pin' && acc<=25 m && distance<=G_NEAR 150 m`. A barangay is never a node: inside it the
+    line says *"pindot mo lang ang 📍 … isang beses lang iyan"* and waits, because once he tags ① by hand the pin exists
+    and the next visit to that CAFAC is fully automatic.
+  * **The three refusals, each its own line + its own card:** `⛔ ±N m` (higit sa 25 m), `📍 N m pa` (malayo pa —
+    *"baka nasa bahay ka pa o nasa sakyanan"*), `—` (walang nabasa sa 12 segundo, with `gErr` beside it). Card because
+    `#rtmsg` is overwritten in the same tick by `sug()`/`toBgy()`/OSRM — the same lesson as `gNotice`.
+  * **Pin drift (`G_KEEP 40 m`):** the auto tag goes through the production `onFix(...,'start')`, which normally
+    rewrites `P[c]` — so a 150 m gate would let the saved node position crawl 150 m per visit. `aTake()` snapshots the
+    old pin and restores it (`P[picked]=was;wp();saved()`) whenever the new fix is more than 40 m from it, so **the
+    reference stays stable and only ① + `gSrc.start` move**. Measured: fed at 100 m → `✅ AUTO … na-tag ang ①`,
+    `gps().on=true`, and `mm_cafac_ll` byte-identical before/after; fed at 15 m → tagged and the pin refreshed.
+  * **Lifecycle.** `sense()` returns false (no side effects) when AUTO is off, nothing is picked, a start pin or a walk
+    already exists, or a sense is already in the water; `pick()` on a *changed* CAFAC calls `aStop()` and clears the
+    card, so a sense started under the old node can never tag the new one; `dropTrack()` (✖, CAFAC switch, `LL.gclear`)
+    stops the sense too; a denied/absent `geolocation` lands in the `walang` branch with the ALLOW instruction.
+  * **Log events:** `AUTO SENSE` (reads, best accuracy, distance, NA-TAG / hindi na-tag), `AUTO TAG`, `AUTO WALANG`,
+    `AUTO SWITCH`; `MAP BARANGAY` now ends in ` + auto` when the barangay cache kicked off a sense.
+  * Measured (`?v=auto4`, block 77,239 chars): gates `[150, 40, 1200, 25, 3, 12]`; far 400 m → no tag + card `📍 400 m`;
+    `±40 m` → no tag + card `⛔ ±40 m`; barangay + `±10 m` → no tag, `info.kind:'bgy'`; 15 m + `±7 m` → `✅ NA-TAG`,
+    track LIVE, `daanInfo()` after the walk → `walk:"150 m"`, `walkpts:4`, `gps:"GPS ±7m ① / ±8m ②"`; real denied
+    permission → *"Walang nabasa ang GPS sa loob ng 12 segundo (Hindi pinayagan ang Location …)"*. 27 visible buttons,
+    min height 44 px, `scrollWidth == clientWidth == 688`, `mm_routes` / `mm_walk` untouched in shape, no console
+    errors, `LIVE V9 OK: 2495 records`. Test API: `LL.auto(v)`, `LL.asense()`, `LL.afix(lat,lng,acc)`, `LL.adone()`,
+    `LL.abgy(code,lat,lng,name)` — `aWatch` ignores any read with no live `aRef`, which is what a late
+    `watchPosition` error looks like in this surface.
 * **Existing behavior untouched:** `mode()` keeps `in` and `fc` exactly as before and only gained the null-
   guarded `ll` branch; the panel is injected by the block's own `init()` (`window.LL`) after `#fcp`, not in
   the HTML, so it survives the minified markup. 7 inline scripts parse (`new Function` clean), no console

@@ -1716,6 +1716,9 @@ html.vm .hp button{padding:8px 10px;font-size:11.5px;letter-spacing:0}
 #llp .llbtn.gps{background:#1570ef;border-color:#1570ef;color:#fff}
 #llp .llbtn.gps:hover{background:#0b57d0}
 #llp .llbtn.live.on{background:#0a7d3c;border-color:#0a7d3c;color:#fff}
+/* Ang 🛰️ Auto ay naka-leave ng asul (📍) at lunti (🚶) — teal, at abo kapag OFF. */
+#llp .llbtn.auto{background:#f2f4f7;border-color:#98a2b3;color:#475467}
+#llp .llbtn.auto.on{background:#0e7490;border-color:#0e7490;color:#fff}
 #llp .rtg i{width:16px;height:16px;line-height:12px;font-size:8px;background:#1570ef;box-shadow:0 0 0 5px rgba(21,112,239,.22)}
 #llp .rtgps{display:none;margin-top:8px;background:#0b2a4a;color:#fff;border-radius:10px;padding:8px 10px;font-size:12px;line-height:1.45;font-variant-numeric:tabular-nums}
 #llp .rtgps.on{display:block}
@@ -1727,7 +1730,7 @@ html.vm .hp button{padding:8px 10px;font-size:11.5px;letter-spacing:0}
 <script id="longlat-js">
 /* ============ LONG/LAT - CAFAC: lookup + mano-manong pag-tap ng daan (CAFAC -> bahay) ============ */
 window.LL=(()=>{
- const LS='mm_cafac_ll', MM='mm_routes', WK='mm_walk';
+ const LS='mm_cafac_ll', MM='mm_routes', WK='mm_walk', AK='mm_auto';
  let codes=null,picked='';
  const P=(()=>{try{return JSON.parse(localStorage.getItem(LS))||{}}catch(e){return{}}})();
  const R=(()=>{try{return JSON.parse(localStorage.getItem(MM))||{}}catch(e){return{}}})();
@@ -1968,8 +1971,93 @@ window.LL=(()=>{
   logEv('GPS TRACK','LONG/LAT - CAFAC','OFF '+gTrack.length+' punto, '+walkKm().toFixed(3)+' km');
   return false};
  const gpsTrack=(v)=>{const want=(v===undefined)?!gOn:!!v;return want?gpsStart():gpsStop()};
+ /* ---- AUTO-DETECT (A — ito ang pinili ng may-ari 2026-11-09: "auto detect mo agad kung nasaan
+    located ang device sa mapa para mag start ng paglalakad") ----
+    Pag-pili ng CAFAC o pagbukas ng mapa, hinahanap agad ang phone: maximum 3 pagbasa / 12 segundo.
+    A = may GATE: awtomatikong ① at awtomatikong track lang kapag nasa loob ng 150 m ng
+    naka-save na pin ng CAFAC at <= ±25 m ang taya. Kung malabo o malayo, ipinapakita lang ang
+    punto mo — hindi itinatag — para ang naka-save na daan ay ang huling talim, hindi ang biyahe
+    papuntang site. Kapag walang naka-save na pin, ang reference ay ang barangay (coarse), kaya
+    doon ay hinihintay pa rin ang kanyang pindot. Mananatili ang 📍 at 🚶. */
+ const G_NEAR=150;   // metro mula sa naka-save na pin ng CAFAC
+ const G_KEEP=40;    // kapag higit rito ang laktawan, hindi pinapalitan ang naka-save na pin
+ const G_BGY=1200;   // metro mula sa barangay center — reference lang, hindi sapat para itag
+ const G_READS=3; const G_WIN=12000;
+ let AUTO=true;try{AUTO=localStorage.getItem(AK)!=='0'}catch(e){}
+ let aID=null,aTmr=null,aT0=0,aN=0,aBest=null,aRef=null,aInfo=null,aFail='',BGY=null;
+ const aBtn=()=>{const b=$('rtauto');if(!b)return;
+  b.classList.toggle('on',AUTO);b.setAttribute('aria-pressed',AUTO?'true':'false');
+  b.textContent=AUTO?'\ud83d\def0 Auto: ON':'\ud83d\def0 Auto: OFF'};
+ const aRefOf=()=>{
+  if(picked&&P[picked]&&isFinite(P[picked][0])&&isFinite(P[picked][1]))
+   return{kind:'pin',p:[+P[picked][1],+P[picked][0]],lbl:picked};
+  if(picked&&BGY&&BGY.c===picked&&BGY.p&&BGY.p.length===2)
+   return{kind:'bgy',p:BGY.p,lbl:BGY.nm||'barangay'};
+  return null};
+ const aStop=()=>{const g=GEO();
+  if(aID!==null&&g){try{g.clearWatch(aID)}catch(e){}}
+  aID=null;if(aTmr){clearTimeout(aTmr);aTmr=null}};
+ const aTag=()=>{draw()};
+ const aTake=()=>{
+  const p=[aBest.lat,aBest.lng],acc=aBest.acc,d=hav(aRef.p,p)*1000;
+  if(aRef.kind==='pin'&&acc<=G_PIN&&d<=G_NEAR){
+   // Ang P[c] ang reference ng gate — kaya kung ang awtomatikong tag ay malayo pa sa naka-save na pin,
+   // ibalik natin ang dating pin pagkatapos i-tag ang ①. Kundi, lalo pang layo ang node sa bawat bisita
+   // (150 m kada ulit = drifting reference), at ang ① ng GPS ang dapat na gumagalaw, hindi ang pin.
+   const was=P[picked]?P[picked].slice():null;
+   const r=onFix({coords:{latitude:aBest.lat,longitude:aBest.lng,accuracy:acc}},'start');
+   if(!r)return false;
+   if(was&&hav([+was[1],+was[0]],[aBest.lat,aBest.lng])*1000>G_KEEP){P[picked]=was;wp();saved()}
+   gpsStart();
+   aInfo={ok:1,d:d,acc:acc,lbl:aRef.lbl,kind:'pin'};
+   m2('✅ <b>AUTO</b>: nasa <b>'+Math.round(d)+' m</b> ka ng '+esc(aRef.lbl)+' (\u00b1'+acc+' m) — na-tag ang ① CAFAC mula sa GPS mo at <b>LIVE na ang track</b>. Lakaran mo na lang; pindot <b>📍 Dito ako (GPS)</b> pagdating sa bahay para sa ②.','ok');
+   logEv('AUTO TAG','LONG/LAT - CAFAC',(picked||'-')+' ① = '+aBest.lng.toFixed(6)+','+aBest.lat.toFixed(6)+' \u00b1'+acc+'m, '+Math.round(d)+' m mula sa pin');
+   aTag();return true}
+  if(acc>G_PIN){aInfo={ok:0,d:d,acc:acc,lbl:aRef.lbl,kind:aRef.kind,why:'malabo'};
+   m2('🛰️ Nahanap ka sa <b>'+km(d/1000)+'</b> mula sa '+esc(aRef.lbl)+', pero <b>\u00b1'+acc+' m</b> ang taya (higit sa '+G_PIN+' m) — hindi ko itatag ang ①. Tumigil 10\u201320 segundo sa place na <b>nakikita ang kalangitan</b>, pagkatapos pindot <b>📍 Dito ako (GPS)</b>.','bad')}
+  else if(aRef.kind==='bgy'){aInfo={ok:0,d:d,acc:acc,lbl:aRef.lbl,kind:'bgy',why:'barangay'};
+   m2('🛰️ Nasa loob ka ng barangay na '+esc(aRef.lbl)+' ('+km(d/1000)+' mula dito, \u00b1'+acc+' m) — pero ang reference ko rito ay <b>barangay, hindi ang node</b>, kaya pindot mo lang ang <b>📍 Dito ako (GPS)</b> sa harap ng CAFAC. <b>Isang beses lang iyan</b>: pagna-tag mo, may naka-save nang pin ang '+esc(picked)+' at awtomatiko na ang simula.','')}
+  else{aInfo={ok:0,d:d,acc:acc,lbl:aRef.lbl,kind:aRef.kind,why:'malayo'};
+   m2('🛰️ Nasa <b>'+km(d/1000)+'</b> ka pa ng '+esc(aRef.lbl)+' (\u00b1'+acc+' m) — <b>hindi ko itatag ang ①</b>, baka nasa bahay ka pa o nasa sakyanan. Nasa mapa na lang ang punto mo; pagkatapos sa tapat ng node, pindot <b>📍 Dito ako (GPS)</b>.','bad')}
+  aTag();return false};
+ const aWatch=(pos)=>{
+  if(!aRef)return false;   // may naunang sense na nag-freeze — huwag nang magpalit ng reference
+  const c=(pos&&pos.coords)||{},la=+c.latitude,lo=+c.longitude,acc=Math.round(+c.accuracy||0)||99;
+  if(!isFinite(la)||!isFinite(lo))return false;
+  aN++;if(!aBest||acc<aBest.acc)aBest={lat:la,lng:lo,acc:acc};
+  gHere([la,lo],acc);
+  if(aRef&&aRef.kind==='pin'&&aBest.acc<=G_PIN&&hav(aRef.p,[la,lo])*1000<=G_NEAR)return aDone('tama');
+  if(aN>=G_READS)return aDone('basas');
+  return true};
+ const aDone=(why)=>{
+  aStop();
+  const n=aN;
+  if(!aBest){aInfo={ok:0,why:'walang',acc:null,d:null,lbl:aRef?aRef.lbl:(picked||'-')};
+   m2('🛰️ Walang nabasa ang GPS sa loob ng '+Math.round(G_WIN/1000)+' segundo'+(aFail?(' ('+aFail+')'):'')+' — samantala, pindot <b>📍 Dito ako (GPS)</b> o i-tap ang mapa.','bad');
+   logEv('AUTO WALANG','LONG/LAT - CAFAC',(picked||'-')+' '+why);
+   aRef=null;aTag();return false}
+  const r=aBest&&aRef?aTake():false;
+  if(aBest&&aRef)logEv('AUTO SENSE','LONG/LAT - CAFAC',(picked||'-')+' '+why+': '+n+' pagbasa, pinakamalinaw \u00b1'+aBest.acc+'m, '+Math.round(hav(aRef.p,[aBest.lat,aBest.lng])*1000)+' m mula sa '+aRef.lbl+(r?' — NA-TAG ①':' — hindi na-tag'));
+  aRef=null;return r};
+ const sense=(why)=>{
+  if(!AUTO||!picked||!M)return false;
+  if(pts.start||gOn||aID!==null)return false;
+  const g=GEO();
+  if(!g){return false}
+  aRef=aRefOf();aT0=Date.now();aN=0;aBest=null;aFail='';
+  if(!aRef){m2('🛰️ Auto: wala pang naka-save na pin ang '+esc(picked)+' at hindi pa natamaan ang barangay sa OSM — i-tap muna ang ① CAFAC (o pindot <b>⤢ I-fit</b>). Pag-isa lang iyan.','');return false}
+  m2('🛰️ Hanapin ko muna kung nasaan ka — '+(aRef.kind==='pin'?('may naka-save na pin ng '+esc(aRef.lbl)):('batay sa barangay na '+esc(aRef.lbl)))+'. '+G_READS+' pagbasa, maximum '+Math.round(G_WIN/1000)+' segundo'+'...','');
+  aID=g.watchPosition(aWatch,e=>{aFail=gErr(e);aDone('tanggi')},
+   {enableHighAccuracy:true,timeout:G_WIN,maximumAge:2000});
+  aTmr=setTimeout(()=>aDone('oras'),G_WIN+700);
+  return true};
+ const setAuto=(v)=>{AUTO=!!v;try{localStorage.setItem(AK,AUTO?'1':'0')}catch(e){}aBtn();
+  if(AUTO){sense('switch')}else{aStop();m2('🛰️ Pinatay ko ang <b>auto-detect</b> — ikaw na ulit ang pindot ng <b>📍 Dito ako (GPS)</b> at <b>🚶 I-track ang lakad</b>.','')}
+  logEv('AUTO SWITCH','LONG/LAT - CAFAC',(AUTO?'ON':'OFF')+' '+(picked||'-'));
+  return AUTO};
  const dropTrack=(why)=>{
   if(gDT){clearTimeout(gDT);gDT=null}
+  aStop();aInfo=null;aFail='';
   gTrack=[];gSrc={};gSeen=0;gSkip=0;gFull=0;gAccMin=999;gAccMax=0;gT0=0;gEnd=0;gKey='';
   if(M&&gPoly){M.removeLayer(gPoly);gPoly=null}
   if(M&&gRing){M.removeLayer(gRing);gRing=null}
@@ -2033,6 +2121,14 @@ window.LL=(()=>{
    if(gSkip)us+=' \u00b7 '+gSkip+' malabo hindi binilang';
    h+=card('\ud83d\udeb6','LAKAD MO (GPS)',us,km(wk))}
   if(gNotice){h+=card('\u26a0\ufe0f','BINURA ANG NAUNANG LAKAD',gNotice,'\u2014')}
+  if(aInfo){
+   let as,av;
+   if(aInfo.ok){as='nakita kang nasa <b>'+Math.round(aInfo.d)+' m</b> ng '+esc(aInfo.lbl)+' (\u00b1'+aInfo.acc+' m) \u2014 awtomatikong na-tag ang ① at tumatakbo ang track';av='\u2705 NA-TAG'}
+   else if(aInfo.why==='malabo'){as='ang taya mo ay <b>\u00b1'+aInfo.acc+' m</b> \u2014 higit sa '+G_PIN+' m kaya hindi itinatag ang ①';av='\u26d4 \u00b1'+aInfo.acc+' m'}
+   else if(aInfo.why==='barangay'){as='nasa loob ka ng <b>'+esc(aInfo.lbl)+'</b> ('+km(aInfo.d/1000)+', \u00b1'+aInfo.acc+' m) \u2014 barangay lang ang reference, hindi ang node';av='\ud83d\udccd '+km(aInfo.d/1000)}
+   else if(aInfo.why==='walang'){as='walang nabasa sa loob ng '+Math.round(G_WIN/1000)+' segundo'+(aFail?(' \u2014 '+esc(String(aFail).replace(/<[^>]+>/g,''))):'')+'; pindot <b>\ud83d\udccd Dito ako (GPS)</b> o i-tap ang mapa';av='\u2014'}
+   else{as='nasa <b>'+km(aInfo.d/1000)+'</b> ka pa ng '+esc(aInfo.lbl)+' (\u00b1'+aInfo.acc+' m) \u2014 hindi pa oras para mag-tag';av='\ud83d\udccd '+km(aInfo.d/1000)}
+   h+=card('\ud83d\def0','AUTO-DETECT',as,av)}
   if(pts.start)h+=card('\ud83d\udd35','PIN NG CAFAC',(gSrc.start?('mula sa GPS mo \u00b1'+gSrc.start+' m'):(picked?'naka-save na rin ang '+esc(picked):'i-tap o i-drag kung mali')),LON(pts.start),'LAT '+LAT(pts.start));
   else if(savedLL)h+=card('\ud83d\udd35','PIN NG CAFAC (naka-save)','hindi pa naka-tap sa mapa \u2014 pindot \ud83d\udccc para mailagay','LONG '+(+sp[0]).toFixed(6),'LAT '+(+sp[1]).toFixed(6));
   else h+=card('\ud83d\udd35','PIN NG CAFAC','wala pang naka-tap at wala pang naka-save','\u2014');
@@ -2324,7 +2420,7 @@ window.LL=(()=>{
   M.on('load zoomend moveend viewreset',paint);
   M.on('zoomend moveend',zsync);
   M.on('click',e=>putPin([e.latlng.lat,e.latlng.lng],'tap'));
-  setTimeout(()=>{wake(true);askWalk()},90);
+  setTimeout(()=>{wake(true);askWalk();sense('bukas')},90);
   autoTool();xhOn(true);
   return true};
  const rk=()=>(picked||'NOWHERE')+'|'+(nameOf().toUpperCase()||'-');
@@ -2476,10 +2572,11 @@ window.LL=(()=>{
   const ch=picked!==c;
   picked=c;
   if(ch&&M)guardKey();
+  if(ch){aStop();aInfo=null;aFail=''}   // ang AUTO-DETECT card at ang naghahanap na sense ay para sa naunang node
   $('llc').value=c;det(o);fill();saved();sug();
   if(M&&R[rk()]){loadR(rk());m2('Na-load ang '+R[rk()].w.length+' punto na naka-save ('+km(R[rk()].km)+') para kay '+R[rk()].nm+'.','ok')}
   else if(M&&askWalk()){}
-  else if(M&&P[c]){M.setView([P[c][1],P[c][0]],15,{animate:false});paint();m2('Ibinaling ang mapa sa naka-save na pin ng '+c+' ('+P[c][0]+', '+P[c][1]+').','')}
+  else if(M&&P[c]){M.setView([P[c][1],P[c][0]],15,{animate:false});paint();m2('Ibinaling ang mapa sa naka-save na pin ng '+c+' ('+P[c][0]+', '+P[c][1]+').','');sense('pin')}
   else toBgy(o);
   cnt();
   logEv('LONGLAT PICK','LONG/LAT - CAFAC',(nameOf()||'-')+' -> '+c)};
@@ -2579,6 +2676,7 @@ window.LL=(()=>{
    let yes=toks.length>0;
    for(let i=0;i<toks.length;i++)if(lead.indexOf(toks[i])<0)yes=false;
    const tama=!hit.alt&&yes;
+   BGY={c:o.c,p:[p.lat,p.lng],nm:nm,tama:tama};
    if(tama)m2('Izoom sa barangay na <b>'+nm+'</b> (zoom '+p.z+'). I-tap na doon ang ① CAFAC — pagkatapos niyan ay awtomatiko na ang ② bahay at ③ kada likuan.','ok');
    else if(hit.alt)m2('Walang barangay boundary sa OSM para sa '+cleanB(o.r.b)+' — eto ang pinakamalapit na match: <b>'+nm+'</b> (zoom '+p.z+'). Kumpirmahin bago mag-tap ng ① CAFAC.','bad');
    else m2('Hindi eksakto ang pangalan ng barangay na <b>'+cleanB(o.r.b)+'</b> sa nakita — pinakamalapit ay <b>'+nm+'</b> (zoom '+p.z+'). Kumpirmahin bago mag-tap ng ① CAFAC, o i-drag ang mapa sa eksaktong lugar.','bad');
@@ -2586,12 +2684,13 @@ window.LL=(()=>{
    if(hit.alt){sfx=' (POI)'}
    else if(hit.soft){sfx=' (PLACE)'}
    else if(!tama){if(String(hit.r.category)==='place')sfx=' (PLACE)';else sfx=' (LAAS)'}
-   logEv('MAP BARANGAY','LONG/LAT - CAFAC',o.c+' -> '+hit.q+' @ '+p.lat.toFixed(5)+','+p.lng.toFixed(5)+' z'+p.z+sfx)},
+   logEv('MAP BARANGAY','LONG/LAT - CAFAC',o.c+' -> '+hit.q+' @ '+p.lat.toFixed(5)+','+p.lng.toFixed(5)+' z'+p.z+sfx
+    +(sense('barangay')?' + auto':''))},
    (q,i)=>{if(picked===o.c)m2('Izoom sa barangay ng '+o.c+' — pagsubok '+i+': <b>'+q+'</b> ...','')},leadOK)};
 
  const panel='<div class="fcp" id="llp" hidden>'+
   '<h2>LONG/LAT - CAFAC</h2>'+
-  '<div class="sub">I-type ang pangalan ng bagong application, tapos mag-type ng CAFAC — searchable siya habang ka nagta-type. Pagkatapos: <b>2 tap lang</b> (CAFAC at bahay) <b>o 2 pindot ng 📍 Dito ako (GPS)</b> kapag nasa place ka na — at ang <b>totoong kalye</b> pa rin ang susundin ng linya at ng sukat. Nasa place ka at may balak maglakad? Pindot <b>🚶 I-track ang lakad</b> para may sariling sukat ang paglalakad mo.</div>'+
+  '<div class="sub">I-type ang pangalan ng bagong application, tapos mag-type ng CAFAC — searchable siya habang ka nagta-type. Pagkatapos: <b>2 tap lang</b> (CAFAC at bahay) <b>o 2 pindot ng 📍 Dito ako (GPS)</b> kapag nasa place ka na — at ang <b>totoong kalye</b> pa rin ang susundin ng linya at ng sukat. Nasa place ka at may balak maglakad? Pindot <b>🚶 I-track ang lakad</b> para may sariling sukat ang paglalakad mo — o iwanang <b>🛰️ Auto: ON</b>: hanapin ko ang phone mo pag-pili ng CAFAC, at kung nasa harap mo talaga ng node, awtomatiko nang ① at awtomatiko nang simula ng lakad.</div>'+
   '<div class="llgrid">'+
   '<div class="llleft">'+
   '<label class="sub">SUBSCRIBER NAME</label><input id="llnm" placeholder="Pangalan ng subscriber" autocomplete="off">'+
@@ -2616,6 +2715,7 @@ window.LL=(()=>{
   '<div class="rtwrap"><div class="rtmap" id="rtmap"></div>'+
   '<div class="xh" id="xh" style="display:none"><i></i><j></j></div></div>'+
   '<div class="lltools lltools2">'+
+  '<button class="llbtn auto" id="rtauto" aria-pressed="true">\ud83d\def0 Auto: ON</button>'+
   '<button class="llbtn gps" id="rtgp">\ud83d\udccd Dito ako (GPS)</button>'+
   '<button class="llbtn live" id="rtwalk" aria-pressed="false">\ud83d\udeb6 I-track ang lakad</button>'+
   '<button class="llbtn" id="rtzin">➕ Zoom in</button>'+
@@ -2684,6 +2784,7 @@ window.LL=(()=>{
    m2('Naitag ang ① CAFAC mula sa naka-save na pin ng '+picked+' ('+v[0]+', '+v[1]+'). I-tap na lang ang ② bahay.','ok')}
   // gpsTrack(v) ay may argument — huwag i-pass ang event object kasi laging "start" ang mawawala.
   $('rtgp').onclick=()=>{gpsNow()};
+  $('rtauto').onclick=()=>{setAuto(!AUTO)};aBtn();
   $('rtwalk').onclick=()=>{gpsTrack()};
   $('rtundo').onclick=undo;
   $('rtfit').onclick=fit;
@@ -2724,6 +2825,13 @@ window.LL=(()=>{
   gwalk:(lat,lng,acc)=>{onWatch({coords:{latitude:lat,longitude:lng,accuracy:acc}});return{n:gTrack.length,km:+walkKm().toFixed(3)}},
   gtrack:(v)=>gpsTrack(v),
   gclear:()=>{if(gOn)gpsStop(true);dropTrack();draw();return gTrack.length},
+  // AUTO-DETECT test API — parehong aWatch/aDone ang dinadaan ng tunay na pagbasa ng GPS.
+  auto:(v)=>(v===undefined?{on:AUTO,ref:aRefOf(),busy:aID!==null,reads:aN,best:aBest,info:aInfo,
+    gates:[G_NEAR,G_KEEP,G_BGY,G_PIN,G_READS,Math.round(G_WIN/1000)],fail:aFail}:setAuto(!!v)),
+  asense:()=>{aStop();aRef=null;aBest=null;aN=0;return sense('test')},
+  afix:(lat,lng,acc)=>aWatch({coords:{latitude:lat,longitude:lng,accuracy:acc}}),
+  adone:()=>aDone('test'),
+  abgy:(c,lat,lng,nm)=>{BGY={c:String(c),p:[+lat,+lng],nm:String(nm||''),tama:true};return aRefOf()},
   ack:()=>ackProbe(daanUrl())};})();
 </script>
 </body></html>
