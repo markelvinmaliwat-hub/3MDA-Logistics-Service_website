@@ -1689,6 +1689,14 @@ html.vm .hp button{padding:8px 10px;font-size:11.5px;letter-spacing:0}
 #llp .rtcard.over .rtval,#llp .rtcard.over .rtval small{color:var(--red)}
 #llp .rtcard.chk{border-left-color:#f79009}
 #llp .rtcard.chk .rtval,#llp .rtcard.chk .rtval small{color:#b45309}
+#llp .rtcard.hab{border-left-color:#7a1220;background:#fff5f6}
+#llp .rtcard.hab .rtval,#llp .rtcard.hab .rtval small{color:#7a1220}
+#llp .llbtn.habol{border-color:#e11d2e;color:#e11d2e;background:#fff;font-weight:800}
+#llp .llbtn.habol.act{background:#7a1220;border-color:#7a1220;color:#fff}
+#llp .llhabol{display:none;flex-wrap:wrap;gap:6px;margin:0 0 8px}
+#llp .llhabol.on{display:flex}
+#llp .llhchip{flex:1 1 calc(33.333% - 4px);min-width:96px;min-height:44px;border:1px dashed #7a1220;border-radius:10px;background:#fff5f6;color:#7a1220;font:inherit;font-size:11px;font-weight:700;line-height:1.25;padding:6px 4px;cursor:pointer}
+#llp .llhchip.on{background:#7a1220;border-style:solid;border-color:#7a1220;color:#fff}
 #llp .rtic{width:26px;height:26px;flex:0 0 26px;border-radius:50%;background:#eef4ff;display:flex;align-items:center;justify-content:center;font-size:13px}
 #llp .rttx{flex:1;min-width:0}
 #llp .rttx b{display:block;font-size:12.5px;font-weight:700;color:var(--ink)}
@@ -1868,6 +1876,16 @@ window.LL=(()=>{
  // ANG SPAN RULE ni Markelvin (2026-11-09, kanyang mga salita): 1 span = 50 m,
  // maximum 600 m = 12 span, lumagpas = OVERSPAN = kailangan ng dagdag na poste.
  const SPM=50; const SPMAX=600;
+ /* ---- HABOL (2026-11-09, "AB" ang sagot ni Markelvin sa mock) ----
+    Ang rule niya: "KAPAG ANG DADAANAN AY MAPUNO O MAGUBAT OR HNDI TUNAY NA DAAN ILAGAY AS
+    UNMAINTAINABLE FOR APPROVAL". Manuel ito sa sinasadya: sinukat ko na ang free map data
+    (Overpass sa 6 pinakamabigat niyang barangay) at wala doon ang baha o kagubatan — kaya ang
+    satellite ay tulong sa MATA ng agent, hindi sa code. Hindi kailanman magse-send nang mag-isa. */
+ const HABOL={mapuno:'MAPUNO',magubat:'MAGUBAT',hindi:'HINDI TUNAY NA DAAN'};
+ const HICN={mapuno:'\ud83c\udf0a',magubat:'\ud83c\udf3f',hindi:'\ud83d\udea7'};
+ const HWORD='UNMAINTAINABLE FOR APPROVAL';
+ const HLOG='RPR - UNMAINTAINABLE';
+ let habol='',habolKey='',habolOpen=false,habolView='';
  let gID=null,gOn=false,gTrack=[],gAcc=null,gAccMin=999,gAccMax=0,gSeen=0,gSkip=0,gFull=0,
      gT0=0,gEnd=0,gSrc={},gKey='',gPoly=null,gMark=null,gRing=null,gDrawAt=0,gDT=null,gNotice='';
  let W=null;try{W=JSON.parse(localStorage.getItem(WK))||null}catch(e){W=null}
@@ -2133,6 +2151,11 @@ window.LL=(()=>{
    if(over)ds+=' \u00b7 lampas sa '+SPMAX+' m hangganan ng '+(dms-SPMAX)+' m';
    else if(chk)ds+=' \u00b7 iba ang dalawa — kailangan tingnan ang totoong linya ng poste';
    h+='<div class="rtcard '+(over?'over':chk?'chk':'span')+'"><div class="rtic">\ud83d\udccf</div><div class="rttx"><b>SUKAT NG DROP (span)</b><i>'+ds+'</i></div><div class="rtval">'+nr+' span<small>'+(over?'OVERSPAN \u2014 dagdag na poste':chk?'SURIIN \u2014 iba ang tuwiran':'OK sa '+SPMAX+' m')+'</small></div></div>'}
+  if(habolOn()){
+   const dm=Math.round(totKm()*1000);
+   h+='<div class="rtcard hab"><div class="rtic">\ud83d\udeab</div><div class="rttx"><b>'+HWORD+'</b><i>dahilan: <b>'+HABOL[habol]+'</b> \u00b7 '+
+    (pts.start&&pts.end?('buong daan '+dm+' m, '+pts.ways.length+' likuan'):'wala pang dalawang dulo \u2014 walang sukat')+
+    ' \u00b7 ikaw ang pumindot, hindi auto</i></div><div class="rtval">HABOL<small>'+esc(picked||'\u2014')+'</small></div></div>'}
   h+=card('\ud83c\udfea','NODE \u2014 CAFAC na gamit',esc(nodeSub),esc(picked||'\u2014'));
   if(gTrack.length>1){
    const sp=walkSpan(),wk=walkKm();
@@ -2161,7 +2184,7 @@ window.LL=(()=>{
   r.innerHTML=h;
   mini();
   liveBar();
-  cnt()};
+  cnt();habolTool()};
  // Ang mini-map sa gilid ng summary card at ang PNG para sa SEND: iisang renderer,
  // kinopya ang mga tile na naka-load na (walang bagong request) + ang linya at ang mga pin.
  const shot=(w,hh)=>{
@@ -2251,6 +2274,9 @@ window.LL=(()=>{
    bahll:pts.end?stLng(pts.end)+' '+stLat(pts.end):'',
    walk:(gTrack.length>1?km(walkKm()):'\u2014'),walkpts:gTrack.length,
    gps:(gSrc.start||gSrc.end)?('GPS \u00b1'+(gSrc.start||'?')+'m \u2460 / \u00b1'+(gSrc.end||'?')+'m \u2461'):'',
+   // Idadagdag lang ito sa email kung i-paste ni Markelvin ang dagdag sa DaanMail.gs (part B).
+   // Ang lumang script ay hindi basahan nito — hindi ito magpapalit ng anumang existing na teksto.
+   habol:(habolOn()?(HWORD+' \u2014 '+HABOL[habol]):''),
    by:whoName(),
    at:new Date().toLocaleString('en-PH',{hour12:false}),
    dev:String(navigator.userAgent||'').replace(/\s+/g,' ').slice(0,90)}};
@@ -2441,10 +2467,39 @@ window.LL=(()=>{
   M.on('zoomend moveend',zsync);
   M.on('click',e=>putPin([e.latlng.lat,e.latlng.lng],'tap'));
   setTimeout(()=>{wake(true);askWalk();sense('bukas')},90);
-  autoTool();xhOn(true);
+  autoTool();xhOn(true);habolTool();
   return true};
  const rk=()=>(picked||'NOWHERE')+'|'+(nameOf().toUpperCase()||'-');
- const clearAll=()=>{if(gOn)gpsStop(true);dropTrack();pts={start:null,end:null,ways:[]};drop();oSig='';autoTool();sync()};
+ // Ang tatak ng habol ay nakatali sa ISANG daan (CAFAC + pangalan), hindi sa screen. Kaya kapag
+ // lumipat ang CAFAC o ang pangalan ng aplikasyon, awtomatikong hindi na ito umiiral — hindi
+ // maaaring dalhin ang "MAPUNO" ni A sa daan ni B.
+ const habolOn=()=>(habol&&habolKey===rk())?habol:'';
+ const stampR=()=>{const k=rk();if(!R[k])return;if(habol)R[k].hb=habol;else delete R[k].hb;wr()};
+ const habolTool=()=>{
+  const vs=habolKey+'|'+(habolOn()||'')+'|'+(habolOpen?1:0);
+  if(vs===habolView)return;
+  habolView=vs;
+  const c=$('llhabol'),b=$('rthabol');
+  if(c)c.innerHTML=Object.keys(HABOL).map(k=>'<button class="llhchip'+(habolOn()===k?' on':'')+'" data-h="'+k+'">'+HICN[k]+'<br>'+HABOL[k]+'</button>').join('');
+  if(c)c.className='llhabol'+(habolOpen?' on':'');
+  if(b){const on=habolOn();b.className='llbtn habol'+(on?' act':'');b.setAttribute('aria-pressed',on?'true':'false');
+   b.textContent=on?('🚫 '+HABOL[on]):'🚫 May habol sa daan'}};
+ const habolPick=(v)=>{
+  const same=(habolOn()===v);
+  if(same){habol='';habolKey='';habolOpen=false}
+  else{habol=v;habolKey=rk();habolOpen=true}
+  stampR();habolTool();draw();
+  logEv('DAAN HABOL','LONG/LAT - CAFAC',rk()+' = '+(same?
+   ('tinanggal ang tatak \u00b7 '+HLOG+' \u00b7 '+whoName()):
+   (HABOL[v]+' \u00b7 '+HWORD+' \u00b7 buong daan '+Math.round(totKm()*1000)+' m \u00b7 '+(RD>0?'kalye':'hop')+' \u00b7 '+whoName())));
+  m2(same?'Tinanggal ang tatak \u2014 <b>normal na daan</b> na lang ulit ang sukat.':
+   ('Nakatakda: <b>'+HWORD+'</b> \u2014 dahilan <b>'+HABOL[v]+'</b>. Buong daan na <b>'+Math.round(totKm()*1000)+' m</b> ang tinutukoy, hindi iisang likuan. '+
+    (R[rk()]?'Naka-attach na rin sa naka-save na daan.':'Pindot <b>\ud83d\udcbe I-save ang daan</b> para manatili ito sa device.')+
+    ' <b>Ikaw ang pumindot \u2014 hindi ito nalalarawan ng mapa.</b>'),same?'':'bad')};
+ const habolBtn=()=>{if(habolOn()){habolPick(habolOn())}else{habolOpen=!habolOpen;habolTool();
+  m2(habolOpen?'Pumili ng dahilan: <b>MAPUNO</b>, <b>MAGUBAT</b>, o <b>HINDI TUNAY NA DAAN</b> \u2014 iilalagay itong <b>'+HWORD+'</b> sa daan na ito.':'Bukas ang pagpili ng habol.','')}};
+ const clearAll=()=>{if(gOn)gpsStop(true);dropTrack();pts={start:null,end:null,ways:[]};drop();oSig='';autoTool();
+  if(habolOn()){habol='';habolKey='';habolOpen=false;stampR();habolTool()}sync()};
  // Ang CAFAC ang sukatin dito, hindi ang pangalan: maaaring i-type ang SUBSCRIBER NAME
  // pagkatapos ng paglalakad, at hindi dapat mawala ang lakad dahil lang doon.
  const guardKey=()=>{
@@ -2469,6 +2524,7 @@ window.LL=(()=>{
   if(gTrack.length){gKey=rk();gT0=Date.now()-Math.max(0,+r.tel||0);gEnd=Date.now();gAccMin=+(r.a&&r.a[0])||99;gAccMax=+(r.a&&r.a[1])||99;gSeen=+r.tn||gTrack.length}
   trackG();liveBar();
   if(r.g&&r.g.length>1){RG=r.g.map(ll2);RD=r.rd||0;RL=(r.L&&r.L.length)?r.L.slice():null;oSig=sigOf()}else drop();
+  habol=(r.hb&&HABOL[r.hb])?r.hb:'';habolKey=k;habolOpen=false;habolTool();
   autoTool();sync();fit();return true};
  const thin=(g,max)=>{if(!g||g.length<=max)return g;const st=Math.ceil(g.length/max),o=[];
   for(let i=0;i<g.length;i+=st)o.push(g[i]);
@@ -2483,19 +2539,27 @@ window.LL=(()=>{
    w:pts.ways.map(a=>[+a[1].toFixed(6),+a[0].toFixed(6)]),km:+k.toFixed(3),ts:Date.now(),
    rd:RD>0?+RD.toFixed(3):0,L:(RL||[]).map(x=>+x.toFixed(3)),g:thin(RG.map(ll2),400),
    T:thin(gTrack.map(ll2),600),tk:+walkKm().toFixed(3),tn:gTrack.length,a:[gAccMin,gAccMax],
-   tel:Math.max(0,(gEnd||Date.now())-(gT0||Date.now())),gs:{start:gSrc.start||null,end:gSrc.end||null}};
+   tel:Math.max(0,(gEnd||Date.now())-(gT0||Date.now())),gs:{start:gSrc.start||null,end:gSrc.end||null},
+   hb:habolOn()?habol:undefined};
   if(!P[picked]){P[picked]=[+pts.start[1].toFixed(6),+pts.start[0].toFixed(6),Date.now(),nameOf()];wp();fill();saved();sug()}
   wr();cnt();
   let s='Na-save ang '+km(k)+' na daan para kay '+nameOf()+' ('+picked+'), '+pts.ways.length+' punto.';
   if(RD>0)s+=' Kasama ang totoong linya ng kalye.';
   if(gTrack.length>1)s+=' At ang <b>lakad mo</b>: '+km(walkKm())+' sa '+gTrack.length+' punto.';
+  if(habolOn())s+=' At ang tatak: <b>'+HWORD+'</b> ('+HABOL[habol]+').';
   m2(s,'ok');
-  logEv('ROUTE SAVE','LONG/LAT - CAFAC',rk()+' = '+pts.ways.length+' punto, '+k.toFixed(3)+' km, '+(RD>0?'kalye':'hop')+', lakad '+walkKm().toFixed(3)+' km / '+gTrack.length+'p, drop '+Math.round(totKm()*1000)+' m = '+Math.ceil(totKm()*1000/SPM)+' span'+(straightKm()*1000>SPMAX?' OVERSPAN':RD>0&&totKm()*1000>SPMAX?' SURIIN':' OK'))};
+  logEv('ROUTE SAVE','LONG/LAT - CAFAC',rk()+' = '+pts.ways.length+' punto, '+k.toFixed(3)+' km, '+(RD>0?'kalye':'hop')+', lakad '+walkKm().toFixed(3)+' km / '+gTrack.length+'p, drop '+Math.round(totKm()*1000)+' m = '+Math.ceil(totKm()*1000/SPM)+' span'+(straightKm()*1000>SPMAX?' OVERSPAN':RD>0&&totKm()*1000>SPMAX?' SURIIN':' OK')+(habolOn()?', '+HLOG+' ('+HABOL[habol]+' \u2192 '+HWORD+')':''))};
  const delR=()=>{
   if(!picked){m2('Pumili muna ng CAFAC sa listahan bago mag-bura.','bad');return}
   const k=rk();if(!R[k]){m2('Walang naka-save na daan ang '+picked+' para kay '+nameOf()+'.','bad');return}
   delete R[k];wr();cnt();clearAll();
   m2('Tinanggal ang naka-save na daan ng '+picked+' para kay '+nameOf()+'.','')};
+ const habolRead=()=>({on:habolOn(),key:habolKey,cur:habol,open:habolOpen,word:HWORD,log:HLOG,
+   reasons:Object.keys(HABOL),saved:(R[rk()]&&R[rk()].hb)||null,
+   btn:($('rthabol')||{}).textContent,
+   chips:[...(($('llhabol')||{}).children||[])].map(x=>x.className+'|'+x.textContent.replace(/\s+/g,' ').trim()),
+   card:(()=>{const c=[...(($('rtrow')||{}).children||[])].find(x=>/UNMAINTAINABLE/.test(x.textContent||''));
+    return c?c.className+' :: '+c.textContent.replace(/\s+/g,' ').trim():null})()});
  const cnt=()=>{const el=$('rtcnt');if(!el)return;
   const n=Object.keys(R).length;const me=R[rk()];
   let s='May '+n+' daan na naka-save sa device na ito';
@@ -2599,8 +2663,11 @@ window.LL=(()=>{
   else if(M&&P[c]){M.setView([P[c][1],P[c][0]],15,{animate:false});paint();m2('Ibinaling ang mapa sa naka-save na pin ng '+c+' ('+P[c][0]+', '+P[c][1]+').','');sense('pin')}
   else toBgy(o);
   cnt();
+  // Kailangang i-redraw agad: kapag lumipat ang CAFAC (o ang pangalan) ay ibinali ang identity ng
+  // daan, kaya ang span card at ang tatak ng habol ay hindi dapat manatiling ngunaang daan.
+  draw();
   logEv('LONGLAT PICK','LONG/LAT - CAFAC',(nameOf()||'-')+' -> '+c)};
- const typed=()=>{picked='';$('lldet').innerHTML='';fill();saved();sug();cnt()};
+ const typed=()=>{picked='';$('lldet').innerHTML='';fill();saved();sug();cnt();draw()};
 
  /* ---- Nominatim (OpenStreetMap) — ang tanging gamit ngayon ay ang awtomatikong izoom sa barangay ng
     CAFAC; ang 🔍 Hanapin search box ay inalis noong 2026-11-08 sa utos ng may-ari. ---- */
@@ -2710,7 +2777,7 @@ window.LL=(()=>{
 
  const panel='<div class="fcp" id="llp" hidden>'+
   '<h2>LONG/LAT - CAFAC</h2>'+
-  '<div class="sub">I-type ang pangalan ng bagong application, tapos mag-type ng CAFAC — searchable siya habang ka nagta-type. Pagkatapos: <b>2 tap lang</b> (CAFAC at bahay) <b>o 2 pindot ng 📍 Dito ako (GPS)</b> kapag nasa place ka na — at ang <b>totoong kalye</b> pa rin ang susundin ng linya at ng sukat. Nasa place ka at may balak maglakad? Pindot <b>🚶 I-track ang lakad</b> para may sariling sukat ang paglalakad mo — o iwanang <b>🛰️ Auto: ON</b>: hanapin ko ang phone mo pag-pili ng CAFAC, at kung nasa harap mo talaga ng node, awtomatiko nang ① at awtomatiko nang simula ng lakad. May <b>📏 SUKAT NG DROP</b> na card: <b>1 span = 50 m</b> at <b>600 m (12 span) ang maximum</b> — lampas yun ay <b>OVERSPAN</b> at kailangan ng dagdag na poste.</div>'+
+  '<div class="sub">I-type ang pangalan ng bagong application, tapos mag-type ng CAFAC — searchable siya habang ka nagta-type. Pagkatapos: <b>2 tap lang</b> (CAFAC at bahay) <b>o 2 pindot ng 📍 Dito ako (GPS)</b> kapag nasa place ka na — at ang <b>totoong kalye</b> pa rin ang susundin ng linya at ng sukat. Nasa place ka at may balak maglakad? Pindot <b>🚶 I-track ang lakad</b> para may sariling sukat ang paglalakad mo — o iwanang <b>🛰️ Auto: ON</b>: hanapin ko ang phone mo pag-pili ng CAFAC, at kung nasa harap mo talaga ng node, awtomatiko nang ① at awtomatiko nang simula ng lakad. May <b>📏 SUKAT NG DROP</b> na card: <b>1 span = 50 m</b> at <b>600 m (12 span) ang maximum</b> — lampas yun ay <b>OVERSPAN</b> at kailangan ng dagdag na poste. At kung ang daanan ay <b>MAPUNO</b>, <b>MAGUBAT</b>, o <b>HINDI TUNAY NA DAAN</b>, pindot <b>🚫 May habol sa daan</b> at pumili ng dahilan — ilalagay niyang <b>'+HWORD+'</b> ang daan na iyon sa record at sa log. Ikaw ang pumipili, hindi binabasa ng mapa.</div>'+
   '<div class="llgrid">'+
   '<div class="llleft">'+
   '<label class="sub">SUBSCRIBER NAME</label><input id="llnm" placeholder="Pangalan ng subscriber" autocomplete="off">'+
@@ -2731,6 +2798,7 @@ window.LL=(()=>{
   '<button class="llbtn red" id="rtclear">✖ Burahin lahat</button>'+
   '<button class="llbtn" id="rtsave">💾 I-save ang daan</button>'+
   '<button class="llbtn red" id="rtdel">🗑 Tanggalin ang naka-save</button>'+
+  '<button class="llbtn habol" id="rthabol" aria-pressed="false">🚫 May habol sa daan</button>'+
   '</div>'+
   '<div class="rtwrap"><div class="rtmap" id="rtmap"></div>'+
   '<div class="xh" id="xh" style="display:none"><i></i><j></j></div></div>'+
@@ -2749,6 +2817,7 @@ window.LL=(()=>{
   '<div class="rtzoom"><span>ZOOM</span><input type="range" id="rtzsl" min="10" max="19" step="1" value="11" aria-label="I-drag para mag-zoom in at zoom out"><b id="rtzvl">11</b></div>'+
   '<div class="rtlay"><button class="llbtn on" id="bmap">🗺️ Mapa</button><button class="llbtn" id="bsat">🛰️ Satellite</button>'+
   '<span class="llsaved" style="margin-top:0">Kailangan ng internet para sa tiles at para sa <b>totoong kalye</b> (OpenStreetMap routing, libre, walang API key). Kapag walang internet, ang mga tap mo na lang ang susukatin — at sasabihin namin iyan.</span></div>'+
+  '<div class="llhabol" id="llhabol"></div>'+
   '<div class="rtrow" id="rtrow"></div>'+
   '<button class="rtsend" id="rtsend">\ud83d\udce4 SEND</button>'+
   '<div class="llbtns">'+
@@ -2772,6 +2841,9 @@ window.LL=(()=>{
   const fcp=$('fcp');if(!fcp||$('llp'))return;
   fcp.insertAdjacentHTML('afterend',panel);
   $('llc').addEventListener('input',typed);
+  // Ang pangalan ay bahagi ng identity ng daan (CAFAC|pangalan), kaya dapat ring mag-redraw agad:
+  // kapag nag-iba ang pangalan ay nawawala ang dating tatak ng habol, hindi ito daxil sa bagong aplikasyon.
+  $('llnm').addEventListener('input',()=>{cnt();draw()});
   $('llc').addEventListener('keydown',e=>{
    if(e.key!=='Enter')return;
    const b=$('llsug').querySelector('.llrow');
@@ -2811,6 +2883,9 @@ window.LL=(()=>{
   $('rtclear').onclick=()=>{clearAll();m2('Binura ang mga punto sa mapa — hindi ang naka-save.','')};
   $('rtsave').onclick=saveR;
   $('rtdel').onclick=delR;
+  $('rthabol').onclick=habolBtn;
+  $('llhabol').onclick=(e)=>{const t=e.target.closest?e.target.closest('[data-h]'):null;
+   if(t)habolPick(t.getAttribute('data-h'))};
   $('rtsend').onclick=sendShot;
   $('rtstreet').onclick=openStreet;
   $('bmap').onclick=()=>baseWhich('osm');
@@ -2858,6 +2933,11 @@ window.LL=(()=>{
    const c=[...(($('rtrow')||{}).children||[])].find(x=>/SUKAT NG DROP/.test(x.textContent||''));
    return{road:dmr,stra:dms,nr:Math.ceil(dmr/SPM),ns:Math.ceil(dms/SPM),over:over,hard:hard,chk:chk,
     base:RD>0?'kalye':'hop',rule:[SPM,SPMAX],
-    card:c?(c.className+' :: '+c.textContent.replace(/\s+/g,' ').trim()):null}}};})();
+    card:c?(c.className+' :: '+c.textContent.replace(/\s+/g,' ').trim()):null}},
+  // HABOL test API — iisang daan ang dinadaan, tapos sabihin kung ano ang nakikita sa card,
+  // sa naka-save na record, at sa button/chips.
+  habol:(v)=>{if(v==='open'){habolBtn();return habolRead()}
+    if(v!==undefined&&v!=='')habolPick(v);else if(v==='')habolPick(habolOn());
+    return habolRead()}};})();
 </script>
 </body></html>
