@@ -631,6 +631,36 @@ FACILITY CHECKING, `#t3` LONG/LAT - CAFAC): a lookup first, then a map the agent
     OSM/Overpass was probed and rejected as a pole source: across his six busiest barangays `power=pole` counts
     were 51/27/12/9/0/0 — **three of six effectively empty, including Capipisa·Tanza, his #1 barangay** — and the
     endpoint answered 502 in 932 ms in-page, 35–41 s per query with 3 of 6 failing server-side.
+* **HABOL — 🚫 May habol sa daan (`13b11a5`, owner's rule 2026-11-09):** *"KAPAG ANG DADAANAN AY MAPUNO O
+  MAGUBAT OR HNDI TUNAY NA DAAN ILAGAY AS UNMAINTAINABLE FOR APPROVAL"*, and **"AB"** approved the mock, so the
+  shape is **one button + three chips** and **both** spellings are used — the card prints his own phrase
+  `UNMAINTAINABLE FOR APPROVAL`, the log line carries the wording his Sheet already stores, `RPR - UNMAINTAINABLE`
+  (24 rows of it, incl. his typos `UNMAINTANABLE`/`UNAMAINTAINABLE`/`SUBS UNMAIMTAINABLE`).
+  * **Manual by design.** Nothing in the free data can see flooding or overgrowth (measured in the span probe:
+    `power=pole` 51/27/12/9/0/0 across his six busiest barangays, no flood/veg layer at all), so the Satellite
+    basemap informs his **eyes**, never the code. The stamp can only be pressed by the agent, it never auto-fires,
+    and it does not touch SEND: no mail leaves the page without his press.
+  * `HABOL={mapuno:'MAPUNO',magubat:'MAGUBAT',hindi:'HINDI TUNAY NA DAAN'}`, `HWORD`, `HLOG`, state
+    `habol`/`habolKey`/`habolOpen`. Pressing 🚫 while stamped **clears** it; the reason chips (`#llhabol`,
+    `.llhchip`, `display:none` until opened) sit directly above the card stack; the red `🚫` card renders **below**
+    `📏 SUKAT NG DROP` so an OVERSPAN verdict is never hidden — they are two separate judgements (wire length vs.
+    quality of the way).
+  * **The stamp is bound to one daan, not to the screen:** it lives as `hb` inside the existing `mm_routes` record
+    keyed `CAFAC|NAME` (no new localStorage key, no server change, no Apps Script redeploy), and `habolOn()` only
+    returns it while `habolKey === rk()`. Measured: pick another CAFAC → `on:""` and the button reverts to
+    `🚫 May habol sa daan`; pick the first again → restored from the record; change the SUBSCRIBER NAME → hidden
+    and the old record keeps `hb` (so a stamp can never travel to another application); name back → restored;
+    press the same chip again → `hb` removed from the record (17 → 16 keys) with `Tinanggal ang tatak …`;
+    `✖ Burahin lahat` → cleared. This also needed `pick()`/`typed()` and the name input to `draw()` immediately —
+    before that the card stack kept showing the previous daan.
+  * Logs: `DAAN HABOL | AMALP112NP1|QA HABOL TEST = MAPUNO · UNMAINTAINABLE FOR APPROVAL · buong daan 778 m ·
+    kalye · <agent>` on every set/change/clear, and `ROUTE SAVE … drop 778 m = 16 span SURIIN, RPR - UNMAINTAINABLE
+    (MAPUNO → UNMAINTAINABLE FOR APPROVAL)`. `daanInfo()` gained `habol` — the current `DaanMail.gs` ignores unknown
+    fields, so the mail is unchanged until he pastes the (offered, not installed) 4-line addition.
+  * Measured on the production path: 26 visible `.llbtn` (was 25), chips 44 px tall × 207 px, min button height
+    44 px, `scrollWidth == clientWidth == 688`, console clean, `LIVE V9 OK: 2515 records`. Test API:
+    `LL.habol()` reads state/button/chips/saved/card, `LL.habol('open')` presses the button, `LL.habol('mapuno'|
+    'magubat'|'hindi')` picks a reason, `LL.habol('')` clears.
 * **Existing behavior untouched:** `mode()` keeps `in` and `fc` exactly as before and only gained the null-
   guarded `ll` branch; the panel is injected by the block's own `init()` (`window.LL`) after `#fcp`, not in
   the HTML, so it survives the minified markup. 7 inline scripts parse (`new Function` clean), no console
