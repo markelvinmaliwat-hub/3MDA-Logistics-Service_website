@@ -661,6 +661,12 @@ FACILITY CHECKING, `#t3` LONG/LAT - CAFAC): a lookup first, then a map the agent
     44 px, `scrollWidth == clientWidth == 688`, console clean, `LIVE V9 OK: 2515 records`. Test API:
     `LL.habol()` reads state/button/chips/saved/card, `LL.habol('open')` presses the button, `LL.habol('mapuno'|
     'magubat'|'hindi')` picks a reason, `LL.habol('')` clears.
+  * **Pre-existing crash found while testing this (`3d1e6ec`):** `saveR` wrote the street geometry with
+    `thin(RG.map(ll2),400)` although `RG` is `null` until OSRM answers (and `drop()` returns it to `null`), so
+    pressing **💾 I-save ang daan** on a fresh trace before the road server replied — or with no internet — threw
+    `Cannot read properties of null (reading 'map')` and **stored nothing**, silently. Reproduced on the live origin,
+    fixed with the same guarded form the autosave path already used (`g:null`, which `loadR` already handled), and
+    re-measured: `err:null`, record `…gs,hb` with `g:null rd:0 km:0.504`, `hb:"mapuno"`.
 * **Existing behavior untouched:** `mode()` keeps `in` and `fc` exactly as before and only gained the null-
   guarded `ll` branch; the panel is injected by the block's own `init()` (`window.LL`) after `#fcp`, not in
   the HTML, so it survives the minified markup. 7 inline scripts parse (`new Function` clean), no console
