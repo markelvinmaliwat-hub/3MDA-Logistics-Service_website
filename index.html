@@ -2537,7 +2537,7 @@ window.LL=(()=>{
   R[rk()]={c:picked,nm:nameOf(),s:[+pts.start[1].toFixed(6),+pts.start[0].toFixed(6)],
    e:[+pts.end[1].toFixed(6),+pts.end[0].toFixed(6)],
    w:pts.ways.map(a=>[+a[1].toFixed(6),+a[0].toFixed(6)]),km:+k.toFixed(3),ts:Date.now(),
-   rd:RD>0?+RD.toFixed(3):0,L:(RL||[]).map(x=>+x.toFixed(3)),g:thin(RG.map(ll2),400),
+   rd:RD>0?+RD.toFixed(3):0,L:(RL||[]).map(x=>+x.toFixed(3)),g:RG&&RG.length>1?thin(RG.map(ll2),400):null,
    T:thin(gTrack.map(ll2),600),tk:+walkKm().toFixed(3),tn:gTrack.length,a:[gAccMin,gAccMax],
    tel:Math.max(0,(gEnd||Date.now())-(gT0||Date.now())),gs:{start:gSrc.start||null,end:gSrc.end||null},
    hb:habolOn()?habol:undefined};
