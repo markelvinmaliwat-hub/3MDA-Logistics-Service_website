@@ -249,7 +249,7 @@ const AFD = {
   NOT: [{ COL: 'HD RECOMMENDATION', HAS: 'RPR' }],
   ON_DAY: 'HD RECOMMENDATION',            // the revisit day is read from this cell and must be today
   HD_TEXT: 'PART OF AFD {DATE} - SUBS WANT TO REQUEST FOR REVISIT',
-  COLS: ['DATE', 'SUBSCRIBER NAME', 'SR', 'ACCT', 'PR', 'CSP STATUS', 'BRGY', 'CITY', 'CLUSTER', 'HD REMARKS'],
+  COLS: ['DATE', 'SUBSCRIBER NAME', 'SR', 'ACCT', 'PR', 'CSP STATUS', 'BRGY', 'CITY', 'CLUSTER', 'HD RECOMMENDATION'],
   DATE_FORMAT: 'M/d/yyyy',
   SR_LINK: '',
   SEND_HOURS: [10, 11],              // two chances in the morning; the first one that lands at or after SEND_FROM mails
@@ -300,7 +300,7 @@ const AFD12 = {
   NOT: [{ COL: 'HD RECOMMENDATION', HAS: 'RPR' }],
   ON_DAY: 'HD RECOMMENDATION',
   HD_TEXT: 'PART OF AFD {DATE} - SUBS WANT TO REQUEST FOR REVISIT',
-  COLS: ['DATE', 'SUBSCRIBER NAME', 'SR', 'ACCT', 'PR', 'CSP STATUS', 'BRGY', 'CITY', 'CLUSTER', 'HD REMARKS'],
+  COLS: ['DATE', 'SUBSCRIBER NAME', 'SR', 'ACCT', 'PR', 'CSP STATUS', 'BRGY', 'CITY', 'CLUSTER', 'HD RECOMMENDATION'],
   DATE_FORMAT: 'M/d/yyyy',
   SR_LINK: '',
   SEND_HOURS: [10, 11],
