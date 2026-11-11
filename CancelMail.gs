@@ -188,13 +188,17 @@ function cancelTestReport() {
 }
 
 /* He asked for the weekday in the schedule, so it lives in the trigger, not in a cron guess.
-   Every old trigger for this handler is deleted first, so pressing this twice is safe. */
+   Every old trigger for this handler is deleted first, so pressing this twice is safe.
+   THE API RULE THAT BIT US ON 2026-11-11: Apps Script refuses
+   `.everyDays(1).onWeekDay(FRIDAY)` - ".onWeekday(day) can only be used with triggers that use
+   .everyWeeks(n)". So this is a WEEKLY trigger: everyWeeks(1) + the weekday + the hour, which is
+   exactly "every Friday in the 1 PM hour" and nothing else. */
 function installCancelTrigger() {
   ScriptApp.getProjectTriggers().filter(t => t.getHandlerFunction() === 'runCancelNotices')
     .forEach(t => ScriptApp.deleteTrigger(t));
   ScriptApp.newTrigger('runCancelNotices').timeBased()
-    .atHour(CANCEL.SEND_HOUR).everyDays(1)
-    .onWeekDay(ScriptApp.WeekDay[CANCEL.SEND_WEEKDAY]).create();
+    .everyWeeks(1).onWeekDay(ScriptApp.WeekDay[CANCEL.SEND_WEEKDAY])
+    .atHour(CANCEL.SEND_HOUR).create();
   const st = cmStatus_();
   Logger.log('CANCEL trigger: ' + (st.installed ? 'installed' : 'NOT installed') +
     ' | runs ' + CANCEL.SEND_WEEKDAY + ' in the ' + (CANCEL.SEND_HOUR % 12 || 12) +
