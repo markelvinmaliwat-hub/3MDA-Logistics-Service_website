@@ -188,21 +188,25 @@ function cancelPreview() { return previewReport_(CANCEL); }       // logs the ma
    about cancellations. testReport_ always swaps cfg.STATUS for cfg.TEST.STATUS, so when the real
    phrase is present the swap is made a no-op and EXACT stays on; the borrow is left as the
    fallback for a day when nothing is tagged, and the log says which of the two he is reading.
-   The table cap comes from testReport_ itself, so the sample stays readable at 12 rows. */
+   When it shows the real queue the 12-row cap is lifted, because on 2026-11-11 he asked to see
+   the whole thing before he says go ("preview muna") - the copy then has every row the Friday
+   mail will carry. The borrowed fallback stays capped at 12, since those rows are not his list. */
 function cancelTestReport() {
   const real = cmItemsNow_();
   const n = real ? real.length : -1;
-  const keepStatus = CANCEL.TEST.STATUS, keepExact = CANCEL.EXACT;
-  if (n > 0) CANCEL.TEST.STATUS = CANCEL.STATUS; else CANCEL.EXACT = false;
+  const keepStatus = CANCEL.TEST.STATUS, keepExact = CANCEL.EXACT, keepCap = CANCEL.TEST.MAX_ROWS;
+  if (n > 0) { CANCEL.TEST.STATUS = CANCEL.STATUS; CANCEL.TEST.MAX_ROWS = CANCEL.MAX_ROWS; }
+  else CANCEL.EXACT = false;
   Logger.log('CANCEL sample | ' + (n > 0
-    ? 'the REAL queue: ' + n + ' row tagged ' + CANCEL.STATUS + ' | nothing was borrowed'
+    ? 'the REAL queue: ' + n + ' row tagged ' + CANCEL.STATUS + ' | BUONG talahanayan, lahat ng ' +
+      n + ' row | nothing was borrowed'
     : n === 0
     ? 'NOTHING is tagged right now | this copy BORROWS "' + keepStatus + '" with the strictness' +
-      ' off - a wording sample only, NOT the real queue'
+      ' off, capped at ' + keepCap + ' row - a wording sample only, NOT the real queue'
     : 'the file could not be read | this copy BORROWS "' + keepStatus + '" so there is still' +
       ' a wording sample to look at'));
   try { return testReport_(CANCEL); }
-  finally { CANCEL.TEST.STATUS = keepStatus; CANCEL.EXACT = keepExact; }
+  finally { CANCEL.TEST.STATUS = keepStatus; CANCEL.TEST.MAX_ROWS = keepCap; CANCEL.EXACT = keepExact; }
 }
 
 /* He asked for the weekday in the schedule, so it lives in the trigger, not in a cron guess.
