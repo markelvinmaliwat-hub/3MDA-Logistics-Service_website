@@ -33,7 +33,10 @@ const AOR = {
   CLUSTERISH: /^(?:C(?:LUSTER)?\.?\s*)?\d{1,2}(?:\b|$)/i,
   /* AFD rows are the ones the mail is built from, so they get listed in full (this many at most). */
   AFD_MAX: 40,
-  SAMPLE: 15, TAB_ROWS: 500, TAB_COLS: 40, LOG_CAP: 46000
+  SAMPLE: 15,
+  /* Ang kanyang CLUSTER tab ay 1742r/2c (log niya 2026-11-11) - kailangan BUO basahin, kung
+     500 lang ang babasahin ay kulang ang index at magmumukhang "hindi natagpuan" ang lahat. */
+  TAB_ROWS: 4000, TAB_COLS: 40, LOG_CAP: 46000
 };
 
 let aorUsed_ = 0;
@@ -85,6 +88,38 @@ function aorHit_(idx, col, val) {
 
 function aorUp_(s) { return String(s === undefined ? '' : s).trim().toUpperCase(); }
 
+/* Ang kanyang CLUSTER tab (1742r/2c, nakita sa log niya 2026-11-11 11:29 AM) ay IISANG text field:
+   "BGY ALIMA BACOOR CITY". Kaya kailangan ng pangalawang anyo ng pangalan: tanggalin ang BGY,
+   BARANGAY, CITY, MUNICIPALITY at iba pang salitang panlokasyon, para magkasingkahulugan ang
+   "BGY ALIMA BACOOR CITY" ng tab at "BGY ALIMA" + "BACOOR CITY" ng sales tab. */
+function aorPlaceNorm_(s) {
+  return aorNorm_(s)
+    .replace(/\b(?:BRG?Y?Y?|BARANGAY|BGO)\b/g, ' ')
+    .replace(/\b(?:CITY|MUNICI?PALITY|TOWN|POB(?:LACION)?|OF)\b/g, ' ')
+    .replace(/\s+/g, ' ').trim();
+}
+
+/* Mga susi mula sa isang place text: hilaw, normalisado, at walang salitang panlokasyon. */
+function aorPlaceForms_(v) {
+  const raw = aorUp_(v);
+  const out = [];
+  if (raw) out.push(raw);
+  if (raw) out.push(aorNorm_(raw));
+  if (raw) out.push(aorPlaceNorm_(raw));
+  return out.filter((k, i, a) => k && a.indexOf(k) === i);
+}
+
+/* Mga susi mula sa SALES row: ang BRGY at CITY ay hiwalay na column doon, kaya samahin
+   sa parehong anyo ng kanyang "BGY & CITY" field - at ang parehong baligtad na pagkakasunod. */
+function aorRowPlaceKeys_(brgy, city) {
+  const b = aorUp_(brgy), c = aorUp_(city);
+  const out = [];
+  if (b && c) { out.push(b + ' ' + c, c + ' ' + b); }
+  const nb = aorPlaceNorm_(b || ''), nc = aorPlaceNorm_(c || '');
+  if (nb && nc) { out.push(nb + ' ' + nc, nc + ' ' + nb); }
+  return out.filter((k, i, a) => k && a.indexOf(k) === i);
+}
+
 /* Ang eksaktang susi ng rule niya: ang CITY at BRGY ng isang row, magkasama. Parehong anyo
    (CITY|BRGY at BRGY|CITY, hilaw at normalisado) ang idinemanda dahil hindi natin alam pa kung
    anong pagkakasunod ang tab niya. Ang #BRGY lamang ay fallback - mapanganib siyang mag-isa dahil
@@ -95,10 +130,16 @@ function aorPairKeys_(city, brgy) {
   const nc = aorNorm_(c), nb = aorNorm_(b);
   return [c + '|' + b, b + '|' + c, nc + '|' + nb, nb + '|' + nc].filter((k, i, a) => a.indexOf(k) === i);
 }
-function aorPairHit_(idx, r) {
-  const by = idx['#CITY+BRGY']; if (!by) return null;
-  const keys = aorPairKeys_(r.CITY, r.BRGY);
-  for (let i = 0; i < keys.length; i++) if (by[keys[i]]) return { key: keys[i], vals: Object.keys(by[keys[i]]) };
+function aorPlaceHit_(idx, r) {
+  const by2 = idx['#CITY+BRGY'], by1 = idx['#PLACE'];
+  if (by2) {
+    const keys = aorPairKeys_(r.CITY, r.BRGY);
+    for (let i = 0; i < keys.length; i++) if (by2[keys[i]]) return { key: keys[i], vals: Object.keys(by2[keys[i]]), how: 'CITY+BRGY (2 column)' };
+  }
+  if (by1) {
+    const keys = aorRowPlaceKeys_(r.BRGY, r.CITY);
+    for (let i = 0; i < keys.length; i++) if (by1[keys[i]]) return { key: keys[i], vals: Object.keys(by1[keys[i]]), how: 'BRGY+CITY (1 field)' };
+  }
   return null;
 }
 
@@ -146,8 +187,8 @@ function aorReadTab_(sh, idx) {
     });
   });
   /* The join his rule names: CITY + BRGY together -> cluster. */
-  const bcol = t.head.filter(k => /BRG|BARANG/.test(k))[0];
-  const ccol = t.head.filter(k => /CITY|MUNICIP|TOWN|POB/i.test(k))[0];
+  const bcol = t.head.filter(k => /BRG|BARANG/.test(k) && !/CITY|MUNICIP/i.test(k))[0];
+  const ccol = t.head.filter(k => /CITY|MUNICIP|TOWN|POB/i.test(k) && !/BRG|BARANG/i.test(k))[0];
   if (bcol && ccol) {
     const by = idx['#CITY+BRGY'] || (idx['#CITY+BRGY'] = {});
     clusterCols.forEach(ck => {
@@ -162,8 +203,27 @@ function aorReadTab_(sh, idx) {
     aorLog_('    PAIR index: "' + ccol + '" + "' + bcol + '" -> cluster (' +
       Object.keys(by).length + ' na key, ' + clusterCols.join('/') + ' ang cluster column)');
   } else {
-    aorLog_('    WALANG parehong BRGY at CITY column sa tab na ito (BRGY=' + (bcol || 'wala') +
-      ', CITY=' + (ccol || 'wala') + ') - kaya hindi nito magagawa ang CITY+BRGY validation niya.');
+    aorLog_('    WALANG hiwalay na BRGY at CITY column dito (BRGY=' + (bcol || 'wala') +
+      ', CITY=' + (ccol || 'wala') + ') - kung iisang "BGY & CITY" field ang tab, nasa SINGLE-FIELD index sa baba ang sagot.');
+  }
+  /* ANG TAMANG ANYO NG TAB NIYA: iisang field na "BGY & CITY" na may loob na
+     "BGY ALIMA BACOOR CITY". Ito ang index na kulang kanina. */
+  const placeCols = t.head.filter(k => clusterCols.indexOf(k) < 0 &&
+    (/BGY|BRGY|BARANG/i.test(k) && /CITY|MUNICIP|TOWN/i.test(k) || /AREA|LOCATION|ADDRESS|ZONE|TERRIT/i.test(k)));
+  placeCols.forEach(pc => {
+    const by = idx['#PLACE'] || (idx['#PLACE'] = {});
+    clusterCols.forEach(ck => {
+      t.rows.forEach(r => {
+        const val = aorUp_(r[ck]);
+        if (!val || val === 'NOT AOR') return;
+        aorPlaceForms_(r[pc]).forEach(z => { (by[z] || (by[z] = {}))[val] = (by[z][val] || 0) + 1; });
+      });
+    });
+    aorLog_('    SINGLE-FIELD index: "' + pc + '" (hal. ' + aorUp_(t.rows[0][pc]) + ') -> cluster (' +
+      Object.keys(idx['#PLACE']).length + ' na key, cluster column ' + clusterCols.join('/') + ')');
+  });
+  if (!placeCols.length) {
+    aorLog_('    WALANG single-field na "BRGY+CITY" column (mga column: ' + t.head.join(', ') + ')');
   }
   const distinct = {};
   clusterCols.forEach(ck => t.rows.forEach(r => { const v = aorUp_(r[ck]); if (v) distinct[v] = (distinct[v] || 0) + 1; }));
@@ -197,8 +257,8 @@ function aorSales_(ss, idx) {
   const tried = notAor.slice(0, 60);
   tried.forEach(r => {
     let verdict = null;
-    const ph = aorPairHit_(idx, r);
-    if (ph) { out.pair++; verdict = { col: 'CITY+BRGY', key: ph.key, vals: ph.vals }; }
+    const ph = aorPlaceHit_(idx, r);
+    if (ph) { out.pair++; verdict = { col: ph.how, key: ph.key, vals: ph.vals }; }
     if (!verdict) for (const k of keys) {
       const hits = aorHit_(idx, k, r[k]); if (!hits) continue;
       const vals = Object.keys(hits);
@@ -213,22 +273,39 @@ function aorSales_(ss, idx) {
   });
   aorLog_('=== PAGKA-VALIDATE ng ' + notAor.length + ' NOT AOR row (unang ' + tried.length + ' ang sinubukan) ===');
   aorLog_('    unique=' + out.unique + ' | ambiguous (2+ cluster sa iisang lugar)=' + out.ambiguous +
-    ' | hindi natagpuan sa tab=' + out.none + ' | sa CITY+BRGY natagpuan=' + out.pair);
+    ' | hindi natagpuan sa tab=' + out.none + ' | sa place key natagpuan=' + out.pair);
   Object.keys(detail).sort((a, b) => detail[b] - detail[a]).slice(0, 12)
     .forEach(k => aorLog_('    ' + k + '  (' + detail[k] + ' row)'));
+  /* Kung may hindi natagpuan, kailangan makita ANG SUKAT na binuo, para may maayos na pagkakasulat. */
+  const miss = notAor.filter(r => !aorPlaceHit_(idx, r));
+  aorLog_('=== 10 HALIMBAWA ng HINDI natagpuan (ang susi na sinubukan) ===');
+  miss.slice(0, 10).forEach(r => aorLog_('    ' + up(r['BRGY']) + ' + ' + up(r['CITY']) + ' -> [' +
+    aorRowPlaceKeys_(r['BRGY'], r['CITY']).join(' || ') + '] | ' + up(r['SUBSCRIBER NAME']).slice(0, 22)));
+  if (!miss.length) aorLog_('    (lahat ng sinubukan ay natagpuan)');
+  /* Ang BUONG listahan ng NOT AOR, hindi lang ang AFD-tagged - para kapag pinili niyang buo ang
+     mail, may numero na agad sa iisang run. */
+  const allGroup = {}; let allMiss = 0;
+  notAor.forEach(r => {
+    const ph = aorPlaceHit_(idx, r);
+    if (ph && ph.vals.length === 1) allGroup[ph.vals[0]] = (allGroup[ph.vals[0]] || 0) + 1;
+    else allMiss++;
+  });
+  const agk = Object.keys(allGroup).sort((a, b) => allGroup[b] - allGroup[a]);
+  aorLog_('=== KUNG BUONG ' + notAor.length + ' ANG MAIL: ' + agk.length + ' cluster, ' + allMiss + ' hindi na-validate ===');
+  aorLog_('    ' + (agk.length ? agk.map(k => k + '=' + allGroup[k]).join(', ') : 'WALANG na-validate'));
   const afdAor = afd.filter(r => up(r[AOR.CLUSTER_COL]) === AOR.NOT_AOR);
   aorLog_('=== HUGIS NG BAGONG MAIL: AFD rows na NOT AOR (' + afdAor.length + ') ===');
   aorLog_('    (iblase sa CITY+BRGY sa CLUSTER tab; ang tatanggap ay IYOONG address ng AFD mail, walang bago)');
   const grouped = {}, noCluster = [];
   afdAor.forEach(r => {
-    const ph = aorPairHit_(idx, r);
+    const ph = aorPlaceHit_(idx, r);
     const vals = ph ? ph.vals : null;
     if (vals && vals.length === 1) grouped[vals[0]] = (grouped[vals[0]] || 0) + 1;
     else if (vals) noCluster.push({ r: r, why: 'AMBiguO: ' + vals.join(' / ') + ' (key ' + ph.key + ')' });
     else {
       let alt = null;
       for (const k of keys) { const h = aorHit_(idx, k, r[k]); if (h) { const v = Object.keys(h); alt = k + '=' + up(r[k]) + ' -> ' + v.join(' / '); break; } }
-      noCluster.push({ r: r, why: alt || 'hindi natagpuan sa cluster tab' });
+      noCluster.push({ r: r, why: alt || ('hindi natagpuan: [' + aorRowPlaceKeys_(r['BRGY'], r['CITY']).join(' || ') + ']') });
     }
   });
   const gk = Object.keys(grouped).sort((a, b) => grouped[b] - grouped[a]);
@@ -240,8 +317,8 @@ function aorSales_(ss, idx) {
   aorLog_('=== DETALYE ng bawat AFD+NOT AOR row (' + afdAor.length + ') ===');
   afdAor.forEach(r => {
     let found = 'hindi natagpuan sa cluster tab';
-    const ph = aorPairHit_(idx, r);
-    if (ph) found = 'CITY+BRGY(' + ph.key + ') -> ' + ph.vals.join(' / ');
+    const ph = aorPlaceHit_(idx, r);
+    if (ph) found = ph.how + '(' + ph.key + ') -> ' + ph.vals.join(' / ');
     else for (const k of keys) {
       const hits = aorHit_(idx, k, r[k]); if (!hits) continue;
       found = k + '=' + up(r[k]) + ' -> ' + Object.keys(hits).join(' / '); break;
