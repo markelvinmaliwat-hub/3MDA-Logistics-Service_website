@@ -10,7 +10,7 @@ their own PLDT / RED sales, and the owner can trigger the daily sales-status ema
 | `index.html` | The whole app: markup, styles and logic. Published as-is by GitHub Pages. |
 | `AgentNotices.gs` | **Mirror only** of the Google Apps Script file that actually sends the emails. |
 | `DaanMail.gs` | **Mirror only** of the new Apps Script file that receives the dashboard's `📤 SEND` and mails the map picture. Needs pasting + one line added to `doGet` + a New version deploy. |
-| `AorProbe.gs` | **Read-only scout**, runs only when he chooses `aorProbe()` in the dropdown. Answers the 2026-11-11 "isama ang NOT AOR" question: which tab can name a cluster, and how many `NOT AOR` rows it resolves. Sends nothing, writes nothing, needs no deploy. |
+| `AorProbe.gs` | **Read-only scout**, runs only when he chooses `aorProbe()` in the dropdown. Answers the 2026-11-11 ask for a NEW `NOT AOR` email: does a CLUSTER tab exist, can it name each row's cluster from **CITY + BRGY together**, and how many clusters/rows the new mail would carry. Sends nothing, writes nothing, needs no deploy. |
 | `assets/mmmda-logo.jpg` | The logo attached to the signature of the two PLDT reports. |
 
 ## The email code does not live here

@@ -2,12 +2,19 @@
    "SA AFD EMAIL MAARI MO BA ISAMA ANG NOT AOR PERO VAVALIDATE MO ANG CLUSTER NILA GAMIT ANG
     CLUSTER TAB SA SHEET?"
 
+   What the owner actually asked for, restated by him on 2026-11-11 after a first misread:
+     a NEW email of its own for the NOT AOR rows - not a change to the cluster-11/cluster-12 AFD mails.
+     Each row's BARANGAY + CITY is first validated against the CLUSTER tab, the cluster that tab names
+     is what the mail reports, and the recipients stay exactly the same addresses as the AFD mail.
+
    What it answers, in one Logger run, using only reads:
      1. Every tab in "DATABASE AUG TO OCT" with its size, and which of them COULD be the cluster table.
      2. If such a tab exists: its header, 15 real rows, which column holds cluster values, and an index
-        of every other column to those cluster values (that is the join the AFD mail would need).
-     3. The sales side: the CLUSTER spread, every AFD-tagged row, and for each NOT AOR row whether that
-        tab can actually name its cluster (unique / ambiguous / not found).
+        of CITY + BRGY (together, both orders, raw and normalized) to those cluster values - that is
+        the join his rule needs, because one barangay name can exist in two towns.
+     3. The sales side: the CLUSTER spread, every AFD-tagged row, and for each NOT AOR row whether the
+        CLUSTER tab can name its cluster (unique / ambiguous / not found), grouped per cluster so the
+        shape of the new mail - how many clusters, how many rows each - is visible before it is built.
 
    It sends no mail, writes no cell, touches no Script Property, and needs NO deployment: the dropdown
    runs Head code. Run  aorProbe()  and paste the whole log back. */
@@ -76,6 +83,25 @@ function aorHit_(idx, col, val) {
   const n = aorNorm_(val); return n && by[n] ? by[n] : null;
 }
 
+function aorUp_(s) { return String(s === undefined ? '' : s).trim().toUpperCase(); }
+
+/* Ang eksaktang susi ng rule niya: ang CITY at BRGY ng isang row, magkasama. Parehong anyo
+   (CITY|BRGY at BRGY|CITY, hilaw at normalisado) ang idinemanda dahil hindi natin alam pa kung
+   anong pagkakasunod ang tab niya. Ang #BRGY lamang ay fallback - mapanganib siyang mag-isa dahil
+   iisang pangalan ng barangay ang maaaring nasa dalawang bayan. */
+function aorPairKeys_(city, brgy) {
+  const c = aorUp_(city), b = aorUp_(brgy);
+  if (!c || !b) return [];
+  const nc = aorNorm_(c), nb = aorNorm_(b);
+  return [c + '|' + b, b + '|' + c, nc + '|' + nb, nb + '|' + nc].filter((k, i, a) => a.indexOf(k) === i);
+}
+function aorPairHit_(idx, r) {
+  const by = idx['#CITY+BRGY']; if (!by) return null;
+  const keys = aorPairKeys_(r.CITY, r.BRGY);
+  for (let i = 0; i < keys.length; i++) if (by[keys[i]]) return { key: keys[i], vals: Object.keys(by[keys[i]]) };
+  return null;
+}
+
 /* One candidate tab: dump it, find its cluster column, and index every other column to its clusters. */
 function aorReadTab_(sh, idx) {
   const t = aorTab_(sh);
@@ -119,6 +145,30 @@ function aorReadTab_(sh, idx) {
       });
     });
   });
+  /* The join his rule names: CITY + BRGY together -> cluster. */
+  const bcol = t.head.filter(k => /BRG|BARANG/.test(k))[0];
+  const ccol = t.head.filter(k => /CITY|MUNICIP|TOWN|POB/i.test(k))[0];
+  if (bcol && ccol) {
+    const by = idx['#CITY+BRGY'] || (idx['#CITY+BRGY'] = {});
+    clusterCols.forEach(ck => {
+      t.rows.forEach(r => {
+        const val = aorUp_(r[ck]);
+        if (!val || val === 'NOT AOR') return;
+        aorPairKeys_(r[ccol], r[bcol]).forEach(z => {
+          (by[z] || (by[z] = {}))[val] = (by[z][val] || 0) + 1;
+        });
+      });
+    });
+    aorLog_('    PAIR index: "' + ccol + '" + "' + bcol + '" -> cluster (' +
+      Object.keys(by).length + ' na key, ' + clusterCols.join('/') + ' ang cluster column)');
+  } else {
+    aorLog_('    WALANG parehong BRGY at CITY column sa tab na ito (BRGY=' + (bcol || 'wala') +
+      ', CITY=' + (ccol || 'wala') + ') - kaya hindi nito magagawa ang CITY+BRGY validation niya.');
+  }
+  const distinct = {};
+  clusterCols.forEach(ck => t.rows.forEach(r => { const v = aorUp_(r[ck]); if (v) distinct[v] = (distinct[v] || 0) + 1; }));
+  aorLog_('    LAHAT ng cluster value dito (' + Object.keys(distinct).length + '): ' +
+    Object.keys(distinct).sort((a, b) => distinct[b] - distinct[a]).slice(0, 40).map(v => v + '=' + distinct[v]).join(', '));
 }
 
 /* Sales side: the CLUSTER spread, every AFD row, and whether the candidate tab can name a cluster. */
@@ -140,13 +190,16 @@ function aorSales_(ss, idx) {
   afd.slice(0, AOR.AFD_MAX).forEach(r => aorLog_('    ' + up(r[AOR.CLUSTER_COL]) + ' | ' + up(r['CITY']) + ' | ' +
     up(r['BRGY']) + ' | ' + up(r['SUBSCRIBER NAME']).slice(0, 28) + ' | HD=' + up(r['HD RECOMMENDATION']).slice(0, 26) +
     ' | FS=' + up(r['FINAL STATUS']).slice(0, 22) + ' | TL=' + up(r['TEAM LEADER']).slice(0, 18)));
-  /* Can the candidate tab resolve a NOT AOR row? Try the precise keys first, the area keys last. */
+  /* Can the CLUSTER tab name the cluster of a NOT AOR row? His rule first: CITY + BRGY together.
+     Ang ibang susi ay fallback lang, para makita kung saan pa posible ang validation. */
   const keys = ['SR', 'PR', 'ACCOUNT PID', 'ACCT', 'SUBSCRIBER NAME', 'SUBDIVISION', 'AGENT CODE', 'BRGY', 'CITY', 'TEAM LEADER'];
-  const out = { unique: 0, ambiguous: 0, none: 0 }, detail = {};
+  const out = { unique: 0, ambiguous: 0, none: 0, pair: 0 }, detail = {};
   const tried = notAor.slice(0, 60);
   tried.forEach(r => {
     let verdict = null;
-    for (const k of keys) {
+    const ph = aorPairHit_(idx, r);
+    if (ph) { out.pair++; verdict = { col: 'CITY+BRGY', key: ph.key, vals: ph.vals }; }
+    if (!verdict) for (const k of keys) {
       const hits = aorHit_(idx, k, r[k]); if (!hits) continue;
       const vals = Object.keys(hits);
       verdict = { col: k, key: String(r[k]).trim().toUpperCase(), vals: vals }; break;
@@ -160,16 +213,38 @@ function aorSales_(ss, idx) {
   });
   aorLog_('=== PAGKA-VALIDATE ng ' + notAor.length + ' NOT AOR row (unang ' + tried.length + ' ang sinubukan) ===');
   aorLog_('    unique=' + out.unique + ' | ambiguous (2+ cluster sa iisang lugar)=' + out.ambiguous +
-    ' | hindi natagpuan sa tab=' + out.none);
+    ' | hindi natagpuan sa tab=' + out.none + ' | sa CITY+BRGY natagpuan=' + out.pair);
   Object.keys(detail).sort((a, b) => detail[b] - detail[a]).slice(0, 12)
     .forEach(k => aorLog_('    ' + k + '  (' + detail[k] + ' row)'));
   const afdAor = afd.filter(r => up(r[AOR.CLUSTER_COL]) === AOR.NOT_AOR);
-  aorLog_('=== AFD rows na NOT AOR (' + afdAor.length + ') - ang mga ito ang hindi nakakapasok sa AFD/AFD12 mail ===');
+  aorLog_('=== HUGIS NG BAGONG MAIL: AFD rows na NOT AOR (' + afdAor.length + ') ===');
+  aorLog_('    (iblase sa CITY+BRGY sa CLUSTER tab; ang tatanggap ay IYOONG address ng AFD mail, walang bago)');
+  const grouped = {}, noCluster = [];
+  afdAor.forEach(r => {
+    const ph = aorPairHit_(idx, r);
+    const vals = ph ? ph.vals : null;
+    if (vals && vals.length === 1) grouped[vals[0]] = (grouped[vals[0]] || 0) + 1;
+    else if (vals) noCluster.push({ r: r, why: 'AMBiguO: ' + vals.join(' / ') + ' (key ' + ph.key + ')' });
+    else {
+      let alt = null;
+      for (const k of keys) { const h = aorHit_(idx, k, r[k]); if (h) { const v = Object.keys(h); alt = k + '=' + up(r[k]) + ' -> ' + v.join(' / '); break; } }
+      noCluster.push({ r: r, why: alt || 'hindi natagpuan sa cluster tab' });
+    }
+  });
+  const gk = Object.keys(grouped).sort((a, b) => grouped[b] - grouped[a]);
+  aorLog_('    ' + (gk.length ? gk.length + ' cluster ang mabubuo: ' + gk.map(k => k + '=' + grouped[k] + ' row').join(', ')
+    : 'WALANG ma-group - hindi pa kayang i-validate ng CLUSTER tab ang mga row na ito'));
+  noCluster.slice(0, AOR.SAMPLE).forEach(x => aorLog_('    HINDI NA-VALIDATE | ' + up(x.r['BRGY']) + ', ' + up(x.r['CITY']) +
+    ' | ' + up(x.r['SUBSCRIBER NAME']).slice(0, 26) + ' | ' + x.why));
+  if (noCluster.length > AOR.SAMPLE) aorLog_('    … at ' + (noCluster.length - AOR.SAMPLE) + ' pa pang hindi na-validate.');
+  aorLog_('=== DETALYE ng bawat AFD+NOT AOR row (' + afdAor.length + ') ===');
   afdAor.forEach(r => {
     let found = 'hindi natagpuan sa cluster tab';
-    for (const k of keys) {
+    const ph = aorPairHit_(idx, r);
+    if (ph) found = 'CITY+BRGY(' + ph.key + ') -> ' + ph.vals.join(' / ');
+    else for (const k of keys) {
       const hits = aorHit_(idx, k, r[k]); if (!hits) continue;
-      found = k + '=' + String(r[k]).trim().toUpperCase() + ' -> ' + Object.keys(hits).join(' / '); break;
+      found = k + '=' + up(r[k]) + ' -> ' + Object.keys(hits).join(' / '); break;
     }
     aorLog_('    ' + up(r['SUBSCRIBER NAME']) + ' | ' + up(r['BRGY']) + ', ' + up(r['CITY']) + ' | SR=' + up(r['SR']) +
       ' PR=' + up(r['PR']) + ' | HD=' + up(r['HD RECOMMENDATION']) + ' | ' + found);
