@@ -229,7 +229,7 @@ function cancelProbe() {
   const want = nk_(CANCEL.STATUS);
   const parts = ['CANCELLATION', 'NON COMPLIANCE', 'NO PAYMENT'];
   const st = { rows: 0, tabs: [], noHeader: [], exact: 0, spellings: {}, near: {}, cancelledElsewhere: {},
-    blanks: 0, sample: [], mailed: 0, fresh: 0 };
+    blanks: 0, sample: [], mailed: 0, fresh: 0, srCount: {} };
   reportTabs_(CANCEL).forEach(name => {
     const sh = ss.getSheetByName(name);
     if (!sh) { st.tabs.push(name + ' = WALANG TAB'); return; }
@@ -246,6 +246,11 @@ function cancelProbe() {
       if (k === want) {
         st.exact++; hit++;
         st.spellings[raw] = (st.spellings[raw] || 0) + 1;
+        /* the key the mail itself would file this row under, so the probe can tell a repeated
+           SR number apart from a row an earlier run already asked about */
+        const srk = String(r['SR'] == null ? '' : r['SR']).replace(/\.0$/, '').trim() ||
+          (name + '|' + String(r['SUBSCRIBER NAME'] || '').trim());
+        st.srCount[srk] = (st.srCount[srk] || 0) + 1;
         if (st.sample.length < 5) st.sample.push(name + ' | SR ' + String(r['SR'] || '-'));
         return;
       }
@@ -260,8 +265,15 @@ function cancelProbe() {
   });
   const mailed = {};
   cmList_(CANCEL.MAIL_KEY).forEach(k => { mailed[k] = 1; });
-  st.fresh = collectReport_(ss, CANCEL).filter(i => !mailed[i.key]).length;
-  st.mailed = st.exact - st.fresh;
+  /* The mail is one row per SR number (collectReport_ drops a repeat SR), so the row COUNT and
+     the item COUNT are two different numbers on the live file. Subtracting one from the other to
+     guess "already requested" would call every duplicate a past request - so the memory list is
+     read directly, and the duplicate is named for what it is. */
+  const items = collectReport_(ss, CANCEL);
+  st.fresh = items.filter(i => !mailed[i.key]).length;
+  st.mailed = Object.keys(mailed).length;
+  st.items = items.length;
+  st.dups = Object.keys(st.srCount).filter(k => st.srCount[k] > 1);
   const tally = o => {
     const ks = Object.keys(o).sort((a, b) => o[b] - o[a]);
     ks.slice(0, 12).forEach(k => Logger.log('     "' + k.slice(0, 90) + '" = ' + o[k] + ' row'));
@@ -284,11 +296,21 @@ function cancelProbe() {
     tally(st.cancelledElsewhere);
   }
   Logger.log('=== 3. KUNG ANO ANG MABIBIGAY NG BAWAT FRIDAY ===');
-  Logger.log('   tagged ngayon: ' + st.exact + ' | already requested ng nakaraang run: ' + st.mailed +
+  Logger.log('   tagged ngayon: ' + st.exact + ' row' +
+    (st.items === st.exact ? '' : ' | IBA-IBANG SR number: ' + st.items +
+      ' - ang mail ay isang row kada SR, kaya ' + st.items + ' lang ang lalabas sa table') +
     ' | BAGO at ibibigay sa susunod na Friday: ' + st.fresh +
     (CANCEL.REMAIL_WEEKLY ? ' (REMAIL_WEEKLY is on, so lahat ng ' + st.exact + ' uulitin)' : ''));
-  Logger.log('   memory list: ' + cmList_(CANCEL.MAIL_KEY).length + ' row | max ' + CANCEL.MAIL_MAX +
-    ' | clear with clearCancelSent()');
+  Logger.log('   already requested ng nakaraang run: ' + st.mailed + ' SR | memory list max ' +
+    CANCEL.MAIL_MAX + ' | clear with clearCancelSent()');
+  /* 90 rows in one mail is a different conversation from 3 rows, so the size is stated
+     out loud instead of leaving him to count the table after the first Friday. */
+  if (st.fresh > 30) Logger.log('   LAKI: ' + st.fresh + ' row sa iisang mail sa iisang Friday' +
+    (st.fresh > CANCEL.MAX_ROWS ? ' - lampas MAX_ROWS ' + CANCEL.MAX_ROWS +
+      ', ang mga huli ay "and N more not listed here" lang sa table' : ' - nasa loob pa ng MAX_ROWS'));
+  if (st.dups.length) Logger.log('   ?? parehong SR number sa ' + st.dups.length +
+    ' pang row (isang beses lang ito hihingingin): ' + st.dups.slice(0, 8).join(', ') +
+    (st.dups.length > 8 ? ' ...at ' + (st.dups.length - 8) + ' pa' : ''));
   Logger.log('=== 4. PADALA ===');
   Logger.log('   subject: ' + CANCEL.SUBJECT +
     Utilities.formatDate(new Date(), tz, 'MMMyyyy').toUpperCase() +
