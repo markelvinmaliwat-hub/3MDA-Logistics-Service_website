@@ -78,7 +78,7 @@ const CANCEL = {
   MAIL_KEY: 'CANCEL_MAIL_',            // this mail's own week-proof list of SRs already requested
   MAIL_MAX: 500,                       // cap on that list; past it the oldest rows may be asked again
   REMAIL_WEEKLY: false,                // true = ignore the memory and re-send the whole backlog every Friday
-  TEST: { STATUS: 'FOR PAYMENT', MAX_ROWS: 12 }   // what cancelTestReport borrows so there is a sample to read
+  TEST: { STATUS: 'FOR PAYMENT', MAX_ROWS: 12 }   // the FALLBACK sample; cancelTestReport borrows it only on a 0-row day
 };
 
 const cmUp_ = v => String(v == null ? '' : v).trim().toUpperCase();
@@ -177,14 +177,27 @@ function runCancelNotices() { return cancelSend_(false); }        // the Friday 
 function sendCancelReport() { return cancelSend_(true); }         // send now, any day
 function cancelPreview() { return previewReport_(CANCEL); }       // logs the mail, sends nothing
 
-/* A sample he can read even when today's file has no row tagged yet: testReport_ borrows
-   cfg.TEST.STATUS, and with EXACT still true "FOR PAYMENT" alone would match nothing real.
-   So the strictness is switched off for the sample only - and put back in the finally, the
-   same way testReport_ puts STATUS and DRY_RUN back. */
+/* THE SAMPLE SHOWS THE REAL QUEUE WHENEVER IT HAS ROWS. He read the first one on 2026-11-11 and
+   said "hindi ito yung status na kailangan" - and he was right: the borrow below matches any cell
+   CONTAINING "FOR PAYMENT", so a CANCELLED - FOR PAYMENT - AUTO AGING row turned up in a mail
+   about cancellations. testReport_ always swaps cfg.STATUS for cfg.TEST.STATUS, so when the real
+   phrase is present the swap is made a no-op and EXACT stays on; the borrow is left as the
+   fallback for a day when nothing is tagged, and the log says which of the two he is reading.
+   The table cap comes from testReport_ itself, so the sample stays readable at 12 rows. */
 function cancelTestReport() {
-  const keep = CANCEL.EXACT;
-  CANCEL.EXACT = false;
-  try { return testReport_(CANCEL); } finally { CANCEL.EXACT = keep; }
+  const real = cmItemsNow_();
+  const n = real ? real.length : -1;
+  const keepStatus = CANCEL.TEST.STATUS, keepExact = CANCEL.EXACT;
+  if (n > 0) CANCEL.TEST.STATUS = CANCEL.STATUS; else CANCEL.EXACT = false;
+  Logger.log('CANCEL sample | ' + (n > 0
+    ? 'the REAL queue: ' + n + ' row tagged ' + CANCEL.STATUS + ' | nothing was borrowed'
+    : n === 0
+    ? 'NOTHING is tagged right now | this copy BORROWS "' + keepStatus + '" with the strictness' +
+      ' off - a wording sample only, NOT the real queue'
+    : 'the file could not be read | this copy BORROWS "' + keepStatus + '" so there is still' +
+      ' a wording sample to look at'));
+  try { return testReport_(CANCEL); }
+  finally { CANCEL.TEST.STATUS = keepStatus; CANCEL.EXACT = keepExact; }
 }
 
 /* He asked for the weekday in the schedule, so it lives in the trigger, not in a cron guess.
