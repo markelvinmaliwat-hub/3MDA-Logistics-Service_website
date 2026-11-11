@@ -65,6 +65,11 @@ const CANCEL = {
   TABS: [],                            // '' = NOTICE.SALES_TABS (PLDT + RED)
   FROM: ['FINAL STATUS'],              // the one column he named
   EXACT: true,                         // his "eksaktong kopya" - see the header
+  /* "wag na isama ang naka cancelled na sa CSP STATUS" - his words, 2026-11-11. A row whose
+     CSP STATUS already reads CANCELLED has been cancelled on the PLDT side already, so this mail
+     would be asking for something that is done. Contains, not exact: CANCELLED,
+     CANCELLED - WITH EXISTING SR and CANCELLED FOR PAYMENT all step aside. */
+  NOT: [{ COL: 'CSP STATUS', HAS: 'CANCELLED' }],
   COLS: ['DATE', 'SUBSCRIBER NAME', 'SR', 'ACCT', 'PR', 'CSP STATUS', 'BRGY', 'CITY', 'CLUSTER', 'FINAL STATUS'],
   DATE_FORMAT: 'M/d/yyyy',
   SR_LINK: '',
@@ -246,7 +251,7 @@ function cancelProbe() {
   const want = nk_(CANCEL.STATUS);
   const parts = ['CANCELLATION', 'NON COMPLIANCE', 'NO PAYMENT'];
   const st = { rows: 0, tabs: [], noHeader: [], exact: 0, spellings: {}, near: {}, cancelledElsewhere: {},
-    blanks: 0, sample: [], mailed: 0, fresh: 0, srCount: {} };
+    out: 0, outWords: {}, blanks: 0, sample: [], mailed: 0, fresh: 0, srCount: {} };
   reportTabs_(CANCEL).forEach(name => {
     const sh = ss.getSheetByName(name);
     if (!sh) { st.tabs.push(name + ' = WALANG TAB'); return; }
@@ -262,6 +267,14 @@ function cancelProbe() {
       const k = nk_(raw);
       if (k === want) {
         st.exact++; hit++;
+        /* counted here, not by subtracting later, so the probe and the mail can never disagree
+           about how many rows the CSP STATUS CANCELLED rule took out */
+        if (notOut_(r, CANCEL)) {
+          st.out++;
+          const csp = String(r['CSP STATUS'] == null ? '' : r['CSP STATUS']).trim() || '(blank)';
+          st.outWords[csp] = (st.outWords[csp] || 0) + 1;
+          return;
+        }
         st.spellings[raw] = (st.spellings[raw] || 0) + 1;
         /* the key the mail itself would file this row under, so the probe can tell a repeated
            SR number apart from a row an earlier run already asked about */
@@ -302,6 +315,11 @@ function cancelProbe() {
     ' ' + Utilities.formatDate(new Date(), tz, 'yyyy-MM-dd') + ' in ' + tz);
   Logger.log('=== 1. EXACT match (the whole cell is the phrase): ' + st.exact + ' row(s) ===');
   if (st.exact) { tally(st.spellings); Logger.log('   samples: ' + st.sample.join(' , ')); }
+  if (st.out) {
+    Logger.log('   at ' + st.out + ' sa mga yun ay naka-CANCELLED na sa CSP STATUS - HINDI sasama, ' +
+      'sa kanyang utos: "wag na isama ang naka cancelled na sa CSP STATUS". Ito ang CSP wording:');
+    tally(st.outWords);
+  }
   Logger.log('=== 2. BAHAGI o MAHALABANG spelling - HINDI kasama sa mail ng EXACT rule ===');
   if (!Object.keys(st.near).length) Logger.log('   wala - lahat ng binabanggit ang cancellation ay eksakto.');
   else { Logger.log('   ' + Object.keys(st.near).length + ' pang spelling, ' +
@@ -314,7 +332,8 @@ function cancelProbe() {
   }
   Logger.log('=== 3. KUNG ANO ANG MABIBIGAY NG BAWAT FRIDAY ===');
   Logger.log('   tagged ngayon: ' + st.exact + ' row' +
-    (st.items === st.exact ? '' : ' | IBA-IBANG SR number: ' + st.items +
+    (st.out ? ' | CANCELLED na sa CSP STATUS, KINAALIS: ' + st.out + ' row' : '') +
+    (st.items === st.exact - st.out ? '' : ' | IBA-IBANG SR number: ' + st.items +
       ' - ang mail ay isang row kada SR, kaya ' + st.items + ' lang ang lalabas sa table') +
     ' | BAGO at ibibigay sa susunod na Friday: ' + st.fresh +
     (CANCEL.REMAIL_WEEKLY ? ' (REMAIL_WEEKLY is on, so lahat ng ' + st.exact + ' uulitin)' : ''));
