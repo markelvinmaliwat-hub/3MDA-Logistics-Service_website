@@ -11,6 +11,7 @@ their own PLDT / RED sales, and the owner can trigger the daily sales-status ema
 | `AgentNotices.gs` | **Mirror only** of the Google Apps Script file that actually sends the emails. |
 | `DaanMail.gs` | **Mirror only** of the new Apps Script file that receives the dashboard's `📤 SEND` and mails the map picture. Needs pasting + one line added to `doGet` + a New version deploy. |
 | `AorProbe.gs` | **Read-only scout**, runs only when he chooses `aorProbe()` in the dropdown. Answers the 2026-11-11 ask for a NEW `NOT AOR` email: does a CLUSTER tab exist, can it name each row's cluster from **CITY + BRGY together**, and how many clusters/rows the new mail would carry. Sends nothing, writes nothing, needs no deploy. |
+| `NotAorMail.gs` | **The sixth mail** (2026-11-11), built entirely inside this one file so `AgentNotices.gs` stays untouched. Same four conditions, same wording, same four addresses, same 10:30 gate and same per-day dedupe as AFD/AFD12 — only the cluster differs: the row's `NOT AOR` is replaced by the cluster his `CLUSTER` tab names from BRGY + CITY, and every validated cluster becomes its own mail. Paste as a new Apps Script file named `NotAorMail`; no edit to AgentNotices, no deploy. Delete the file and the feature is gone. |
 | `assets/mmmda-logo.jpg` | The logo attached to the signature of the two PLDT reports. |
 
 ## The email code does not live here
