@@ -106,11 +106,18 @@ const ACCT = {
    list is NOT used, so PLDT never receives anything from a test. The owner approved the SFS
    live switch on 2026-11-04 after reviewing the sfsTestReport copy. FROM / STATUS decide
    which rows count and SHEET_ID / TABS decide which file they are read from; sfsProbe() and
-   cvProbe() measure both against the live sheet. */
+   cvProbe() measure both against the live sheet.
+   THE CC LIST, CHANGED ON THE OWNER'S WORD 2026-11-11: "parehong tao, palitan sa lahat ng
+   mail" - Jerome Navarro is one person, so his jrsnavarro25@gmail.com replaces the
+   t-jesnavarro@supplier.pldt.com.ph address in every report below (SFS, CV, AFD, AFD12,
+   RTS and AFD29) and in NotAorMail.gs. The t-jesnavarro@pldt365.onmicrosoft.com alias was
+   left on the lists because he did not name it; one word from him removes it too.
+   Every one of these five lists is still the SAME three addresses, so the checks that
+   compare them to each other keep working. */
 const SFS = {
   NAME: 'SFS',
   TO: ['lsabat@pldt.com.ph'],
-  CC: ['t-jesnavarro@supplier.pldt.com.ph', 't-jesnavarro@pldt365.onmicrosoft.com', 'abmadlangbayan0510@icloud.com'],
+  CC: ['jrsnavarro25@gmail.com', 't-jesnavarro@pldt365.onmicrosoft.com', 'abmadlangbayan0510@icloud.com'],
   GREET: 'Hi Sir ABAT, Leonard S.,',
   INTRO: 'For endorsement to SFS for proper validation.',
   THANKS: 'Thank you !',
@@ -165,7 +172,7 @@ const SFS = {
 const CV = {
   NAME: 'CV',
   TO: ['lsabat@pldt.com.ph'],
-  CC: ['t-jesnavarro@supplier.pldt.com.ph', 't-jesnavarro@pldt365.onmicrosoft.com', 'abmadlangbayan0510@icloud.com'],
+  CC: ['jrsnavarro25@gmail.com', 't-jesnavarro@pldt365.onmicrosoft.com', 'abmadlangbayan0510@icloud.com'],
   GREET: 'Hi Sir ABAT, Leonard S.,',
   INTRO: 'For credit validation and approval.',
   THANKS: 'Thank you !',
@@ -222,7 +229,7 @@ const CV = {
 const AFD = {
   NAME: 'AFD',
   TO: ['lsabat@pldt.com.ph'],
-  CC: ['t-jesnavarro@supplier.pldt.com.ph', 't-jesnavarro@pldt365.onmicrosoft.com', 'abmadlangbayan0510@icloud.com'],
+  CC: ['jrsnavarro25@gmail.com', 't-jesnavarro@pldt365.onmicrosoft.com', 'abmadlangbayan0510@icloud.com'],
   GREET: 'Hi Sir Jack,',
   /* His wording, put into formal English because operations bosses are copied on it. {CLUSTER}
      is filled from the rows, so changing AFD.WHERE alone moves the number in the sentence. */
@@ -278,7 +285,7 @@ const AFD = {
 const AFD12 = {
   NAME: 'AFD12',
   TO: ['lsabat@pldt.com.ph'],
-  CC: ['t-jesnavarro@supplier.pldt.com.ph', 't-jesnavarro@pldt365.onmicrosoft.com', 'abmadlangbayan0510@icloud.com'],
+  CC: ['jrsnavarro25@gmail.com', 't-jesnavarro@pldt365.onmicrosoft.com', 'abmadlangbayan0510@icloud.com'],
   GREET: 'Hi Sir Jack,',
   /* {CLUSTER} is filled from the rows, so this sentence reads "CLUSTER 12" on its own. */
   INTRO: 'For endorsement to CLUSTER {CLUSTER} for revisit. The call-out has already been completed and the subscribers are available today; we would appreciate your assistance in having them revisited.',
@@ -393,7 +400,7 @@ const RTS = {
 const AFD29 = {
   NAME: 'AFD29',
   TO: ['lsabat@pldt.com.ph'],
-  CC: ['t-jesnavarro@supplier.pldt.com.ph', 't-jesnavarro@pldt365.onmicrosoft.com', 'abmadlangbayan0510@icloud.com'],
+  CC: ['jrsnavarro25@gmail.com', 't-jesnavarro@pldt365.onmicrosoft.com', 'abmadlangbayan0510@icloud.com'],
   GREET: 'Hi Sir Jack,',
   INTRO: 'For endorsement to AFD. Please help validate the account(s) that have 147 days and above due.',
   CLOSE: 'Should you have any concerns regarding the scheduled revisit, please kindly reply to this email so that we may address them immediately.',

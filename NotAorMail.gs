@@ -43,7 +43,10 @@
 const NOTAOR = {
   NAME: 'NOT AOR',
   TO: ['lsabat@pldt.com.ph'],
-  CC: ['t-jesnavarro@supplier.pldt.com.ph', 't-jesnavarro@pldt365.onmicrosoft.com', 'abmadlangbayan0510@icloud.com'],
+  /* Jerome Navarro is one person: on 2026-11-11 the owner said "parehong tao, palitan sa lahat
+     ng mail", so his Gmail replaces the supplier address here exactly as it does in SFS, CV,
+     AFD, AFD12, RTS and AFD29. The pldt365 alias stays because he did not name it. */
+  CC: ['jrsnavarro25@gmail.com', 't-jesnavarro@pldt365.onmicrosoft.com', 'abmadlangbayan0510@icloud.com'],
   GREET: 'Hi Sir Jack,',
   INTRO: 'For endorsement to CLUSTER {CLUSTER} for revisit. The call-out has already been completed and the subscribers are available today; we would appreciate your assistance in having them revisited.',
   CLOSE: 'Should you have any concerns regarding the scheduled revisit, please kindly reply to this email so that we may address them immediately.',
