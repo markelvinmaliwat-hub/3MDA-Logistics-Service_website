@@ -47,10 +47,10 @@ const CANCEL = {
   TO: ['lsabat@pldt.com.ph'],
   CC: ['jrsnavarro25@gmail.com', 'ilanoandong@gmail.com', 'markelvinmaliwat@gmail.com'],
   GREET: 'Hi Sir Jack,',
-  /* Formal English at his request - operations bosses read it - but the reason for
-     the mail is his own sentence: these were FOR PAYMENT and the subscriber did not
-     pay, so he is asking for them to be cancelled. */
-  INTRO: 'For cancellation. The applications below were released for payment and the subscribers did not comply within 1 AMSF, so we would like to request their cancellation.',
+  /* His own sentence, given to me on 2026-11-11 to have its grammar fixed - he picked the
+     two-sentence version, so "1 AMSF", SR / ACCOUNT / PR and the "open in the system" reason
+     all stay his words. Nothing here was invented by me. */
+  INTRO: 'For cancellation. The applications listed below were released for payment, but the subscribers did not comply within 1 AMSF. We would therefore like to request the cancellation of their SR / ACCOUNT / PR so that these records no longer remain open in the system.',
   CLOSE: 'Should you have any concerns regarding these applications, please kindly reply to this email so that we may address them immediately.',
   THANKS: 'Thank you !',
   SIGN: ['Mark Maliwat', 'Sales Validator - MMMDA Logistics', 'Service Cavite Upland'],
