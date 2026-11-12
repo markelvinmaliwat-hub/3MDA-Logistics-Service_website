@@ -18,30 +18,55 @@
    My first version read only #3, and read it from FINAL STATUS, so it reported the
    PAID rows and missed every RESERVED FACILITY and ORDER CREATED row. That rule is
    gone; CSP_OPEN + CSP_PAID + PAID_FINAL are what the config now carries, and
-   imBranch_() is the ONE predicate the probe and the future mail share, so neither
-   can drift from the other.
+   imBranch_() is the ONE predicate the probe and the mail share, so the count he
+   approves in the log is the count that leaves the account.
    A cancelled row cannot enter: CANCELLED is not one of the three CSP values, and
    a strict-equals rule refuses anything longer - the same strictness the
    cancellation mail runs on.
 
-   "iba ibang email ito kada cluster ang pag sesendan kaya hiwa hiwalay sya
-   ipapadala" - one mail PER CLUSTER, the AFD/NOT AOR shape, not one big table.
+   WHAT HIS LIVE PROBE LOG MEASURED ON 2026-11-12 (instProbe, 1517 PLDT row):
+     RESERVED FACILITY 3 row | ORDER CREATED 1 row | PAID + the exact FINAL STATUS
+     line 3 row = 7 row sa queue, na nahahati sa 3 mail (CLUSTER 12 = 5, CLUSTER 10
+     = 1, CLUSTER 11 = 1). Ang 2a (PAID na mali ang FINAL STATUS) ay 0 row. Ang 2b
+     (tama ang FINAL STATUS pero iba ang CSP STATUS) ay 6 row: 4 blank ang CSP, 2
+     RPR - iyon ang ihahatid ng MAKANDANG rule, kaya 7 ang tama.
+
+   THE FOUR ANSWERS THAT BUILT THE SEND, all from him on 2026-11-12:
+     1. "HINDI - PLDT LANG"        -> TABS is ['PLDT']. The probe printed the real
+        headers and the RED tab has NO CSP STATUS column at all (its status column
+        is plainly named STATUS), so a CSP-STATUS rule can only ever read PLDT.
+     2. "A"                       -> the table's STATUS column is the CSP STATUS
+        cell. It is spelled "STATUS" in his screenshot, so COL_SOURCE says so.
+     3. "labas" (RPR)             -> nothing to write: RPR is not one of his three
+        CSP values, so the exact rule already refuses it.
+     4. "wag SR ang ilagay kundi PID" -> the third column of his table is labelled
+        PID and its value comes from the PR header. COL_SOURCE again, nothing else.
+   And the dedupe question ("maulit ba sa bukang 10AM o isang beses lang kada
+   SR?"): he answered B - ARAW-ARAW. So this mail has NO dedupe list, no
+   INSTALL_SENT_ property, and a row that is still in the queue tomorrow is mailed
+   again tomorrow. That is a reminder to PLDT, not a one-time report.
+
+   ONE MAIL PER CLUSTER: "iba ibang email ito kada cluster ang pag sesendan kaya
+   hiwa hiwalay sya ipapadala". The cluster a mail is NAMED for comes from the row's
+   own CLUSTER cell when it carries a number, and from his CLUSTER tab (BRGY + CITY)
+   when it says NOT AOR or is blank - kagaya ng sa AFD RESCHEDULE. A row neither can
+   name is dropped and listed by name, never guessed.
    "ang format ng template ay dapat yung kagaya ng nasa litrato" - his table is
-   DATE | SUBSCRIBER NAME | PR | BRGY | CITY | CLUSTER | STATUS | PAYMENT
+   DATE | SUBSCRIBER NAME | PID | BRGY | CITY | CLUSTER | STATUS | PAYMENT
    REFERENCE/ REMARKS | PAYMENT STATUS.
    "ipadala sa parehas na email kagaya sa SFS/CV" and "isang beses lang kada araw
    ... dapat tuwing 10am".
 
-   THIS FILE STILL HAS NO SEND IN IT. Deliberately, the way AFD29 was shipped: three
-   of his nine columns have no proven source yet, and a mail whose column is empty
-   goes to PLDT looking like a mistake. So this file is the INSTALL config plus
-   instProbe() - a read-only scout that counts the rows each of his THREE branches
-   admits, shows what CSP STATUS = PAID was refused because its FINAL STATUS line
-   said something else, splits the queue into the clusters each mail would be named
-   for, and prints the REAL header names and REAL values of every candidate column.
-   He picks, then the send gets written. Nothing here can mail anything, writes
-   nothing to the sheet, and needs no deployment.
+   WHY THE TABLE IS BUILT HERE AND NOT BY THE SHARED ENGINE: three of his nine
+   labels - PID, STATUS, PAYMENT REFERENCE/ REMARKS - are not keys in AgentNotices'
+   CELL_, and cellOf_ renders anything missing from it as an empty cell. Rather than
+   edit the file that runs the five live mails, imTable_ / imMail_ / sendInstallGroup_
+   are copied step for step from reportTable_ / buildReportMail_ / sendReport_ (the
+   same decision NotAorMail.gs documents at its own send path). If that file's send
+   path ever changes, those three functions are what to compare.
 
+   DRY_RUN IS STILL ON. Nothing reaches PLDT until the owner flips it on his own
+   word. instPreview() and instTestReport() mail only his own address.
    NAMING: every entry is INSTALL / im* / inst*. Apps Script loads all .gs files
    into ONE shared scope, so a second `const NOT AOR`-style config or a second
    copy of a normaliser would not just break this feature - it would break the
@@ -54,6 +79,25 @@ const INSTALL = {
      person (his Gmail replaced the supplier alias, the pldt365 alias stayed). Nothing invented. */
   TO: ['lsabat@pldt.com.ph'],
   CC: ['jrsnavarro25@gmail.com', 't-jesnavarro@pldt365.onmicrosoft.com', 'abmadlangbayan0510@icloud.com'],
+  /* the greeting of the two mails that already go to lsabat@pldt.com.ph (SFS and CV), copied
+     word for word - the AFD/NOT AOR greeting says "Hi Sir Jack" because those go somewhere else */
+  GREET: 'Hi Sir ABAT, Leonard S.,',
+  /* {CLUSTER} is filled per mail from the cluster that mail was named for, the way AFD does it.
+     It names his three taggings instead of claiming a payment, because a RESERVED FACILITY row
+     is not paid yet. */
+  INTRO: 'For endorsement to CLUSTER {CLUSTER} for installation. The accounts below are tagged ' +
+    'RESERVED FACILITY, ORDER CREATED, or PAID with a final status of PAID - FOR INSTALLATION, and ' +
+    'we would appreciate your assistance in having them scheduled for installation.',
+  CLOSE: 'Should you have any concerns regarding the scheduled installation, please kindly reply ' +
+    'to this email so that we may address them immediately.',
+  THANKS: 'Thank you !',
+  SIGN: ['Mark Maliwat', 'Sales Validator - MMMDA Logistics', 'Service Cavite Upland'],
+  LOGO_URL: 'https://markelvinmaliwat-hub.github.io/3MDA-Logistics-Service_website/assets/mmmda-logo.jpg',
+  LOGO_KEY: 'mmmda-logo',
+  LOGO_ALT: 'MMMDA Logistics Service',
+  LOGO_W: 150, LOGO_H: 147,
+  LOGO_ABOVE: true,
+  FOOTER: '',
   /* ---- his three branches, named apart so the log can say which one a row came in on ---- */
   CSP_OPEN: ['RESERVED FACILITY', 'ORDER CREATED'],   // these two qualify on their own
   CSP_PAID: 'PAID',                                   // this one needs the FINAL STATUS line below
@@ -63,36 +107,39 @@ const INSTALL = {
   ANY: true,                               // ANY of the three, not all three at once
   EXACT: true,                             // the whole cell, the CANCEL mail's strictness
   SHEET_ID: '',                            // '' = DATABASE AUG TO OCT, the live-synced sales file
-  TABS: [],                                // '' = NOTICE.SALES_TABS (PLDT + RED)
+  /* his answer to "RED ba o PLDT?": "HINDI - PLDT LANG". instProbe proved why - the RED tab's
+     real headers are DATE | SUBSCRIBER NAME | RITM # | CS&WO# | ACCT | EMAIL ADDRESS | STATUS |
+     ... and there is no CSP STATUS there at all, which is exactly why RED counted 0. */
+  TABS: ['PLDT'],
   /* the cluster the mail is NAMED for. The row's own CLUSTER cell is used when it has a number;
      a row whose cell says NOT AOR gets its cluster from his CLUSTER tab by BRGY + CITY, which is
      exactly what he asked for: "kasama ang not AOR at pag babasehan ng not AOR ay yung may TAB
      na CLUSTER kagaya ng sa AFD RESCHEDULE". */
   CLUSTER_TAB: 'CLUSTER',
   SOURCE_CLUSTER: 'NOT AOR',
-  /* his template, in his order, spelled the way he typed it in the screenshot. Three of these
-     are NOT yet wired to a sheet column - that is what instProbe section 5 prints. */
-  COLS: ['DATE', 'SUBSCRIBER NAME', 'PR', 'BRGY', 'CITY', 'CLUSTER', 'STATUS',
+  /* his template, in his order, spelled the way he typed it in the screenshot. COL_SOURCE is the
+     answer to the two labels the sheet does not carry under that name: "PID" is his word for the
+     PR column, and "STATUS" is his word for CSP STATUS - the column his rule itself lives in. */
+  COLS: ['DATE', 'SUBSCRIBER NAME', 'PID', 'BRGY', 'CITY', 'CLUSTER', 'STATUS',
     'PAYMENT REFERENCE/ REMARKS', 'PAYMENT STATUS'],
+  COL_SOURCE: { PID: 'PR', STATUS: 'CSP STATUS' },
+  DATE_FORMAT: 'M/d/yyyy',                 // the same date rendering the SFS/AFD mails use
+  SR_LINK: '',
   SEND_HOURS: [10],                        // "isang beses lang kada araw ... tuwing 10am"
-  DRY_RUN: true,
+  DRY_RUN: true,                           // his word flips it; until then only his own inbox
   MAX_ROWS: 300,
   MAX_GROUPS: 20,                          // one Gmail send per cluster; the quota is ~100/day for everything
   TIMEZONE: '',
   SUBJECT: '3MDA_INSTALL_',                // + CLUSTER<n>_ + MMMyyyy, built per mail the way NOT AOR does
-  SENT_PREFIX: 'INSTALL_SENT_',
-  /* the columns whose value PLDT reads as "STATUS" - CSP STATUS leads because that is where his
-     rule lives now. The probe prints each one's real contents on the queued rows so he names the
-     right one instead of me guessing from one screenshot */
-  CANDIDATES: ['CSP STATUS', 'FINAL STATUS', 'PAYMENT STATUS', 'FUSE STATUS', 'OFSC STATUS'],
-  PAY_COLS: ['PAYMENT REFERENCE/ REMARKS', 'PAYMENT STATUS', 'CSP REMARKS', 'PAYMENT REMARKS'],
-  TEST: { STATUS: ['RESERVED FACILITY', 'ORDER CREATED', 'PAID'], MAX_ROWS: 12, MAX_GROUPS: 3 }
+  /* WALANG SENT_PREFIX sa purpose: option B ("maulit sa bukang 10AM") means a row still in the
+     queue is reported again the next day. A dedupe list would silently undo his answer. */
+  TEST: { MAX_ROWS: 12, MAX_GROUPS: 3 }
 };
 
 const imUp_ = v => String(v === undefined ? '' : v).trim().toUpperCase();
 
 /* ---- the rule, in ONE place ----
-   The probe and the future mail both call this, so the count he approves is the count that mails.
+   The probe and the mail both call this, so the count he approves is the count that mails.
    Returns the branch a row came in on, or '' when the row is not in the queue. */
 function imBranch_(r) {
   if (!statusRowHit_(r, INSTALL)) return '';
@@ -105,12 +152,14 @@ function imRuleText_() {
   return 'CSP STATUS = ' + INSTALL.CSP_OPEN.join(' / ') + ' / ' + INSTALL.CSP_PAID +
     ', at kapag ' + INSTALL.CSP_PAID + ': FINAL STATUS eksaktong ' + INSTALL.PAID_FINAL;
 }
+/* which real header a table label reads - and the label PLDT sees is always his own spelling */
+const imSrc_ = (cfg, label) => String((cfg.COL_SOURCE || {})[label] || label);
 
 /* ---- the CLUSTER-tab join, copied from the rules aorProbe proved and NotAorMail shipped (nao*).
    His tab keeps the address in ONE text field ("BGY ALIMA BACOOR CITY") while the sales tab keeps
    it in TWO columns (BRGY + CITY), so both sides are reduced to the same key: uppercase, punctuation
    gone, location words dropped. It is copied under im* rather than called, because NotAorMail.gs is
-   a file he may or may not have pasted yet, and this probe must run on its own. */
+   a file he may or may not have pasted yet, and this file must run on its own. */
 function imNorm_(s) {
   return imUp_(s).replace(/[^A-Z0-9]+/g, ' ').trim().replace(/^(?:BRG?Y?|BARANGAY)\s+/, '');
 }
@@ -206,6 +255,253 @@ function imClusterFor_(row, idx) {
   return { digits: d, value: hit.vals[0], from: isNotAor ? 'tab (NOT AOR)' : 'tab' };
 }
 
+/* ---------------------------------------------- the rows that go into the mail
+   collectReport_ cannot be used here: it builds its items from AgentNotices' CELL_ vocabulary,
+   and three of his nine labels are not in that vocabulary. So this reads the sales row directly,
+   through imSrc_, and keys every cell by the label PLDT will see. imBranch_ is the same predicate
+   instProbe counts with, so a row the probe showed him is a row this returns - or the suite fails. */
+function imCell_(r, cfg, label) {
+  const h = imSrc_(cfg, label);
+  const v = r[h];
+  if (label === 'DATE') return fmtReportDate_(v, cfg);
+  return String(v === undefined || v === null ? '' : v).trim();
+}
+function imItem_(r, cfg, cluster) {
+  const it = {};
+  cfg.COLS.forEach(l => { it[l] = imCell_(r, cfg, l); });
+  /* his ruling on the NOT AOR mail applies to this column too: the CLUSTER cell PLDT reads is the
+     cluster the row was VALIDATED into, never the words "NOT AOR" or a blank. When the row already
+     carries a number this is that cell, spelled as his sheet spells it; when the CLUSTER tab named
+     it, the tab's own wording is what the table shows. */
+  it.CLUSTER = cluster.value;
+  /* fill_ reads items[0].cluster for the {CLUSTER} in the intro, so the mail says the cluster it
+     was NAMED for - which may be the CLUSTER tab's answer, not the cell's own word. */
+  it.cluster = cluster.digits;
+  it.clusterShown = cluster.value;
+  it.clusterFrom = cluster.from;
+  it.branch = imBranch_(r);
+  it.sr = String(r['SR'] === undefined ? '' : r['SR']).replace(/\.0$/, '').trim();
+  it.sub = it['SUBSCRIBER NAME'];
+  it.key = it.sr || (it.DATE + '|' + it.sub);
+  const dv = r['DATE'], raw = dv instanceof Date ? dv.getTime() : new Date(dv).getTime();
+  it._t = isNaN(raw) ? 0 : raw;
+  return it;
+}
+/* every queued row in his tabs, or the reason it could not be given a cluster */
+function imCollect_(ss, cfg, idx, drop) {
+  const out = [];
+  reportTabs_(cfg).forEach(name => tab_(ss, name).forEach(r => {
+    const b = imBranch_(r);
+    if (!b) return;
+    const c = imClusterFor_(r, idx);
+    if (c.why) { if (drop) drop.push({ m: { tab: name, r: r, branch: b }, why: c.why }); return; }
+    out.push(imItem_(r, cfg, c));
+  }));
+  /* oldest first - a queue PLDT works by hand reads best from the top, same as every report */
+  return out.sort((x, y) => x._t - y._t || nk_(x.sub).localeCompare(nk_(y.sub)));
+}
+/* one mail per cluster, biggest first so a capped run drops the smallest tail, not the head */
+function imGroups_(cfg, items, max) {
+  const g = {};
+  items.forEach(i => {
+    const k = i.cluster;
+    const o = (g[k] = g[k] || { digits: k, value: i.clusterShown, n: 0, row: 0, tab: 0, items: [] });
+    o.n++; o.items.push(i);
+    o[i.clusterFrom.indexOf('tab') === 0 ? 'tab' : 'row']++;
+  });
+  const all = Object.keys(g).map(k => g[k]).sort((a, b) => b.n - a.n || Number(a.digits) - Number(b.digits));
+  return { groups: all.slice(0, max), skippedGroups: all.slice(max) };
+}
+
+/* ---- the table, his nine columns, his own header words (copied from reportTable_'s style) ---- */
+function imTable_(items, cfg) {
+  const th = 'style="border:1px solid #4d4d4d;padding:8px 10px;font-size:12px;font-weight:700;text-align:center"';
+  const td = 'style="border:1px solid #4d4d4d;padding:8px 10px;font-size:13px;text-align:center;vertical-align:top"';
+  return '<table cellpadding="6" cellspacing="0" style="border-collapse:collapse">' +
+    '<tr>' + cfg.COLS.map(c => `<th ${th}>${esc_(c)}</th>`).join('') + '</tr>' +
+    items.map(x => '<tr>' + cfg.COLS.map(c => { const v = String(x[c] === undefined ? '' : x[c]);
+      return `<td ${td}>${esc_(v) || '&mdash;'}</td>`; }).join('') + '</tr>').join('') + '</table>';
+}
+function imRowsText_(items, cfg) {
+  return items.map(x => '- ' + cfg.COLS.map(c => String(x[c] === undefined ? '' : x[c])).filter(Boolean).join(' | ')).join('\n');
+}
+/* copied from buildReportMail_ - same greeting, same {CLUSTER} fill, same logo signature, same
+   subject stamp - but the table is imTable_, because CELL_ does not know his three labels. */
+function imMail_(items, logo, cfg) {
+  const max = cfg.MAX_ROWS || 300, shown = items.slice(0, max);
+  const stamp = Utilities.formatDate(new Date(), cfg.TIMEZONE || NOTICE.TIMEZONE, 'MMMyyyy').toUpperCase();
+  const subject = cfg.SUBJECT + stamp;
+  const extra = items.length - shown.length;
+  const intro = fill_(cfg.INTRO, cfg, items);
+  const h = `<div style="font-family:Calibri,Arial,sans-serif;font-size:14px;color:#000;max-width:900px">` +
+    `<p>${esc_(cfg.GREET)}</p><p>${esc_(intro)}</p>` + imTable_(shown, cfg) +
+    (extra > 0 ? `<p style="color:#667085;font-size:12px">&hellip;and ${extra} more not listed here.</p>` : '') +
+    (cfg.CLOSE ? `<p style="margin-top:18px">${esc_(fill_(cfg.CLOSE, cfg, items))}</p>` : '') +
+    `<p style="margin-top:18px"><b>${esc_(cfg.THANKS)}</b></p>` + reportSig_(logo, cfg) +
+    (cfg.FOOTER ? `<p style="color:#667085;font-size:12px">${esc_(cfg.FOOTER)}</p>` : '') + '</div>';
+  const t = `${cfg.GREET}\n\n${intro}\n\n${imRowsText_(shown, cfg)}` +
+    (extra > 0 ? `\n...and ${extra} more.` : '') +
+    (cfg.CLOSE ? `\n\n${fill_(cfg.CLOSE, cfg, items)}` : '') + `\n\n${cfg.THANKS}\n\n${cfg.SIGN.join('\n')}`;
+  return { subject: subject, html: h, text: t };
+}
+/* One mail per cluster: the subject and the NAME carry the number, so Sir Abat sees which cluster
+   is being endorsed before he opens it - exactly what naoMailCfg_ does for NOT AOR. */
+function imMailCfg_(cfg, g) {
+  const m = {};
+  Object.keys(cfg).forEach(k => { m[k] = cfg[k]; });
+  m.NAME = cfg.NAME + ' C' + g.digits;
+  m.SUBJECT = cfg.SUBJECT + 'CLUSTER' + g.digits + '_';
+  return m;
+}
+
+/* The send path below is copied step for step from AgentNotices' sendReport_ so that this mail
+   behaves like the four live PLDT reports - same [TEST] label, same DRY_RUN redirect, same inline
+   logo, same outcome log - with TWO deliberate differences, both his instructions:
+   1. WALANG dedupe. sentToday_ / markSent_ are not called and no INSTALL_SENT_ property exists,
+      because he answered B: a row still in the queue is mailed again the next day.
+   2. The table is imMail_, for the three labels CELL_ cannot render.
+   Nothing here writes to the sheet. */
+function sendInstallGroup_(send, cfg, items, force) {
+  const admins = NOTICE.ADMIN_EMAILS.map(x => String(x).trim().toLowerCase()).filter(Boolean);
+  const testTo = admins[0] || Session.getEffectiveUser().getEmail();
+  const max = cfg.MAX_ROWS || 300;
+  const res = {
+    report: cfg.NAME, items: items.length, fresh: items.length,
+    date: fmtD_(new Date()), dryRun: cfg.DRY_RUN, shown: Math.min(items.length, max),
+    mode: send ? (cfg.DRY_RUN ? 'test' : 'live') : 'preview', quota: MailApp.getRemainingDailyQuota(),
+    to: cfg.DRY_RUN ? [testTo] : cfg.TO, cc: cfg.DRY_RUN ? [] : cfg.CC
+  };
+  if (!items.length) {
+    res.skipped = 'walang row sa queue (' + imRuleText_() + ') - walang na-send';
+    if (send) logSendOutcome_(cfg, res);
+    return res;
+  }
+  const logo = reportLogo_(cfg);
+  const m = imMail_(items, logo, cfg);
+  res.subject = m.subject; res.htmlChars = m.html.length;
+  res.logo = logo.blob ? 'attached inline' : logo.src ? 'linked only' : 'none';
+  /* a column that is empty in EVERY row is a mapping mistake, not a blank cell - and PLDT would
+     read it as our error, so it is said out loud before a live send rather than after */
+  res.blankCols = cfg.COLS.filter(c => items.slice(0, max).every(x => String(x[c] === undefined ? '' : x[c]).trim() === ''));
+  if (res.blankCols.length) Logger.log(cfg.NAME + ' | BABALA: BLANK sa LAHAT ng row ang column na ' +
+    res.blankCols.join(', ') + ' - ' + res.blankCols.map(c => '"' + c + '" reads "' + imSrc_(cfg, c) + '"').join(', ') +
+    ". Huwag i-LIVE hanggang't hindi naipaliwanag.");
+  if (!send) { res.text = m.text; return res; }
+  if (MailApp.getRemainingDailyQuota() < 1) { res.skipped = 'daily Gmail quota reached'; logSendOutcome_(cfg, res); return res; }
+  const opt = {
+    to: res.to.join(','), name: NOTICE.SENDER_NAME,
+    subject: (cfg.DRY_RUN ? '[TEST] ' : '') + m.subject, body: m.text, htmlBody: m.html
+  };
+  if (res.cc.length) opt.cc = res.cc.join(',');
+  if (logo.blob) opt.inlineImages = (function () { const o = {}; o[cfg.LOGO_KEY] = logo.blob; return o; })();
+  try {
+    MailApp.sendEmail(opt);
+    res.sent = true;
+  } catch (err) { res.error = String(err); }
+  logSendOutcome_(cfg, res);
+  return res;
+}
+
+/* The run itself: read PLDT, apply imBranch_, name every cluster, then one mail each.
+   test=true is the copy that goes to his own inbox: it keeps DRY_RUN on, caps the run at
+   TEST.MAX_GROUPS clusters / TEST.MAX_ROWS rows, and never mutates INSTALL - the patch is a
+   copy, so the live rule is never left widened. */
+function installMail_(send, force, test) {
+  const cfg = test ? (function () {
+    const c = {}; Object.keys(INSTALL).forEach(k => { c[k] = INSTALL[k]; });
+    c.DRY_RUN = true; c.MAX_ROWS = Math.min(INSTALL.TEST.MAX_ROWS, INSTALL.MAX_ROWS);
+    c._maxGroups = INSTALL.TEST.MAX_GROUPS;
+    return c;
+  })() : INSTALL;
+  const ss = reportSs_(cfg);
+  const why = [];
+  const idx = imIndex_(ss, cfg, why);
+  const drop = [];
+  const items = imCollect_(ss, cfg, idx, drop);
+  const pk = imGroups_(cfg, items, cfg._maxGroups || cfg.MAX_GROUPS);
+  Logger.log(cfg.NAME + ' | file: ' + ss.getName() + ' | tab: ' + reportTabs_(cfg).join('+') +
+    ' | rule: ' + imRuleText_() + ' | ' + items.length + ' row sa queue, ' + pk.groups.length + ' mail');
+  Logger.log(cfg.NAME + ' | index: ' + (idx ? idx.rows + ' row sa tab "' + cfg.CLUSTER_TAB + '" (' +
+    idx.placeCols.join('+') + ' -> ' + idx.clusterCol + ')' : 'WALANG INDEX: ' + why.join(' / ')));
+  if (pk.groups.length) Logger.log(cfg.NAME + ' | mga mail: ' +
+    pk.groups.map(g => 'CLUSTER ' + g.digits + ' = ' + g.items.length + ' row').join(', ') +
+    (pk.skippedGroups.length ? ' | HINDI na-isama (lampas ' + (cfg._maxGroups || cfg.MAX_GROUPS) + ' cluster): ' +
+      pk.skippedGroups.map(g => 'C' + g.digits + '=' + g.items.length).join(', ') : ''));
+  drop.slice(0, 15).forEach(d => Logger.log(cfg.NAME + ' | HINDI NA-VALIDATE | ' +
+    imUp_(d.m.r['SUBSCRIBER NAME']).slice(0, 26) + ' | ' + imUp_(d.m.r['BRGY']) + ' ' + imUp_(d.m.r['CITY']) +
+    ' | ' + d.why));
+  if (drop.length > 15) Logger.log(cfg.NAME + ' | ...at ' + (drop.length - 15) + ' pang row na hindi na-validate');
+  if (drop.length) Logger.log(cfg.NAME + ' | HINDI SASAMA SA MAIL: ' + drop.length +
+    ' row kasi hindi kayang pangalanan ng "' + cfg.CLUSTER_TAB + '" tab ang cluster nila.');
+  const out = [];
+  if (!pk.groups.length) return [sendInstallGroup_(send, cfg, [], force)];
+  for (let i = 0; i < pk.groups.length; i++) {
+    const g = pk.groups[i];
+    out.push(sendInstallGroup_(send, imMailCfg_(cfg, g), g.items, force));
+  }
+  return out;
+}
+
+/* The scheduled run. One run produces MANY mails - one per cluster - and every one of them is
+   mailed again the next day while its row is still in the queue (his option B). Like NOT AOR and
+   AFD29 this is deliberately NOT in ensureReportTriggers_: only installInstallTrigger() puts it
+   on the clock, and no trigger exists until he presses it. */
+function runInstallNotices() { return installMail_(true, false); }
+function sendInstallReport() { return installMail_(true, true); }
+
+/* Preview: nothing is sent, nothing is written. The log lists every mail the run WOULD produce and
+   then prints the first body in full, so the wording can be read before an address is trusted. */
+function instPreview() {
+  const list = installMail_(false, true);
+  list.forEach(r => Logger.log(r.report + ' | rows: ' + r.items + ' | laman ng table: ' + r.shown +
+    (r.subject ? ' | subject: ' + r.subject : '') +
+    ' | kung LIVE: ' + INSTALL.TO.join(',') + ' cc ' + INSTALL.CC.join(',') +
+    (INSTALL.DRY_RUN ? ' (DRY_RUN pa, kaya test copy lang sa ' + r.to.join(',') + ')' : '') +
+    (r.blankCols && r.blankCols.length ? ' | BLANK na column: ' + r.blankCols.join(', ') : '') +
+    (r.skipped ? ' | ' + r.skipped : '')));
+  const first = list.filter(r => r.text)[0];
+  if (first) Logger.log(first.text);
+  return list;
+}
+
+/* The test copy - the one press that shows him the real mail in his own inbox while DRY_RUN is on.
+   Capped at TEST.MAX_GROUPS clusters and TEST.MAX_ROWS rows, so one press cannot spend a morning
+   of quota, and INSTALL itself is never touched. */
+function instTestReport() {
+  const list = installMail_(true, true, true);
+  list.forEach(r => Logger.log(r.report + ' test copy: ' + (r.sent ? 'NA-SEND' : 'HINDI NA-SEND') +
+    ' | rows: ' + r.items + ' | nasa table: ' + r.shown + ' | subject: ' + (r.subject || '-') +
+    ' | kay: ' + r.to.join(',') + (r.cc.length ? ' | cc: ' + r.cc.join(',') : ' | walang cc (DRY_RUN)') +
+    (r.logo ? ' | logo: ' + r.logo : '') + (r.skipped ? ' | ' + r.skipped : '') + (r.error ? ' | ERROR ' + r.error : '')));
+  Logger.log('INSTALL | hindi binago ang tunay na rule: DRY_RUN ' + INSTALL.DRY_RUN +
+    (INSTALL.DRY_RUN ? ' (test copy lang ang nagawa, ' + NOTICE.ADMIN_EMAILS.join(',') + ')'
+      : ' (LIVE - PLDT ang tumatanggap)') +
+    ' | walang dedupe: ang row na nasa queue pa rin ay maulit bukas (option B)' +
+    ' | ang test copy ay may limit na ' + INSTALL.TEST.MAX_GROUPS + ' cluster / ' + INSTALL.TEST.MAX_ROWS + ' row.');
+  return list;
+}
+
+/* The 10AM daily trigger - "isang beses lang kada araw ang pag email nito at dapat tuwing 10am".
+   reportStatus_ hard-codes a dedupe sentence that is TRUE for the other reports and FALSE here, so
+   the line is corrected before it is logged; ruleText_ would also print only the CSP half of his
+   rule, so imRuleText_ replaces it. */
+function installInstallTrigger() {
+  const st = installReportTrigger_(INSTALL, 'runInstallNotices');
+  st.dedupe = 'WALANG dedupe - ang row na nasa queue pa rin ay maulit kada araw (option B ng owner)';
+  st.rule = imRuleText_();
+  Logger.log('INSTALL trigger: ' + (st.installed ? 'installed' : 'NOT installed') +
+    ' | oras: ' + hoursText_(INSTALL) + ' (' + (INSTALL.TIMEZONE || NOTICE.TIMEZONE) + ')' +
+    ' | rule: ' + st.rule +
+    ' | tab: ' + INSTALL.TABS.join(',') + ' (PLDT lang - walang CSP STATUS ang RED)' +
+    ' | table: ' + INSTALL.COLS.join(' | ') +
+    ' | PID = header "' + imSrc_(INSTALL, 'PID') + '", STATUS = header "' + imSrc_(INSTALL, 'STATUS') + '"' +
+    ' | isang mail kada cluster, pinakamarami: ' + INSTALL.MAX_GROUPS +
+    ' | ' + (st.dryRun ? 'DRY_RUN is ON, copies go to ' + NOTICE.ADMIN_EMAILS.join(',') + ' only'
+      : 'LIVE, goes to ' + st.to.join(',') + ' | cc ' + st.cc.join(',')) +
+    ' | ' + st.dedupe + ' | ' + st.note);
+  return st;
+}
+
 /* ---- the read-only scout ---- */
 function instProbe() {
   const ss = reportSs_(INSTALL), tz = INSTALL.TIMEZONE || NOTICE.TIMEZONE;
@@ -214,7 +510,7 @@ function instProbe() {
   const paidBranch = imBranch_({ 'CSP STATUS': INSTALL.CSP_PAID, 'FINAL STATUS': INSTALL.PAID_FINAL });
   const BLANK_CSP = '(blank na CSP STATUS)', BLANK_FIN = '(blank na FINAL STATUS)';
   const st = {
-    rows: 0, tabs: [], noHeader: [], matched: [], heads: {}, valTally: {},
+    rows: 0, tabs: [], noHeader: [], matched: [], heads: {},
     branchTally: {}, paidBlocked: [], paidBlockWords: {},
     finalExact: [], finalExactCsp: {}, finalNear: {},
     cspNear: {}, cspWords: {},
@@ -260,29 +556,17 @@ function instProbe() {
     st.tabs.push(name + ' = ' + rows.length + ' row, ' + hit + ' nasa queue');
   });
 
-  /* every candidate column, counted on the QUEUED rows only - that is the set that will be
-     in the mail, so its values are the ones he has to recognise. The values are printed EXACTLY
-     as the cell holds them, sloppy spacing included, because that is what he can go fix; the
-     rule itself reads them normalised, which is why the queue count and this list can differ. */
-  const cols = INSTALL.CANDIDATES.concat(INSTALL.PAY_COLS.filter(c => INSTALL.CANDIDATES.indexOf(c) < 0));
-  st.matched.forEach(m => {
-    cols.forEach(c => {
-      const v = String(m.r[c] === undefined ? '<<WALANG GANITONG HEADER>>' : m.r[c]).trim() || '(blank)';
-      const t = (st.valTally[c] = st.valTally[c] || {});
-      t[v] = (t[v] || 0) + 1;
-    });
-  });
-
+  /* section 4 and the mail now share ONE collector, so the clusters printed here are the clusters
+     that would be mailed - not a second implementation that could drift from the first */
   const why = [];
   const idx = imIndex_(ss, INSTALL, why);
-  st.matched.forEach(m => {
-    const c = imClusterFor_(m.r, idx);
-    if (c.why) { st.dropped.push({ m: m, why: c.why }); return; }
-    const g = (st.gmap[c.digits] = st.gmap[c.digits] || { digits: c.digits, value: c.value, n: 0, row: 0, tab: 0 });
-    g.n++; g[c.from.indexOf('tab') === 0 ? 'tab' : 'row']++;
-  });
-  /* sorted, so the log and the returned object both lead with the biggest mail */
-  st.groups = Object.keys(st.gmap).map(k => st.gmap[k]).sort((a, b) => b.n - a.n);
+  const drop = [];
+  const items = imCollect_(ss, INSTALL, idx, drop);
+  st.items = items;
+  st.dropped = drop;
+  const pk = imGroups_(INSTALL, items, INSTALL.MAX_GROUPS);
+  st.groups = pk.groups;
+  st.skippedGroups = pk.skippedGroups;
 
   const tally = (o, cap) => {
     const ks = Object.keys(o).sort((a, b) => o[b] - o[a]);
@@ -348,6 +632,8 @@ function instProbe() {
   st.groups.forEach(g => Logger.log('   mail: CLUSTER ' + g.digits + ' = ' + g.n + ' row  (' +
     [g.row ? g.row + ' mula sa CLUSTER cell ng row' : '', g.tab ? g.tab + ' mula sa "' + INSTALL.CLUSTER_TAB + '" tab' : '']
       .filter(Boolean).join(', ') + ')'));
+  if (st.skippedGroups.length) Logger.log('   LAMPAS SA LIMITASYON: ' +
+    st.skippedGroups.map(g => 'CLUSTER ' + g.digits + '=' + g.n).join(', '));
   Logger.log('   KABILANG: ' + st.groups.length + ' mail kada araw (limitasyon: ' + INSTALL.MAX_GROUPS +
     ') | quota sa Gmail ngayon: ' + MailApp.getRemainingDailyQuota() + ' padala pa today, lahat ng mail');
   if (st.dropped.length) {
@@ -355,49 +641,54 @@ function instProbe() {
     st.dropped.slice(0, 15).forEach(d => Logger.log('     ' + who(d.m).join(' | ') + ' | ' + d.why));
     if (st.dropped.length > 15) Logger.log('     ...at ' + (st.dropped.length - 15) + ' pang row');
   }
+  /* the one line that proves the scout and the mail agree, counted from the SAME collector the
+     send uses - if these two numbers ever differ, the log he approved is not the mail PLDT gets */
+  Logger.log('   PROBING AT MAIL NA PAREHO: ' + st.matched.length + ' row ang binibilang ng probe, ' +
+    items.length + ' row ang kukunin ng mail (' + (st.matched.length - items.length) + ' ang nawala sa ' +
+    'CLUSTER-tab na pagpangalan) | ' + st.groups.length + ' mail');
 
   Logger.log('=== 5. ANG TEMPLATE MO: WHAT EACH COLUMN REALLY HOLDS ===');
   Logger.log('   siyam na column na gusto mo: ' + INSTALL.COLS.join(' | '));
   ['PLDT', 'RED'].forEach(n => {
     if (st.heads[n]) Logger.log('   tunay na header sa ' + n + ': ' + st.heads[n].join(' | '));
   });
-  /* His header word for each column, matched against her real headers. An exact hit is settled;
-     anything else prints the headers whose words CONTAIN it, which is how "STATUS" admits that
-     CSP STATUS, FINAL STATUS, PAYMENT STATUS, FUSE STATUS and OFSC STATUS all claim to be it -
-     and that is a question for him, not a guess for me. */
+  /* His header word for each column, matched against her real headers - through COL_SOURCE, so the
+     two labels he renamed (PID and STATUS) are checked against the header they actually read. */
   INSTALL.COLS.forEach(c => {
-    const cw = nk_(c).split(' ');
+    const src = imSrc_(INSTALL, c);
+    const cw = nk_(src).split(' ');
     const exact = [], near = [];
     Object.keys(st.heads).forEach(t => st.heads[t].forEach(h => {
-      if (nk_(h) === nk_(c)) { if (exact.indexOf(t) < 0) exact.push(t); return; }
+      if (nk_(h) === nk_(src)) { if (exact.indexOf(t) < 0) exact.push(t); return; }
       const hw = nk_(h).split(' ');
       if (cw.every(w => hw.indexOf(w) >= 0)) { const k = t + ':' + h; if (near.indexOf(k) < 0) near.push(k); }
     }));
-    Logger.log('   "' + c + '" = ' + (exact.length ? 'MAY EXACT na header sa ' + exact.join(' + ') + ' tab'
-      : near.length ? 'WALA ang eksakong header - mga kandidato: ' + near.slice(0, 6).join(', ') +
-        (near.length > 6 ? ' ...at ' + (near.length - 6) + ' pa' : '')
-      : 'WALANG header ng sales tab na tumutugma doon'));
+    Logger.log('   "' + c + '"' + (src === c ? '' : ' (bumabasa ng "' + src + '")') + ' = ' +
+      (exact.length ? 'MAY EXACT na header sa ' + exact.join(' + ') + ' tab'
+        : near.length ? 'WALA ang eksakong header - mga kandidato: ' + near.slice(0, 6).join(', ') +
+          (near.length > 6 ? ' ...at ' + (near.length - 6) + ' pa' : '')
+        : 'WALANG header ng sales tab na tumutugma doon'));
   });
-  cols.forEach(c => {
-    Logger.log('   --- "' + c + '" sa mga nasa queue (' + (st.valTally[c] ? Object.keys(st.valTally[c]).length : 0) + ' na ibang-iba) ---');
-    if (st.valTally[c]) tally(st.valTally[c], 8);
+  /* what the mail would ACTUALLY print, straight out of the collector - not the raw column again */
+  INSTALL.COLS.forEach(c => {
+    const t = {};
+    items.slice(0, INSTALL.MAX_ROWS).forEach(i => { const v = String(i[c]).trim() || '(blank)'; t[v] = (t[v] || 0) + 1; });
+    Logger.log('   --- "' + c + '" (galing sa "' + imSrc_(INSTALL, c) + '") sa mga sasama (' +
+      Object.keys(t).length + ' na ibang-iba) ---');
+    tally(t, 8);
   });
   Logger.log('   sample ng isang row (para makita mo ang buong hilera):');
-  st.matched.slice(0, 3).forEach(m => Logger.log('     ' + ['DATE', 'SUBSCRIBER NAME', 'PR', 'BRGY', 'CITY', 'CLUSTER']
-    .concat(cols)
-    .map(h => h + '="' + String(m.r[h] === undefined ? '<<WALANG HEADER>>' : m.r[h]).slice(0, 40)).join('  ')));
+  items.slice(0, 3).forEach(i => Logger.log('     ' + INSTALL.COLS.map(c => c + '="' + String(i[c]).slice(0, 40) + '"').join('  ')));
 
-  Logger.log('=== 6. HINDI PA NAGAGAWA ===');
-  Logger.log('   walang send-function sa file na ito. Ang #5 sa itaas ang nagsasabi kung alin sa ' +
-    'siyam na column ng template mo ang may eksaktong header sa PLDT / RED at alin ang wala. Ang ' +
-    'bawat "WALA ang eksakong header" - lalo na sa "' + INSTALL.COLS[6] + '", na kaya ng limang ' +
-    'iba-ibang column - ay sagot mo, hindi ko hulaan, dahil doon lilinisin ng mail ang table. ' +
-    'Sabihin ang mga sagot, tapos isusulat ang mail - DRY_RUN muna, copy sa sarili mong inbox.');
-  Logger.log('   isang tanong bago ang mail: SR na nasa queue pa rin bukas - maulit ba sa bukang 10AM ' +
-    'o isang beses lang kada SR? Ang AFD / NOT AOR mail ay isang beses kada SR (dedupe), ang ' +
-    'cancellation mail ay kada Biyernes. Piliin mo.');
-  Logger.log('   schedule na isusulat pagka-approved: SEND_HOURS ' + INSTALL.SEND_HOURS.join(',') +
+  Logger.log('=== 6. ANO NA ANG NANDOON (at ano pa ang hinihintay) ===');
+  Logger.log('   may send-function na: runInstallNotices (trigger), sendInstallReport (agad), ' +
+    'instPreview (walang send), instTestReport (test copy sa iyo lang), installInstallTrigger (10AM).');
+  Logger.log('   pero DRY_RUN pa rin = ' + INSTALL.DRY_RUN + ' - kaya ang bawat pindot ay ' +
+    'test copy sa ' + NOTICE.ADMIN_EMAILS.join(',') + ' lang | walang naabot na PLDT.');
+  Logger.log('   schedule: SEND_HOURS ' + INSTALL.SEND_HOURS.join(',') +
     ' (isang beses kada araw, 10AM) | To ' + INSTALL.TO.join(',') + ' | CC ' + INSTALL.CC.join(','));
-  Logger.log('   DRY_RUN: ' + INSTALL.DRY_RUN + ' | walang nasulat sa sheet, walang na-email sa probe na ito');
+  Logger.log('   WALANG dedupe: ang row na nasa queue pa rin bukas ay maulit (ang sagot mo: B).');
+  Logger.log('   HINIINTAY PA: basahin ang instTestReport copy, tapos sabihin "go" para i-off ang ' +
+    'DRY_RUN at pindutin ang installInstallTrigger.');
   return st;
 }
