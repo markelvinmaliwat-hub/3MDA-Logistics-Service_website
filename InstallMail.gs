@@ -3,28 +3,44 @@
    His first ask: "kaya mo ba gumawa ng automated email tungkol sa for installation
    per cluster kasama ang not AOR at pag babasehan ng not AOR ay yung may TAB na
    CLUSTER kagaya ng sa AFD RESCHEDULE".
-   His rule, in his own words a few minutes later, replacing the column I had been
-   told to read: "sa PAID ang pag babasihan mo dito ay ang FINAL STATUS na
-   PAID - FOR INSTALLATION wala ng iba" - so the deciding cell is FINAL STATUS and
-   the phrase is exactly that one. Not CSP STATUS, not a PAID that merely contains
-   the word: EXACT, the same strictness the cancellation mail runs on.
+
+   HIS RULE, IN HIS OWN WORDS - this is the SECOND version, and it corrects the
+   first one I shipped. He wrote: "mali ka ng unawa Sa CSP STATUS kapag ang
+   remarks ay RESERVED FACILITY, ORDER CREATED, PAID ito ang mga pwede ma email ng
+   FOR INSTALLATION pero kapagh ito ay naka PAID sa CSP STATUS dapat ang FINAL
+   STATUS na naka linya sakanya ay PAID - FOR INSTALLATION".
+   So the deciding column is CSP STATUS - not FINAL STATUS alone - and it admits
+   THREE values, each read EXACTLY as the whole cell:
+     1. RESERVED FACILITY  -> nasa queue, walang ibang kundisyon
+     2. ORDER CREATED      -> nasa queue, walang ibang kundisyon
+     3. PAID               -> nasa queue SA KUNG ang FINAL STATUS sa hilera niya
+                              ay eksaktong PAID - FOR INSTALLATION
+   My first version read only #3, and read it from FINAL STATUS, so it reported the
+   PAID rows and missed every RESERVED FACILITY and ORDER CREATED row. That rule is
+   gone; CSP_OPEN + CSP_PAID + PAID_FINAL are what the config now carries, and
+   imBranch_() is the ONE predicate the probe and the future mail share, so neither
+   can drift from the other.
+   A cancelled row cannot enter: CANCELLED is not one of the three CSP values, and
+   a strict-equals rule refuses anything longer - the same strictness the
+   cancellation mail runs on.
+
    "iba ibang email ito kada cluster ang pag sesendan kaya hiwa hiwalay sya
-   ipapadala" - one mail PER CLUSTER, the AFD/NOT AOR shape, not the single
-   cancellation table.
+   ipapadala" - one mail PER CLUSTER, the AFD/NOT AOR shape, not one big table.
    "ang format ng template ay dapat yung kagaya ng nasa litrato" - his table is
    DATE | SUBSCRIBER NAME | PR | BRGY | CITY | CLUSTER | STATUS | PAYMENT
    REFERENCE/ REMARKS | PAYMENT STATUS.
    "ipadala sa parehas na email kagaya sa SFS/CV" and "isang beses lang kada araw
    ... dapat tuwing 10am".
 
-   THIS FILE HAS NO SEND IN IT. Deliberately, the way AFD29 was shipped: three of
-   his nine columns have no proven source yet, and a mail whose column is empty
+   THIS FILE STILL HAS NO SEND IN IT. Deliberately, the way AFD29 was shipped: three
+   of his nine columns have no proven source yet, and a mail whose column is empty
    goes to PLDT looking like a mistake. So this file is the INSTALL config plus
-   instProbe() - a read-only scout that counts the rows his rule admits, splits
-   them into the clusters each mail would be named for, and prints the REAL header
-   names and REAL values of every candidate column. He picks, then the send gets
-   written. Nothing here can mail anything, writes nothing to the sheet, and needs
-   no deployment.
+   instProbe() - a read-only scout that counts the rows each of his THREE branches
+   admits, shows what CSP STATUS = PAID was refused because its FINAL STATUS line
+   said something else, splits the queue into the clusters each mail would be named
+   for, and prints the REAL header names and REAL values of every candidate column.
+   He picks, then the send gets written. Nothing here can mail anything, writes
+   nothing to the sheet, and needs no deployment.
 
    NAMING: every entry is INSTALL / im* / inst*. Apps Script loads all .gs files
    into ONE shared scope, so a second `const NOT AOR`-style config or a second
@@ -38,9 +54,14 @@ const INSTALL = {
      person (his Gmail replaced the supplier alias, the pldt365 alias stayed). Nothing invented. */
   TO: ['lsabat@pldt.com.ph'],
   CC: ['jrsnavarro25@gmail.com', 't-jesnavarro@pldt365.onmicrosoft.com', 'abmadlangbayan0510@icloud.com'],
-  STATUS: 'PAID - FOR INSTALLATION',       // his words: "PAID - FOR INSTALLATION wala ng iba"
-  FROM: ['FINAL STATUS'],                  // not CSP STATUS - he moved the rule here
-  EXACT: true,                             // the whole cell, the same strictness as CANCEL
+  /* ---- his three branches, named apart so the log can say which one a row came in on ---- */
+  CSP_OPEN: ['RESERVED FACILITY', 'ORDER CREATED'],   // these two qualify on their own
+  CSP_PAID: 'PAID',                                   // this one needs the FINAL STATUS line below
+  PAID_FINAL: 'PAID - FOR INSTALLATION',
+  FROM: ['CSP STATUS'],                    // the deciding column - his correction
+  STATUS: ['RESERVED FACILITY', 'ORDER CREATED', 'PAID'],
+  ANY: true,                               // ANY of the three, not all three at once
+  EXACT: true,                             // the whole cell, the CANCEL mail's strictness
   SHEET_ID: '',                            // '' = DATABASE AUG TO OCT, the live-synced sales file
   TABS: [],                                // '' = NOTICE.SALES_TABS (PLDT + RED)
   /* the cluster the mail is NAMED for. The row's own CLUSTER cell is used when it has a number;
@@ -50,7 +71,7 @@ const INSTALL = {
   CLUSTER_TAB: 'CLUSTER',
   SOURCE_CLUSTER: 'NOT AOR',
   /* his template, in his order, spelled the way he typed it in the screenshot. Three of these
-     are NOT yet wired to a sheet column - that is what instProbe section 4 prints. */
+     are NOT yet wired to a sheet column - that is what instProbe section 5 prints. */
   COLS: ['DATE', 'SUBSCRIBER NAME', 'PR', 'BRGY', 'CITY', 'CLUSTER', 'STATUS',
     'PAYMENT REFERENCE/ REMARKS', 'PAYMENT STATUS'],
   SEND_HOURS: [10],                        // "isang beses lang kada araw ... tuwing 10am"
@@ -60,14 +81,30 @@ const INSTALL = {
   TIMEZONE: '',
   SUBJECT: '3MDA_INSTALL_',                // + CLUSTER<n>_ + MMMyyyy, built per mail the way NOT AOR does
   SENT_PREFIX: 'INSTALL_SENT_',
-  /* the columns whose value PLDT reads as "STATUS" - the probe prints each one's real contents
-     on the matched rows so he can name the right one instead of me guessing from one screenshot */
-  CANDIDATES: ['FINAL STATUS', 'CSP STATUS', 'FUSE STATUS', 'OFSC STATUS'],
+  /* the columns whose value PLDT reads as "STATUS" - CSP STATUS leads because that is where his
+     rule lives now. The probe prints each one's real contents on the queued rows so he names the
+     right one instead of me guessing from one screenshot */
+  CANDIDATES: ['CSP STATUS', 'FINAL STATUS', 'PAYMENT STATUS', 'FUSE STATUS', 'OFSC STATUS'],
   PAY_COLS: ['PAYMENT REFERENCE/ REMARKS', 'PAYMENT STATUS', 'CSP REMARKS', 'PAYMENT REMARKS'],
-  TEST: { STATUS: 'PAID - FOR INSTALLATION', MAX_ROWS: 12, MAX_GROUPS: 3 }
+  TEST: { STATUS: ['RESERVED FACILITY', 'ORDER CREATED', 'PAID'], MAX_ROWS: 12, MAX_GROUPS: 3 }
 };
 
 const imUp_ = v => String(v === undefined ? '' : v).trim().toUpperCase();
+
+/* ---- the rule, in ONE place ----
+   The probe and the future mail both call this, so the count he approves is the count that mails.
+   Returns the branch a row came in on, or '' when the row is not in the queue. */
+function imBranch_(r) {
+  if (!statusRowHit_(r, INSTALL)) return '';
+  const csp = nk_(reportStatusOf_(r, INSTALL));
+  if (csp !== nk_(INSTALL.CSP_PAID)) return csp;
+  return nk_(r['FINAL STATUS']) === nk_(INSTALL.PAID_FINAL)
+    ? INSTALL.CSP_PAID + ' + ' + INSTALL.PAID_FINAL : '';
+}
+function imRuleText_() {
+  return 'CSP STATUS = ' + INSTALL.CSP_OPEN.join(' / ') + ' / ' + INSTALL.CSP_PAID +
+    ', at kapag ' + INSTALL.CSP_PAID + ': FINAL STATUS eksaktong ' + INSTALL.PAID_FINAL;
+}
 
 /* ---- the CLUSTER-tab join, copied from the rules aorProbe proved and NotAorMail shipped (nao*).
    His tab keeps the address in ONE text field ("BGY ALIMA BACOOR CITY") while the sales tab keeps
@@ -172,10 +209,16 @@ function imClusterFor_(row, idx) {
 /* ---- the read-only scout ---- */
 function instProbe() {
   const ss = reportSs_(INSTALL), tz = INSTALL.TIMEZONE || NOTICE.TIMEZONE;
-  const want = nk_(INSTALL.STATUS);
+  const paid = nk_(INSTALL.CSP_PAID), wantFinal = nk_(INSTALL.PAID_FINAL);
+  /* the label imBranch_ gives the PAID rows, asked of imBranch_ itself so the two can never drift */
+  const paidBranch = imBranch_({ 'CSP STATUS': INSTALL.CSP_PAID, 'FINAL STATUS': INSTALL.PAID_FINAL });
+  const BLANK_CSP = '(blank na CSP STATUS)', BLANK_FIN = '(blank na FINAL STATUS)';
   const st = {
-    rows: 0, tabs: [], noHeader: [], exact: 0, spellings: {}, near: {}, blanks: 0,
-    matched: [], heads: {}, dropped: [], gmap: {}, groups: [], valTally: {}, sample: []
+    rows: 0, tabs: [], noHeader: [], matched: [], heads: {}, valTally: {},
+    branchTally: {}, paidBlocked: [], paidBlockWords: {},
+    finalExact: [], finalExactCsp: {}, finalNear: {},
+    cspNear: {}, cspWords: {},
+    dropped: [], gmap: {}, groups: []
   };
   reportTabs_(INSTALL).forEach(name => {
     const sh = ss.getSheetByName(name);
@@ -186,20 +229,42 @@ function instProbe() {
     let hit = 0;
     rows.forEach(r => {
       st.rows++;
-      const raw = imUp_(r['FINAL STATUS']);
-      if (!raw) { st.blanks++; return; }
-      const k = nk_(raw);
-      if (k === want) { st.exact++; hit++; st.spellings[raw] = (st.spellings[raw] || 0) + 1; st.matched.push({ tab: name, r: r }); return; }
-      /* the two ways this queue loses a row without saying so: a longer wording that still
-         means "paid, ready to install", and a PAID typed somewhere other than FINAL STATUS */
-      if (k.indexOf('INSTALL') >= 0 || k.indexOf('PAID') >= 0) st.near[raw] = (st.near[raw] || 0) + 1;
+      const b = imBranch_(r);
+      if (b) {
+        hit++; st.matched.push({ tab: name, r: r, branch: b });
+        st.branchTally[b] = (st.branchTally[b] || 0) + 1;
+        return;
+      }
+      const csp = nk_(r['CSP STATUS']), fin = nk_(r['FINAL STATUS']);
+      const cspKey = csp || BLANK_CSP;
+      st.cspWords[cspKey] = (st.cspWords[cspKey] || 0) + 1;
+      /* the two refusals he needs to see by name, because they are the two ways this rule is
+         stricter than it looks: PAID in CSP with the WRONG FINAL STATUS line, and a CSP value
+         that merely smells like one of his three */
+      if (csp === paid) {
+        st.paidBlocked.push({ tab: name, r: r });
+        const f = fin || BLANK_FIN;
+        st.paidBlockWords[f] = (st.paidBlockWords[f] || 0) + 1;
+      } else if (/RESERV|ORDER|PAID|INSTALL/.test(csp)) st.cspNear[csp] = (st.cspNear[csp] || 0) + 1;
+      /* and what my FIRST (wrong) rule would have mailed: FINAL STATUS eksaktong ang phrase niya,
+         pero ang CSP STATUS - ang column na tinukoy niya - ay iba. Doon basahin ang CSP value,
+         dahil siya ang pumigil sa row. */
+      if (fin === wantFinal) {
+        st.finalExact.push({ tab: name, r: r });
+        st.finalExactCsp[cspKey] = (st.finalExactCsp[cspKey] || 0) + 1;
+      } else if (fin.indexOf('INSTALL') >= 0 || fin.indexOf('PAID') >= 0) {
+        const g = fin || BLANK_FIN;
+        st.finalNear[g] = (st.finalNear[g] || 0) + 1;
+      }
     });
-    st.tabs.push(name + ' = ' + rows.length + ' row, ' + hit + ' exact');
+    st.tabs.push(name + ' = ' + rows.length + ' row, ' + hit + ' nasa queue');
   });
 
-  /* every candidate column, counted on the MATCHED rows only - that is the set that will be
-     in the mail, so its values are the ones he has to recognise */
-  const cols = INSTALL.CANDIDATES.concat(INSTALL.PAY_COLS);
+  /* every candidate column, counted on the QUEUED rows only - that is the set that will be
+     in the mail, so its values are the ones he has to recognise. The values are printed EXACTLY
+     as the cell holds them, sloppy spacing included, because that is what he can go fix; the
+     rule itself reads them normalised, which is why the queue count and this list can differ. */
+  const cols = INSTALL.CANDIDATES.concat(INSTALL.PAY_COLS.filter(c => INSTALL.CANDIDATES.indexOf(c) < 0));
   st.matched.forEach(m => {
     cols.forEach(c => {
       const v = String(m.r[c] === undefined ? '<<WALANG GANITONG HEADER>>' : m.r[c]).trim() || '(blank)';
@@ -225,23 +290,57 @@ function instProbe() {
     if (ks.length > (cap || 12)) Logger.log('     ...at ' + (ks.length - (cap || 12)) + ' pang spelling');
     return ks.length;
   };
+  const sum = o => Object.keys(o).reduce((s, k) => s + o[k], 0);
+  const who = m => [m.tab, imUp_(m.r['SUBSCRIBER NAME']).slice(0, 26), imUp_(m.r['BRGY']) + ' ' + imUp_(m.r['CITY'])];
 
   Logger.log('INSTALL PROBE | file: ' + ss.getName() + ' | tabs: ' + st.tabs.join(' | '));
-  Logger.log('INSTALL rule: ' + ruleText_(INSTALL) + ' | one mail per cluster | today is ' +
+  Logger.log('INSTALL rule: ' + imRuleText_() + ' | one mail per cluster | today is ' +
     Utilities.formatDate(new Date(), tz, 'EEEE yyyy-MM-dd') + ' in ' + tz);
-  Logger.log('=== 1. ANG PINAGBABASAN: FINAL STATUS eksaktong "' + INSTALL.STATUS + '" ===');
-  Logger.log('   ' + st.exact + ' row sa buong ' + reportTabs_(INSTALL).join(' + ') + ' tab' +
-    (st.exact === 0 ? ' - WALANG row ngayon, kaya basahin muna ang #2' : ''));
-  if (st.exact) tally(st.spellings, 5);
-  Logger.log('=== 2. MAHALABA o IBA ANG PAGKAKASULAT - HINDI kasama ng EXACT rule ===');
-  if (!Object.keys(st.near).length) Logger.log('   wala - lahat ng nagsasabi ng PAID o INSTALL ay eksaktong "' + INSTALL.STATUS + '".');
-  else {
-    Logger.log('   ' + Object.keys(st.near).length + ' pang spelling, ' +
-      Object.keys(st.near).reduce((s, k) => s + st.near[k], 0) + ' row - ito ang HINDI sasama:');
-    tally(st.near);
+
+  Logger.log('=== 1. ANG TATLONG PINAGBABASAN (CSP STATUS ang kulungan) ===');
+  INSTALL.CSP_OPEN.forEach(w => Logger.log('   CSP STATUS eksaktong "' + w + '" -> ' +
+    (st.branchTally[nk_(w)] || 0) + ' row - SASAMA, walang ibang kundisyon'));
+  Logger.log('   CSP STATUS eksaktong "' + INSTALL.CSP_PAID + '" -> dalawang posibleng sagot:');
+  Logger.log('     a. FINAL STATUS eksaktong "' + INSTALL.PAID_FINAL + '" -> ' +
+    (st.branchTally[paidBranch] || 0) + ' row - SASAMA');
+  Logger.log('     b. FINAL STATUS iba -> ' + st.paidBlocked.length + ' row - HINDI SASAMA (nasa #2 sa ibaba)');
+  Logger.log('   KABUUAN ng nasa queue: ' + st.matched.length + ' row sa ' + reportTabs_(INSTALL).join(' + ') +
+    ' tab' + (st.matched.length ? '' : ' - WALANG row ngayon, basahin muna ang #2 at #3'));
+
+  Logger.log('=== 2. ANG MGA HINIHINDI NG RULE - para makita mo kung tama ang hiwa ===');
+  Logger.log('   2a. CSP STATUS = PAID, pero iba ang FINAL STATUS: ' + st.paidBlocked.length + ' row HINDI SASAMA');
+  if (st.paidBlocked.length) {
+    tally(st.paidBlockWords, 8);
+    st.paidBlocked.slice(0, 5).forEach(m => Logger.log('     sample: ' + who(m).join(' | ') +
+      ' | FINAL STATUS = "' + imUp_(m.r['FINAL STATUS']).slice(0, 50) + '"'));
+    if (st.paidBlocked.length > 5) Logger.log('     ...at ' + (st.paidBlocked.length - 5) + ' pang row');
+  } else Logger.log('     wala - bawat PAID sa CSP STATUS ay tugma ang FINAL STATUS');
+  Logger.log('   2b. FINAL STATUS eksaktong "' + INSTALL.PAID_FINAL + '", pero CSP STATUS iba: ' +
+    st.finalExact.length + ' row HINDI SASAMA');
+  Logger.log('         (ito ang ihahatid ng MAKANDANG rule - yung pinapaluwas mo nang "mali ka ng unawa". ' +
+    'Kung may row dito na dapat nasa queue, sabihin mo - ang CSP STATUS ang basehan natin ngayon:)');
+  if (st.finalExact.length) {
+    tally(st.finalExactCsp, 8);
+    st.finalExact.slice(0, 5).forEach(m => Logger.log('     sample: ' + who(m).join(' | ') +
+      ' | CSP STATUS = "' + imUp_(m.r['CSP STATUS']).slice(0, 40) + '"'));
+    if (st.finalExact.length > 5) Logger.log('     ...at ' + (st.finalExact.length - 5) + ' pang row');
   }
-  Logger.log('   blank na FINAL STATUS cell: ' + st.blanks + ' row (hindi sasama, tulad ng sa cancellation mail)');
-  Logger.log('=== 3. IWA-IBANG MAIL KADA CLUSTER (gaya ng AFD / NOT AOR) ===');
+  Logger.log('   2c. FINAL STATUS na MAY AMOY ng PAID / INSTALL pero hindi eksakto: ' +
+    sum(st.finalNear) + ' row HINDI SASAMA');
+  if (sum(st.finalNear)) tally(st.finalNear, 8);
+
+  Logger.log('=== 3. IBA PANG CSP STATUS na MAY AMOY ng tatlo - EXACT rule, kaya HINDI sasama ===');
+  if (!sum(st.cspNear)) Logger.log('   wala - walang CSP STATUS na may RESERV / ORDER / PAID / INSTALL na hindi eksakong tugma.');
+  else {
+    Logger.log('   ' + Object.keys(st.cspNear).length + ' pang spelling, ' + sum(st.cspNear) + ' row - ito ang HINDI sasama:');
+    tally(st.cspNear);
+  }
+  Logger.log('   lahat ng value ng CSP STATUS sa mga HINDI nasa queue (top 10):');
+  tally(st.cspWords, 10);
+  Logger.log('   blank na CSP STATUS: ' + (st.cspWords['(blank na CSP STATUS)'] || 0) +
+    ' row (hindi sasama - "KAPAG BLANK WAG ISASAMA")');
+
+  Logger.log('=== 4. IWA-IBANG MAIL KADA CLUSTER (gaya ng AFD / NOT AOR) ===');
   Logger.log('   index: ' + (idx ? idx.rows + ' row sa tab "' + INSTALL.CLUSTER_TAB + '" (' +
     idx.placeCols.join('+') + ' -> ' + idx.clusterCol + '), ' + Object.keys(idx.values).length + ' pangalan ng cluster'
     : 'WALANG INDEX: ' + why.join(' / ')));
@@ -253,13 +352,12 @@ function instProbe() {
     ') | quota sa Gmail ngayon: ' + MailApp.getRemainingDailyQuota() + ' padala pa today, lahat ng mail');
   if (st.dropped.length) {
     Logger.log('   HINDI SASAMA - ' + st.dropped.length + ' row na walang mapangalanang cluster:');
-    st.dropped.slice(0, 15).forEach(d => Logger.log('     ' + d.m.tab + ' | ' + imUp_(d.m.r['BRGY']) + ', ' +
-      imUp_(d.m.r['CITY']) + ' | ' + imUp_(d.m.r['SUBSCRIBER NAME']).slice(0, 26) + ' | ' + d.why));
+    st.dropped.slice(0, 15).forEach(d => Logger.log('     ' + who(d.m).join(' | ') + ' | ' + d.why));
     if (st.dropped.length > 15) Logger.log('     ...at ' + (st.dropped.length - 15) + ' pang row');
   }
 
-  Logger.log('=== 4. ANG TEMPLATE MO: WHAT EACH COLUMN REALLY HOLDS ===');
-  Logger.log('   ninang column na gusto mo: ' + INSTALL.COLS.join(' | '));
+  Logger.log('=== 5. ANG TEMPLATE MO: WHAT EACH COLUMN REALLY HOLDS ===');
+  Logger.log('   siyam na column na gusto mo: ' + INSTALL.COLS.join(' | '));
   ['PLDT', 'RED'].forEach(n => {
     if (st.heads[n]) Logger.log('   tunay na header sa ' + n + ': ' + st.heads[n].join(' | '));
   });
@@ -286,15 +384,18 @@ function instProbe() {
   });
   Logger.log('   sample ng isang row (para makita mo ang buong hilera):');
   st.matched.slice(0, 3).forEach(m => Logger.log('     ' + ['DATE', 'SUBSCRIBER NAME', 'PR', 'BRGY', 'CITY', 'CLUSTER']
-    .concat(INSTALL.CANDIDATES).concat(INSTALL.PAY_COLS)
+    .concat(cols)
     .map(h => h + '="' + String(m.r[h] === undefined ? '<<WALANG HEADER>>' : m.r[h]).slice(0, 40)).join('  ')));
 
-  Logger.log('=== 5. HINDI PA NAGAGAWA ===');
-  Logger.log('   walang send-function sa file na ito. Ang #4 sa itaas ang nagsasabi kung alin sa ' +
+  Logger.log('=== 6. HINDI PA NAGAGAWA ===');
+  Logger.log('   walang send-function sa file na ito. Ang #5 sa itaas ang nagsasabi kung alin sa ' +
     'siyam na column ng template mo ang may eksaktong header sa PLDT / RED at alin ang wala. Ang ' +
     'bawat "WALA ang eksakong header" - lalo na sa "' + INSTALL.COLS[6] + '", na kaya ng limang ' +
     'iba-ibang column - ay sagot mo, hindi ko hulaan, dahil doon lilinisin ng mail ang table. ' +
     'Sabihin ang mga sagot, tapos isusulat ang mail - DRY_RUN muna, copy sa sarili mong inbox.');
+  Logger.log('   isang tanong bago ang mail: SR na nasa queue pa rin bukas - maulit ba sa bukang 10AM ' +
+    'o isang beses lang kada SR? Ang AFD / NOT AOR mail ay isang beses kada SR (dedupe), ang ' +
+    'cancellation mail ay kada Biyernes. Piliin mo.');
   Logger.log('   schedule na isusulat pagka-approved: SEND_HOURS ' + INSTALL.SEND_HOURS.join(',') +
     ' (isang beses kada araw, 10AM) | To ' + INSTALL.TO.join(',') + ' | CC ' + INSTALL.CC.join(','));
   Logger.log('   DRY_RUN: ' + INSTALL.DRY_RUN + ' | walang nasulat sa sheet, walang na-email sa probe na ito');
