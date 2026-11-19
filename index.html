@@ -626,21 +626,21 @@ async function tryLogin0(){
  const em=lstep?pendE:$('le').value.trim().toLowerCase(),A=ld('mm_acc',{}),err=m=>{$('lerr').textContent=m;logEv(suMode?'SIGN UP FAILED':'LOGIN FAILED','Login',m,em)};
  if(lstep===2){const c=String($('lu').value||'').replace(/\D/g,'');
   if(c.length!==6)return err('Enter the 6-digit code from the email.');
-  const j=await acctRemote('check',em,{c:c});
+  const j=await acctRemote('check',em,{otp:c});
   if(!j)return err('Could not reach the server. Please try again in a moment.');
   if(!j.ok)return err(acctErr(j.reason)+(j.reason==='badcode'&&j.left?' ('+j.left+' tries left)':''));
   pendC=c;pwStep(em);return}
  if(lstep===3){const pw=$('lp').value;
   if(pw.length<6)return err('Password must be at least 6 characters.');
   if(pw!==$('lp2').value)return err('Passwords do not match.');
-  const h=pwh(em+':'+pw),j=await acctRemote('reset',em,{c:pendC,h:h});
+  const h=pwh(em+':'+pw),j=await acctRemote('reset',em,{otp:pendC,h:h});
   if(!j)return err('Could not reach the server, so the password was not changed.\nPlease try again when you are online.');
   if(!j.ok)return err(acctErr(j.reason)+(j.reason==='badcode'&&j.left?' ('+j.left+' tries left)':''));
   A[em]={h:h,at:Date.now(),c:A[em]&&A[em].c||''};sv('mm_acc',A);logEv('PASSWORD RESET','Login','',em);
   enter((j.code&&AC[j.code]!==undefined)?j.code:'',false,em);return}
  if(lstep===4){const c=String($('lu').value||'').replace(/\D/g,'');
   if(c.length!==6)return err('Enter the 6-digit OTP from the email.');
-  const rj=await acctRemote('create',em,{h:pendH,c:c});
+  const rj=await acctRemote('create',em,{h:pendH,otp:c});
   if(!rj)return err('Could not reach the server, so the account was not created.\nPlease try again in a moment.'+acctDet());
   if(!rj.ok)return err(acctErr(rj.reason)+(rj.reason==='badcode'&&rj.left?' ('+rj.left+' tries left)':''));
   A[em]={h:pendH,at:Date.now()};sv('mm_acc',A);pendH='';ME={code:'',email:em,name:''};logEv('SIGN UP','Sign up');ME=null;

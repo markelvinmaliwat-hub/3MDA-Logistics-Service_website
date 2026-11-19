@@ -2017,6 +2017,7 @@ function acctOp_(sh, op, email, p) {
   const r = acctFind_(sh, email);
   const o = r ? acctGet_(sh, r) : null;
   const day = today_();
+    if (op === 'signupcode' || op === 'create') return acctSignupOp_(sh, op, email, p, o);
   if (op === 'exists') return { ok: true, exists: !!o };
   if (op === 'create') {
     if (o) return { ok: false, reason: 'exists' };
@@ -2070,7 +2071,7 @@ function acctCodeOk_(sh, r, o, p) {
   if (!o.reset) return 'nocode';
   if (o.tries >= ACCT.MAX_TRIES) return 'locked';
   if (o.exp && o.exp < Date.now()) return 'expired';
-  const c = String(p.c || '').replace(/\D/g, '');
+  const c = String(p.otp || '').replace(/\D/g, '');
   if (c.length !== 6) return 'badcode';
   if (c === o.reset) return '';
   o.tries += 1; acctPut_(sh, r, o);
